@@ -37,6 +37,14 @@ Each part of a shop needs a different Azure design decision:
 
 ## Architecture
 
+![CloudMart architecture diagram](docs/architecture.svg)
+
+Every arrow to a data or messaging service authenticates with a **managed identity**: there are no keys or
+connection-string secrets. For slides or documents, use the 2× PNG: [docs/architecture.png](docs/architecture.png).
+
+<details>
+<summary>Text version (Mermaid, editable)</summary>
+
 ```mermaid
 flowchart LR
   user([Browser]) --> fd[Front Door + WAF<br/>phase 10]
@@ -64,8 +72,9 @@ flowchart LR
   entra -.-> api
 ```
 
-Solid arrows are data flows; dotted ones are identity, secrets and telemetry. Every arrow to a data service
-authenticates with a **managed identity**: there are no keys or connection-string secrets.
+Solid arrows are data flows; dotted ones are identity, secrets and telemetry.
+
+</details>
 
 ## Repository
 
