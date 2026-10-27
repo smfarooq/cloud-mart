@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CloudMart.Api/CloudMart.Api.csproj" />
+    <Project Path="src/CloudMart.Core/CloudMart.Core.csproj" />
+    <Project Path="src/CloudMart.Functions/CloudMart.Functions.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CloudMart.Core.Tests/CloudMart.Core.Tests.csproj" />
+  </Folder>
+</Solution>

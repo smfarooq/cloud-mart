@@ -1,0 +1,9 @@
+{
+  "apiBaseUrl": "",
+  "entra": {
+    "clientId": "",
+    "tenantId": "",
+    "apiScope": ""
+  },
+  "appInsightsConnectionString": ""
+}

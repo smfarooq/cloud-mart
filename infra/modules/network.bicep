@@ -1,0 +1,250 @@
+// Phase 2: a single spoke VNet with purpose-built subnets, NSGs and private DNS zones.
+// (Hub-and-spoke with Azure Firewall / VPN Gateway is covered as a design exercise in the learning path.)
+
+param location string
+param tags object
+param vnetName string
+param addressPrefix string = '10.20.0.0/16'
+
+var subnetPrefixes = {
+  appService: '10.20.1.0/24' // App Service VNet integration (outbound)
+  functions: '10.20.2.0/24' // Flex Consumption VNet integration (outbound)
+  containerApps: '10.20.4.0/23' // Container Apps environment (workload profiles)
+  privateEndpoints: '10.20.6.0/24' // inbound private IPs of PaaS services
+  vm: '10.20.7.0/24' // jumpbox
+  aks: '10.20.8.0/22' // AKS nodes (pods use an overlay CIDR, not this range)
+  appGateway: '10.20.12.0/24' // Application Gateway v2 needs a dedicated subnet
+  bastion: '10.20.13.0/26' // name must be AzureBastionSubnet, minimum /26
+}
+
+// A private endpoint is only useful if the name resolves to its private IP: one zone per service type,
+// linked to the VNet. This is the step people forget, and the first thing to check when "it times out".
+var privateDnsZoneNames = {
+  keyVault: 'privatelink.vaultcore.azure.net'
+  blob: 'privatelink.blob.${environment().suffixes.storage}'
+  queue: 'privatelink.queue.${environment().suffixes.storage}'
+  table: 'privatelink.table.${environment().suffixes.storage}'
+  cosmos: 'privatelink.documents.azure.com'
+  sql: 'privatelink${environment().suffixes.sqlServerHostname}'
+  postgres: 'privatelink.postgres.database.azure.com'
+}
+
+resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: '${vnetName}-pe-nsg'
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowVnetToPaaS'
+        properties: {
+          priority: 100
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'VirtualNetwork'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRanges: ['443', '1433', '5432']
+        }
+      }
+      {
+        name: 'DenyEverythingElse'
+        properties: {
+          priority: 4000
+          direction: 'Inbound'
+          access: 'Deny'
+          protocol: '*'
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '*'
+        }
+      }
+    ]
+  }
+}
+
+resource nsgVm 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: '${vnetName}-vm-nsg'
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowSshFromVnet' // Bastion connects from inside the VNet; nothing is exposed to the internet
+        properties: {
+          priority: 100
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'VirtualNetwork'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '22'
+        }
+      }
+    ]
+  }
+}
+
+resource nsgAppGateway 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: '${vnetName}-agw-nsg'
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowGatewayManager' // required for Application Gateway v2 health/management
+        properties: {
+          priority: 100
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'GatewayManager'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '65200-65535'
+        }
+      }
+      {
+        name: 'AllowHttpFromInternet'
+        properties: {
+          priority: 110
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'Internet'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRanges: ['80', '443']
+        }
+      }
+      {
+        name: 'AllowAzureLoadBalancer'
+        properties: {
+          priority: 120
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: '*'
+          sourceAddressPrefix: 'AzureLoadBalancer'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '*'
+        }
+      }
+    ]
+  }
+}
+
+// Integration subnets get an NSG with only the default rules, so you can practise adding outbound rules.
+resource nsgApps 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: '${vnetName}-apps-nsg'
+  location: location
+  tags: tags
+}
+
+resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: vnetName
+  location: location
+  tags: tags
+  properties: {
+    addressSpace: { addressPrefixes: [addressPrefix] }
+    subnets: [
+      {
+        name: 'snet-appservice'
+        properties: {
+          addressPrefix: subnetPrefixes.appService
+          networkSecurityGroup: { id: nsgApps.id }
+          delegations: [{ name: 'web', properties: { serviceName: 'Microsoft.Web/serverFarms' } }]
+        }
+      }
+      {
+        name: 'snet-functions'
+        properties: {
+          addressPrefix: subnetPrefixes.functions
+          networkSecurityGroup: { id: nsgApps.id }
+          delegations: [{ name: 'flex', properties: { serviceName: 'Microsoft.App/environments' } }]
+        }
+      }
+      {
+        name: 'snet-containerapps'
+        properties: {
+          addressPrefix: subnetPrefixes.containerApps
+          networkSecurityGroup: { id: nsgApps.id }
+          delegations: [{ name: 'aca', properties: { serviceName: 'Microsoft.App/environments' } }]
+        }
+      }
+      {
+        name: 'snet-private-endpoints'
+        properties: {
+          addressPrefix: subnetPrefixes.privateEndpoints
+          networkSecurityGroup: { id: nsgPrivateEndpoints.id }
+          privateEndpointNetworkPolicies: 'Enabled' // makes the NSG apply to private endpoints
+        }
+      }
+      {
+        name: 'snet-vm'
+        properties: {
+          addressPrefix: subnetPrefixes.vm
+          networkSecurityGroup: { id: nsgVm.id }
+        }
+      }
+      {
+        name: 'snet-aks'
+        properties: { addressPrefix: subnetPrefixes.aks }
+      }
+      {
+        name: 'snet-appgateway'
+        properties: {
+          addressPrefix: subnetPrefixes.appGateway
+          networkSecurityGroup: { id: nsgAppGateway.id }
+        }
+      }
+      {
+        name: 'AzureBastionSubnet'
+        properties: { addressPrefix: subnetPrefixes.bastion }
+      }
+    ]
+  }
+}
+
+resource zones 'Microsoft.Network/privateDnsZones@2024-06-01' = [
+  for zone in items(privateDnsZoneNames): {
+    name: zone.value
+    location: 'global'
+    tags: tags
+  }
+]
+
+resource zoneLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = [
+  for (zone, i) in items(privateDnsZoneNames): {
+    parent: zones[i]
+    name: '${vnetName}-link'
+    location: 'global'
+    tags: tags
+    properties: {
+      virtualNetwork: { id: vnet.id }
+      registrationEnabled: false
+    }
+  }
+]
+
+func subnetId(vnetName string, subnetName string) string =>
+  resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName)
+
+output vnetId string = vnet.id
+output vnetName string = vnet.name
+output appServiceSubnetId string = subnetId(vnet.name, 'snet-appservice')
+output functionsSubnetId string = subnetId(vnet.name, 'snet-functions')
+output containerAppsSubnetId string = subnetId(vnet.name, 'snet-containerapps')
+output privateEndpointSubnetId string = subnetId(vnet.name, 'snet-private-endpoints')
+output vmSubnetId string = subnetId(vnet.name, 'snet-vm')
+output aksSubnetId string = subnetId(vnet.name, 'snet-aks')
+output appGatewaySubnetId string = subnetId(vnet.name, 'snet-appgateway')
+output bastionSubnetId string = subnetId(vnet.name, 'AzureBastionSubnet')
+output dnsZoneIds object = toObject(
+  items(privateDnsZoneNames),
+  zone => zone.key,
+  zone => resourceId('Microsoft.Network/privateDnsZones', zone.value)
+)
