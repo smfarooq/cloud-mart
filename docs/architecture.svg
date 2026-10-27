@@ -1,0 +1,345 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 1250" width="1480" height="1250" role="img" aria-labelledby="title desc">
+  <title id="title">CloudMart architecture diagram</title>
+  <desc id="desc">Browser and React SPA, Front Door, App Service API, Service Bus, Event Hubs and Event Grid feeding Azure Functions, with Azure SQL, Blob Storage and Cosmos DB, plus security and operations services.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#404040"/>
+    </marker>
+
+    <style>
+      text { font-family: 'Segoe UI', Calibri, Arial, sans-serif; }
+      .svc { fill: #ffffff; stroke: #00B050; stroke-width: 3; }
+      .opt { fill: #ffffff; stroke: #BFBFBF; stroke-width: 3; }
+      .note { fill: #ffffff; stroke: #70AD47; stroke-width: 1.5; }
+      .name { font-size: 14px; font-weight: 600; fill: #262626; text-anchor: middle; }
+      .role { font-size: 15px; font-weight: 700; fill: #000000; text-anchor: middle; }
+      .sub { font-size: 12px; fill: #595959; text-anchor: middle; }
+      .notetext { font-size: 13px; fill: #262626; }
+      .flow { stroke: #404040; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 6 4; }
+      .flowlabel { font-size: 12px; font-style: italic; fill: #404040; }
+      .paneltitle { font-size: 15px; font-weight: 700; fill: #000000; }
+      .itemname { font-size: 13px; font-weight: 600; fill: #262626; }
+      .itemdesc { font-size: 12px; fill: #595959; }
+    </style>
+
+    <!-- Simplified Azure-style glyphs, 48x48 -->
+    <symbol id="i-entra" viewBox="0 0 48 48">
+      <polygon points="24,4 44,30 24,44 4,30" fill="#0078D4"/>
+      <polygon points="24,4 24,44 4,30" fill="#50A0E8"/>
+      <polygon points="24,18 33,30 24,36 15,30" fill="#ffffff" opacity="0.85"/>
+    </symbol>
+    <symbol id="i-swa" viewBox="0 0 48 48">
+      <rect x="6" y="8" width="36" height="32" rx="4" fill="#5C2D91"/>
+      <path d="M19 18 l-6 6 6 6 M29 18 l6 6 -6 6" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-frontdoor" viewBox="0 0 48 48">
+      <path d="M14 36 h22 a9 9 0 0 0 0 -18 a12 12 0 0 0 -23 -3 a9 9 0 0 0 1 21 z" fill="#0078D4"/>
+      <path d="M16 27 h14 m-5 -5 l5 5 -5 5" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-appservice" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="18" fill="#0078D4"/>
+      <ellipse cx="24" cy="24" rx="8" ry="18" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <path d="M6 24 h36 M9 15 h30 M9 33 h30" stroke="#ffffff" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-functions" viewBox="0 0 48 48">
+      <path d="M9 10 L3 24 L9 38 M39 10 L45 24 L39 38" stroke="#0078D4" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M27 6 L14 27 h9 l-3 15 L34 20 h-9 l4 -14 z" fill="#FCD116" stroke="#E8A800" stroke-width="1"/>
+    </symbol>
+    <symbol id="i-servicebus" viewBox="0 0 48 48">
+      <rect x="4" y="10" width="40" height="28" rx="3" fill="#0072C6"/>
+      <rect x="9" y="17" width="9" height="14" fill="#ffffff"/>
+      <rect x="20" y="17" width="9" height="14" fill="#ffffff" opacity="0.8"/>
+      <rect x="31" y="17" width="9" height="14" fill="#ffffff" opacity="0.6"/>
+    </symbol>
+    <symbol id="i-eventhubs" viewBox="0 0 48 48">
+      <rect x="4" y="8" width="40" height="32" rx="3" fill="#0072C6"/>
+      <path d="M10 16 h22 M10 24 h28 M10 32 h22" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M33 13 l4 3 -4 3 M33 29 l4 3 -4 3" stroke="#ffffff" stroke-width="2" fill="none"/>
+    </symbol>
+    <symbol id="i-eventgrid" viewBox="0 0 48 48">
+      <path d="M24 24 L8 10 M24 24 L40 10 M24 24 L8 38 M24 24 L40 38" stroke="#0072C6" stroke-width="2.5"/>
+      <circle cx="8" cy="10" r="5" fill="#50A0E8"/>
+      <circle cx="40" cy="10" r="5" fill="#50A0E8"/>
+      <circle cx="8" cy="38" r="5" fill="#50A0E8"/>
+      <circle cx="40" cy="38" r="5" fill="#50A0E8"/>
+      <circle cx="24" cy="24" r="7" fill="#0072C6"/>
+    </symbol>
+    <symbol id="i-sql" viewBox="0 0 48 48">
+      <path d="M8 10 v28 c0 2.8 7.2 5 16 5 s16 -2.2 16 -5 V10 c0 2.8 -7.2 5 -16 5 S8 12.8 8 10 z" fill="#0072C6"/>
+      <ellipse cx="24" cy="10" rx="16" ry="5" fill="#50A0E8"/>
+      <text x="24" y="33" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">SQL</text>
+    </symbol>
+    <symbol id="i-cosmos" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="13" fill="#0F4C8A"/>
+      <ellipse cx="24" cy="24" rx="22" ry="8" fill="none" stroke="#50A0E8" stroke-width="2.5" transform="rotate(-25 24 24)"/>
+      <circle cx="40" cy="8" r="2" fill="#50A0E8"/>
+      <circle cx="7" cy="40" r="1.6" fill="#50A0E8"/>
+    </symbol>
+    <symbol id="i-blob" viewBox="0 0 48 48">
+      <rect x="4" y="10" width="40" height="30" rx="2" fill="#E6E6E6"/>
+      <rect x="4" y="10" width="40" height="8" fill="#5EA830"/>
+      <path d="M8 24 h32 M8 30 h32 M8 36 h32 M17 18 v22 M31 18 v22" stroke="#0072C6" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-identity" viewBox="0 0 48 48">
+      <circle cx="24" cy="16" r="8" fill="#0078D4"/>
+      <path d="M9 40 c0 -9 7 -14 15 -14 s15 5 15 14 z" fill="#0078D4"/>
+      <circle cx="37" cy="34" r="6" fill="#FFB900"/>
+    </symbol>
+    <symbol id="i-keyvault" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="19" fill="#FFB900"/>
+      <circle cx="19" cy="21" r="6" fill="none" stroke="#ffffff" stroke-width="3"/>
+      <path d="M23 25 l12 12 m-4 -4 l3 -3 m-6 0 l3 -3" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none"/>
+    </symbol>
+    <symbol id="i-appinsights" viewBox="0 0 48 48">
+      <path d="M24 5 a13 13 0 0 0 -7 24 v6 h14 v-6 A13 13 0 0 0 24 5 z" fill="#773ADC"/>
+      <rect x="18" y="37" width="12" height="5" rx="1" fill="#773ADC"/>
+    </symbol>
+    <symbol id="i-loganalytics" viewBox="0 0 48 48">
+      <rect x="6" y="28" width="8" height="14" fill="#0072C6"/>
+      <rect x="20" y="18" width="8" height="24" fill="#0072C6"/>
+      <rect x="34" y="8" width="8" height="34" fill="#0072C6"/>
+    </symbol>
+    <symbol id="i-policy" viewBox="0 0 48 48">
+      <path d="M24 4 L40 10 V24 C40 34 32 41 24 44 C16 41 8 34 8 24 V10 Z" fill="#0078D4"/>
+      <path d="M17 24 l5 5 9 -10" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-appconfig" viewBox="0 0 48 48">
+      <rect x="6" y="6" width="36" height="36" rx="6" fill="#0078D4"/>
+      <path d="M13 16 h22 M13 24 h22 M13 32 h22" stroke="#ffffff" stroke-width="2.5"/>
+      <circle cx="19" cy="16" r="3.5" fill="#FFB900"/>
+      <circle cx="30" cy="24" r="3.5" fill="#FFB900"/>
+      <circle cx="17" cy="32" r="3.5" fill="#FFB900"/>
+    </symbol>
+    <symbol id="i-redis" viewBox="0 0 48 48">
+      <path d="M24 8 L42 16 L24 24 L6 16 Z" fill="#D82C20"/>
+      <path d="M6 24 L24 32 L42 24 M6 32 L24 40 L42 32" stroke="#A41E11" stroke-width="4" fill="none" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-apim" viewBox="0 0 48 48">
+      <path d="M14 36 h22 a9 9 0 0 0 0 -18 a12 12 0 0 0 -23 -3 a9 9 0 0 0 1 21 z" fill="#0078D4"/>
+      <circle cx="17" cy="27" r="2.5" fill="#ffffff"/>
+      <circle cx="25" cy="27" r="2.5" fill="#ffffff"/>
+      <circle cx="33" cy="27" r="2.5" fill="#ffffff"/>
+    </symbol>
+    <symbol id="i-grafana" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="17" fill="#F46800"/>
+      <circle cx="24" cy="24" r="7" fill="none" stroke="#ffffff" stroke-width="3"/>
+    </symbol>
+    <symbol id="i-appgw" viewBox="0 0 48 48">
+      <rect x="4" y="8" width="40" height="32" rx="4" fill="#0078D4"/>
+      <path d="M11 24 h11 l7 -7 h7 M22 24 l7 7 h7" stroke="#ffffff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-containers" viewBox="0 0 48 48">
+      <polygon points="24,4 42,14 42,34 24,44 6,34 6,14" fill="#326CE5"/>
+      <polygon points="24,14 33,19 33,29 24,34 15,29 15,19" fill="#ffffff" opacity="0.9"/>
+    </symbol>
+  </defs>
+
+  <rect width="1480" height="1250" fill="#ffffff"/>
+
+  <!-- Title -->
+  <rect x="30" y="24" width="430" height="66" fill="#4472C4"/>
+  <text x="245" y="69" font-size="34" fill="#ffffff" text-anchor="middle">Architecture Diagram</text>
+  <text x="30" y="122" font-size="15" fill="#404040">CloudMart on Azure. Runs fully in memory on a laptop; each learning phase switches on the Azure services below.</text>
+
+  <!-- Legend -->
+  <rect x="40" y="150" width="230" height="172" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="54" y="174" font-size="14" font-weight="700" fill="#000000">Legend</text>
+  <rect x="54" y="188" width="26" height="18" class="svc"/>
+  <text x="90" y="202" class="notetext">Azure service</text>
+  <rect x="54" y="214" width="26" height="18" class="opt"/>
+  <text x="90" y="228" class="notetext">Optional / later phase</text>
+  <rect x="54" y="240" width="26" height="18" class="note"/>
+  <text x="90" y="254" class="notetext">What it does</text>
+  <path d="M54 274 H80" class="flow"/>
+  <text x="90" y="278" class="notetext">Request / data flow</text>
+  <path d="M54 300 H80" class="flow dash"/>
+  <text x="90" y="304" class="notetext">Sign-in or direct upload</text>
+
+  <!-- ============ Row 1: identity + client ============ -->
+  <rect x="330" y="155" width="150" height="96" class="svc"/>
+  <use href="#i-entra" x="383" y="163" width="44" height="44"/>
+  <text x="405" y="233" class="name">Microsoft Entra ID</text>
+  <text x="405" y="275" class="role">Sign-in &amp; app roles</text>
+  <text x="405" y="293" class="sub">phase 6</text>
+
+  <rect x="665" y="150" width="150" height="110" class="svc"/>
+  <rect x="713" y="159" width="54" height="76" rx="6" fill="#1F2340"/>
+  <rect x="718" y="165" width="44" height="62" fill="#ffffff"/>
+  <rect x="718" y="165" width="44" height="10" fill="#7B3F9E"/>
+  <rect x="722" y="180" width="30" height="4" fill="#A35FC8"/>
+  <rect x="721" y="189" width="11" height="8" fill="#2E86DE"/>
+  <rect x="734" y="189" width="11" height="8" fill="#2E86DE"/>
+  <rect x="747" y="189" width="11" height="8" fill="#2E86DE"/>
+  <rect x="721" y="200" width="11" height="8" fill="#2E86DE"/>
+  <rect x="734" y="200" width="11" height="8" fill="#E84393"/>
+  <rect x="747" y="200" width="11" height="8" fill="#2E86DE"/>
+  <rect x="721" y="212" width="37" height="6" fill="#E84393"/>
+  <text x="740" y="252" class="name">React SPA</text>
+  <text x="730" y="284" class="role">Customer &amp; admin</text>
+  <text x="730" y="302" class="sub">browser</text>
+
+  <path d="M480 203 H663" class="flow dash"/>
+  <text x="572" y="194" class="flowlabel" text-anchor="middle">tokens</text>
+
+  <path d="M815 205 H868" class="flow"/>
+  <rect x="870" y="165" width="280" height="70" class="note"/>
+  <text class="notetext"><tspan x="882" y="187">Shop, cart, order status and admin.</tspan><tspan x="882" y="205">Signs in with Entra ID (MSAL) and</tspan><tspan x="882" y="223">sends product-view click events.</tspan></text>
+
+  <!-- ============ Row 2: edge ============ -->
+  <rect x="330" y="355" width="150" height="96" class="svc"/>
+  <use href="#i-swa" x="383" y="363" width="44" height="44"/>
+  <text x="405" y="433" class="name">Static Web Apps</text>
+  <text x="405" y="475" class="role">SPA hosting</text>
+  <text x="405" y="493" class="sub">phase 3</text>
+
+  <rect x="665" y="355" width="150" height="96" class="svc"/>
+  <use href="#i-frontdoor" x="718" y="363" width="44" height="44"/>
+  <text x="740" y="433" class="name">Front Door + WAF</text>
+  <text x="730" y="475" class="role">Global entry</text>
+  <text x="730" y="493" class="sub">phase 10</text>
+
+  <path d="M806 260 V353" class="flow"/>
+  <text x="816" y="314" class="flowlabel">HTTPS</text>
+  <path d="M665 403 H482" class="flow"/>
+  <text x="572" y="394" class="flowlabel" text-anchor="middle">/*</text>
+
+  <path d="M815 403 H868" class="flow"/>
+  <rect x="870" y="368" width="280" height="70" class="note"/>
+  <text class="notetext"><tspan x="882" y="390">One host name for SPA and API.</tspan><tspan x="882" y="408">WAF rate limiting, edge-cached</tspan><tspan x="882" y="426">images, failover to a 2nd region.</tspan></text>
+
+  <!-- ============ Row 3: API + messaging + functions ============ -->
+  <rect x="665" y="530" width="150" height="96" class="svc"/>
+  <use href="#i-appservice" x="718" y="538" width="44" height="44"/>
+  <text x="740" y="608" class="name">App Service</text>
+  <text x="730" y="650" class="role">CloudMart API</text>
+  <text x="730" y="668" class="sub">.NET 10 API</text>
+
+  <path d="M806 451 V528" class="flow"/>
+  <text x="816" y="496" class="flowlabel">/api/*</text>
+
+  <path d="M815 578 H868" class="flow"/>
+  <rect x="870" y="534" width="280" height="88" class="note"/>
+  <text class="notetext"><tspan x="882" y="556">Catalog and checkout (returns 202).</tspan><tspan x="882" y="574">Signs SAS upload links; publishes</tspan><tspan x="882" y="592">order and click events. Same image</tspan><tspan x="882" y="610">also runs on Container Apps / AKS.</tspan></text>
+
+  <rect x="330" y="530" width="150" height="96" class="svc"/>
+  <use href="#i-servicebus" x="383" y="538" width="44" height="44"/>
+  <text x="405" y="608" class="name">Service Bus</text>
+  <text x="405" y="650" class="role">Order events</text>
+  <text x="405" y="668" class="sub">topic, 3 subscriptions</text>
+
+  <rect x="330" y="680" width="150" height="96" class="svc"/>
+  <use href="#i-eventhubs" x="383" y="688" width="44" height="44"/>
+  <text x="405" y="758" class="name">Event Hubs</text>
+  <text x="405" y="800" class="role">Click stream</text>
+  <text x="405" y="818" class="sub">consumer group: functions</text>
+
+  <rect x="330" y="830" width="150" height="96" class="svc"/>
+  <use href="#i-eventgrid" x="383" y="838" width="44" height="44"/>
+  <text x="405" y="908" class="name">Event Grid</text>
+  <text x="405" y="950" class="role">Image events</text>
+  <text x="405" y="968" class="sub">BlobCreated</text>
+
+  <path d="M665 578 H482" class="flow"/>
+  <text x="572" y="569" class="flowlabel" text-anchor="middle">OrderPlaced</text>
+  <path d="M665 612 H575 V728 H482" class="flow"/>
+  <text x="583" y="700" class="flowlabel">click events</text>
+
+  <rect x="40" y="680" width="150" height="96" class="svc"/>
+  <use href="#i-functions" x="93" y="688" width="44" height="44"/>
+  <text x="115" y="758" class="name">Function App</text>
+  <text x="112" y="800" class="role">Event processors</text>
+  <text x="112" y="818" class="sub">Flex Consumption</text>
+
+  <path d="M330 578 H262 V700 H192" class="flow"/>
+  <path d="M330 728 H192" class="flow"/>
+  <path d="M330 878 H262 V756 H192" class="flow"/>
+
+  <path d="M115 680 V642" class="flow"/>
+  <rect x="40" y="548" width="210" height="92" class="note"/>
+  <text class="notetext"><tspan x="52" y="570">Fulfils orders, flags</tspan><tspan x="52" y="588">high-value orders, attaches</tspan><tspan x="52" y="606">uploaded images, aggregates</tspan><tspan x="52" y="624">product views.</tspan></text>
+
+  <!-- ============ Row 4: data ============ -->
+  <rect x="30" y="1000" width="840" height="192" rx="6" fill="#FAFAFA" stroke="#A6A6A6" stroke-width="1.5" stroke-dasharray="8 5"/>
+  <text x="492" y="1024" font-size="13" font-weight="700" fill="#595959">Data stores (phase 4)</text>
+  <text x="492" y="1041" class="itemdesc">both apps, managed identity</text>
+
+  <rect x="40" y="1040" width="150" height="96" class="svc"/>
+  <use href="#i-sql" x="93" y="1048" width="44" height="44"/>
+  <text x="115" y="1118" class="name">Azure SQL</text>
+  <text x="115" y="1160" class="role">Orders</text>
+  <text x="115" y="1178" class="sub">or PostgreSQL</text>
+
+  <rect x="330" y="1040" width="150" height="96" class="svc"/>
+  <use href="#i-blob" x="383" y="1048" width="44" height="44"/>
+  <text x="405" y="1118" class="name">Blob Storage</text>
+  <text x="405" y="1160" class="role">Product images</text>
+  <text x="405" y="1178" class="sub">uploads → images</text>
+
+  <rect x="665" y="1040" width="150" height="96" class="svc"/>
+  <use href="#i-cosmos" x="718" y="1048" width="44" height="44"/>
+  <text x="740" y="1118" class="name">Cosmos DB</text>
+  <text x="730" y="1160" class="role">Catalog + views</text>
+  <text x="730" y="1178" class="sub">partition key: category</text>
+
+  <path d="M183 776 V998" class="flow"/>
+  <path d="M806 626 V998" class="flow"/>
+  <path d="M470 1040 V928" class="flow"/>
+
+  <path d="M815 240 H1180 V1215 H470 V1138" class="flow dash"/>
+  <text x="825" y="1236" class="flowlabel" text-anchor="middle">browser uploads the image directly with a short-lived SAS (valet key)</text>
+
+  <!-- ============ Right panel: cross-cutting ============ -->
+  <rect x="1220" y="150" width="240" height="780" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="1236" y="178" class="paneltitle">Security &amp; operations</text>
+
+  <use href="#i-identity" x="1234" y="196" width="36" height="36"/>
+  <text x="1280" y="212" class="itemname">Managed identities</text>
+  <text x="1280" y="229" class="itemdesc">No keys or passwords</text>
+
+  <use href="#i-keyvault" x="1234" y="258" width="36" height="36"/>
+  <text x="1280" y="274" class="itemname">Key Vault</text>
+  <text x="1280" y="291" class="itemdesc">Payment-gateway secret</text>
+
+  <use href="#i-appinsights" x="1234" y="320" width="36" height="36"/>
+  <text x="1280" y="336" class="itemname">Application Insights</text>
+  <text x="1280" y="353" class="itemdesc">Traces, metrics, failures</text>
+
+  <use href="#i-loganalytics" x="1234" y="382" width="36" height="36"/>
+  <text x="1280" y="398" class="itemname">Log Analytics</text>
+  <text x="1280" y="415" class="itemdesc">Platform logs, KQL, alerts</text>
+
+  <use href="#i-policy" x="1234" y="444" width="36" height="36"/>
+  <text x="1280" y="460" class="itemname">Policy + Budget</text>
+  <text x="1280" y="477" class="itemdesc">Regions, tags, cost alerts</text>
+
+  <line x1="1236" y1="508" x2="1444" y2="508" stroke="#D9D9D9"/>
+  <text x="1236" y="532" class="paneltitle" fill="#7F7F7F">Later phases (optional)</text>
+
+  <g opacity="0.45">
+    <use href="#i-appconfig" x="1234" y="548" width="36" height="36"/>
+    <text x="1280" y="564" class="itemname">App Configuration</text>
+    <text x="1280" y="581" class="itemdesc">Feature flags (Trending)</text>
+
+    <use href="#i-redis" x="1234" y="610" width="36" height="36"/>
+    <text x="1280" y="626" class="itemname">Azure Managed Redis</text>
+    <text x="1280" y="643" class="itemdesc">Shared L2 cache</text>
+
+    <use href="#i-apim" x="1234" y="672" width="36" height="36"/>
+    <text x="1280" y="688" class="itemname">API Management</text>
+    <text x="1280" y="705" class="itemdesc">Gateway for partner APIs</text>
+
+    <use href="#i-grafana" x="1234" y="734" width="36" height="36"/>
+    <text x="1280" y="750" class="itemname">Managed Grafana</text>
+    <text x="1280" y="767" class="itemdesc">Dashboards</text>
+
+    <use href="#i-appgw" x="1234" y="796" width="36" height="36"/>
+    <text x="1280" y="812" class="itemname">Application Gateway</text>
+    <text x="1280" y="829" class="itemdesc">Regional WAF option</text>
+
+    <use href="#i-containers" x="1234" y="858" width="36" height="36"/>
+    <text x="1280" y="874" class="itemname">Container Apps / AKS</text>
+    <text x="1280" y="891" class="itemdesc">Same API container</text>
+  </g>
+</svg>
