@@ -1,0 +1,26 @@
+{
+  "version": "2.0",
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request"
+      },
+      "enableLiveMetricsFilters": true
+    },
+    "logLevel": {
+      "default": "Information",
+      "Host.Results": "Information",
+      "Function": "Information"
+    }
+  },
+  "extensions": {
+    "serviceBus": {
+      "autoCompleteMessages": true,
+      "maxConcurrentCalls": 8
+    },
+    "eventHubs": {
+      "maxEventBatchSize": 100
+    }
+  }
+}

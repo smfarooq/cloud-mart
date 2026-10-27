@@ -1,0 +1,76 @@
+// Phase 7 queries. Run them in the Log Analytics workspace (log-cloudmart-dev). In Application Insights > Logs the
+// classic names also work (requests, dependencies, exceptions, traces, customMetrics, pageViews).
+// Run one query at a time: select it, then Run.
+
+// 1. Slowest API operations (p95) and their failure counts, last hour
+AppRequests
+| where TimeGenerated > ago(1h)
+| summarize calls = count(), p95_ms = percentile(DurationMs, 95), failures = countif(Success == false) by AppRoleName, Name
+| order by p95_ms desc
+
+// 2. Orders placed vs completed, from the custom OpenTelemetry counters (CloudMartTelemetry.cs)
+AppMetrics
+| where Name in ("cloudmart.orders.placed", "cloudmart.orders.completed")
+| summarize total = sum(Sum) by Name, bin(TimeGenerated, 5m)
+| render timechart
+
+// 3. Follow one order end to end: SPA -> API -> Service Bus -> Function -> SQL. Paste an order id.
+let orderId = "<order-id>";
+let operation = toscalar(AppTraces | where Message has orderId | top 1 by TimeGenerated asc | project OperationId);
+union AppRequests, AppDependencies, AppTraces, AppExceptions
+| where OperationId == operation
+| project TimeGenerated, Type, AppRoleName, Name, Target, DurationMs, Success, Message
+| order by TimeGenerated asc
+
+// 4. Exceptions by type and component (API vs Functions)
+AppExceptions
+| where TimeGenerated > ago(24h)
+| summarize count() by AppRoleName, ExceptionType, OuterMessage
+| order by count_ desc
+
+// 5. Failing dependencies: which Azure service is the problem?
+AppDependencies
+| where TimeGenerated > ago(24h) and Success == false
+| summarize failures = count() by Type, Target, ResultCode, bin(TimeGenerated, 15m)
+| order by TimeGenerated desc
+
+// 6. Function executions: volume, failures, duration
+AppRequests
+| where AppRoleName startswith "func-"
+| summarize executions = count(), failures = countif(Success == false), avg_ms = avg(DurationMs) by Name
+| order by executions desc
+
+// 7. Who read the payment-gateway secret? (Key Vault audit logs via diagnostic settings)
+AzureDiagnostics
+| where ResourceProvider == "MICROSOFT.KEYVAULT" and OperationName == "SecretGet"
+| project TimeGenerated, Resource, requestUri_s, identity_claim_oid_g, CallerIPAddress, ResultSignature
+| order by TimeGenerated desc
+
+// 8. Service Bus dead-letter count (the poison-message demo in phase 5)
+AzureMetrics
+| where ResourceProvider == "MICROSOFT.SERVICEBUS" and MetricName == "DeadletteredMessages"
+| summarize dead_lettered = max(Maximum) by Resource, bin(TimeGenerated, 5m)
+| render timechart
+
+// 9. Who is calling the App Service origin directly? (Before/after the Front Door lock in phase 10)
+AppServiceHTTPLogs
+| where TimeGenerated > ago(1h)
+| summarize count() by CsHost, ScStatus, CIp
+| order by count_ desc
+
+// 10. Front Door WAF: what was blocked, by which rule, from where
+AzureDiagnostics
+| where Category == "FrontDoorWebApplicationFirewallLog"
+| summarize count() by ruleName_s, action_s, clientIP_s
+| order by count_ desc
+
+// 11. Browser experience: page views and load time by country
+AppPageViews
+| where TimeGenerated > ago(24h)
+| summarize views = count(), avg_load_ms = avg(DurationMs) by Name, ClientCountryOrRegion
+
+// 12. What does ingestion cost? Billable GB per table, last 7 days (pair with the workspace daily cap)
+Usage
+| where TimeGenerated > ago(7d) and IsBillable
+| summarize GB = sum(Quantity) / 1024 by DataType
+| order by GB desc

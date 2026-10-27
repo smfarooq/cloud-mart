@@ -1,0 +1,106 @@
+# Phase 3 (AKS): the same container App Service and Container Apps run, now on Kubernetes.
+#
+#   az aks get-credentials -g rg-cloudmart-dev -n aks-cloudmart-dev
+#   export ACR=<acrLoginServer> API_CLIENT_ID=<apiIdentityClientId> REGION=eastus2
+#   export COSMOS_ENDPOINT=... BLOB_ENDPOINT=... KEYVAULT_URI=... APPINSIGHTS="<connection string>"
+#   envsubst < deploy/k8s/cloudmart-api.yaml | kubectl apply -f -
+#   kubectl -n cloudmart get svc cloudmart-api -w      # wait for EXTERNAL-IP
+#
+# Workload identity: the pod's service account is federated with the API's managed identity
+# (infra/modules/aks.bicep), so DefaultAzureCredential gets tokens with no secret in the cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudmart
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudmart-api
+  namespace: cloudmart
+  annotations:
+    azure.workload.identity/client-id: "${API_CLIENT_ID}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudmart-api
+  namespace: cloudmart
+data:
+  CLOUDMART_REGION: "${REGION}"
+  Auth__AllowAnonymousDevMode: "true"
+  Cosmos__Endpoint: "${COSMOS_ENDPOINT}"
+  Storage__BlobEndpoint: "${BLOB_ENDPOINT}"
+  KeyVault__Uri: "${KEYVAULT_URI}"
+  APPLICATIONINSIGHTS_CONNECTION_STRING: "${APPINSIGHTS}"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudmart-api
+  namespace: cloudmart
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloudmart-api
+  template:
+    metadata:
+      labels:
+        app: cloudmart-api
+        azure.workload.identity/use: "true" # the webhook injects AZURE_CLIENT_ID, AZURE_TENANT_ID and a token file
+    spec:
+      serviceAccountName: cloudmart-api
+      containers:
+        - name: api
+          image: ${ACR}/cloudmart-api:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: cloudmart-api
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          livenessProbe:
+            httpGet: { path: /health/live, port: 8080 }
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: { path: /health/live, port: 8080 }
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudmart-api
+  namespace: cloudmart
+spec:
+  type: LoadBalancer # an Azure Standard Load Balancer with a public IP. Try an internal one: see the learning path.
+  selector:
+    app: cloudmart-api
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cloudmart-api
+  namespace: cloudmart
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cloudmart-api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }

@@ -1,0 +1,155 @@
+# Phase 8: build once, deploy infrastructure, then deploy the apps. See docs/learning-path.md, phase 8.
+#
+# One-time setup in Azure DevOps:
+#   1. Service connection "azure-cloudmart-dev": Azure Resource Manager, *workload identity federation* (no secret
+#      to rotate). Grant it Owner on the subscription, or Contributor + Role Based Access Control Administrator,
+#      because the template creates role assignments.
+#   2. Environment "cloudmart-dev". Add an Approvals check to it to see a gated deployment.
+#   3. Fill in infra/main.bicepparam (your object id, UPN, email).
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    exclude: ['docs/*', '*.md']
+
+pr:
+  branches:
+    include: [main]
+
+variables:
+  azureServiceConnection: azure-cloudmart-dev
+  environmentName: cloudmart-dev
+  location: eastus2
+  deploymentName: cloudmart-$(Build.BuildId)
+  buildConfiguration: Release
+
+stages:
+  # ------------------------------------------------------------------------------------------------ Build
+  - stage: Build
+    jobs:
+      - job: build
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UseDotNet@2
+            inputs:
+              packageType: sdk
+              version: 10.0.x
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 24.x
+
+          # The build id surfaces as the version on CloudMart's Platform page.
+          - script: dotnet build CloudMart.slnx -c $(buildConfiguration) -p:InformationalVersion=1.0.$(Build.BuildId)
+            displayName: Build .NET
+
+          - script: dotnet test tests/CloudMart.Core.Tests -c $(buildConfiguration) --no-build --logger trx --results-directory $(Agent.TempDirectory)/tests
+            displayName: Unit tests
+
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: $(Agent.TempDirectory)/tests/*.trx
+
+          - script: |
+              set -euo pipefail
+              dotnet publish src/CloudMart.Api -c $(buildConfiguration) -o $(Agent.TempDirectory)/api --no-build
+              dotnet publish src/CloudMart.Functions -c $(buildConfiguration) -o $(Agent.TempDirectory)/functions --no-build
+              mkdir -p $(Build.ArtifactStagingDirectory)
+              (cd $(Agent.TempDirectory)/api && zip -qr $(Build.ArtifactStagingDirectory)/api.zip .)
+              (cd $(Agent.TempDirectory)/functions && zip -qr $(Build.ArtifactStagingDirectory)/functions.zip .)
+            displayName: Package API and Functions
+
+          - script: |
+              set -euo pipefail
+              npm ci
+              npm run build
+              cp -r dist $(Build.ArtifactStagingDirectory)/web
+            workingDirectory: src/cloudmart-web
+            displayName: Build SPA
+
+          # Compile + lint the templates. No Azure login needed.
+          - script: az bicep build --file infra/main.bicep --stdout > /dev/null
+            displayName: Bicep build
+
+          - publish: $(Build.ArtifactStagingDirectory)
+            artifact: drop
+
+  # ------------------------------------------------------------------------------------------------ Infrastructure
+  - stage: Infrastructure
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: infra
+        environment: $(environmentName)
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: AzureCLI@2
+                  displayName: What-if, then deploy
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      az deployment sub what-if -l $(location) -f infra/main.bicep -p infra/main.bicepparam
+                      az deployment sub create -n $(deploymentName) -l $(location) -f infra/main.bicep -p infra/main.bicepparam -o none
+
+  # ------------------------------------------------------------------------------------------------ Applications
+  - stage: Applications
+    dependsOn: Infrastructure
+    jobs:
+      - deployment: apps
+        environment: $(environmentName)
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self # the container build needs the source
+                - task: AzureCLI@2
+                  displayName: Deploy API, Functions and SPA
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      drop=$(Pipeline.Workspace)/drop
+                      out=$(az deployment sub show -n $(deploymentName) --query properties.outputs -o json)
+                      get() { echo "$out" | jq -r ".$1.value // empty"; }
+                      rg=$(get resourceGroupName)
+
+                      if [ -n "$(get apiAppName)" ]; then
+                        az webapp deploy -g "$rg" -n "$(get apiAppName)" --src-path "$drop/api.zip" --type zip
+                      fi
+
+                      if [ -n "$(get functionAppName)" ]; then
+                        az functionapp deployment source config-zip -g "$rg" -n "$(get functionAppName)" --src "$drop/functions.zip"
+                      fi
+
+                      if [ -n "$(get staticWebAppName)" ]; then
+                        # Build once, configure per environment: only config.json differs between environments.
+                        echo "$out" | jq '.spaConfig.value' > "$drop/web/config.json"
+                        token=$(az staticwebapp secrets list -g "$rg" -n "$(get staticWebAppName)" --query properties.apiKey -o tsv)
+                        npx --yes @azure/static-web-apps-cli deploy "$drop/web" --deployment-token "$token" --env production
+                      fi
+
+                      # Containers (Container Apps / AKS). ACR Tasks builds in Azure, so the agent needs no Docker.
+                      acr=$(get acrLoginServer)
+                      if [ -n "$acr" ]; then
+                        az acr build -r "${acr%%.*}" -t cloudmart-api:$(Build.BuildId) -t cloudmart-api:latest -f src/CloudMart.Api/Dockerfile .
+                        echo "Image: $acr/cloudmart-api:$(Build.BuildId). Set containerImage in main.bicepparam so Bicep and the pipeline agree."
+                      fi
+
+                      echo "SPA: $(get spaUrl)"
+                      echo "API: $(get apiUrl)"
