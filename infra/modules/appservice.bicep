@@ -17,13 +17,16 @@ param vnetSubnetId string = ''
 @description('Front Door profile id (its frontDoorId GUID). When set, only that Front Door can reach the app.')
 param frontDoorId string = ''
 
+@description('Phase 11: instances spread across availability zones. Needs Premium v2 or later and at least 2 instances; an existing plan may have to be recreated.')
+param zoneRedundant bool = false
+
 resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
   name: planName
   location: location
   tags: tags
   kind: 'linux'
-  sku: { name: skuName }
-  properties: { reserved: true }
+  sku: zoneRedundant ? { name: skuName, capacity: 2 } : { name: skuName }
+  properties: { reserved: true, zoneRedundant: zoneRedundant }
 }
 
 resource site 'Microsoft.Web/sites@2024-04-01' = {

@@ -54,6 +54,10 @@ phase 13 an optional **hub VNet** with **Azure Firewall** is peered to this one,
 subnets' internet-bound traffic through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
 is allowed out. For slides or documents, use the 2× PNG: [docs/architecture.png](docs/architecture.png).
 
+**Disaster recovery** has its own diagram, [docs/continuity.svg](docs/continuity.svg)
+([PNG](docs/continuity.png)). It shows what each service fails over to in a second region and what that copy costs.
+It also covers what isn't protected, the failover order, and the zones and backups inside each region (phase 11).
+
 <details>
 <summary>Text version (Mermaid, editable)</summary>
 
@@ -172,7 +176,7 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 | 8 DevOps | `deployAcr` (+ pipeline) | Version = pipeline build id |
 | 9 Governance | `deployGovernance` (on by default) | Policies + budget on the resource group |
 | 10 Architecture | `deployFrontDoor`, `deployAppGateway`, `secondaryApiHostName` | Front Door lock ✓; region flips on failover |
-| 11 Continuity | `storageSku`, `cosmosSecondaryLocation` | Multi-region data |
+| 11 Continuity | `storageSku`, `cosmosSecondaryLocation`, `sqlBackupRedundancy`, `sqlSecondaryLocation`, `eventHubsSecondaryLocation`, `zoneRedundant` | Multi-region data; orders survive a SQL failover |
 | 12 Integration | `deployAppConfig`, `deployRedis`, `deployApim` | Feature flags, Redis L2 cache |
 | 13 Hub-and-spoke | `deployFirewall` (needs `enablePrivateEndpoints`; **≈ $290/month**) | Order events **Service Bus (WebSockets)**; egress through Azure Firewall |
 | 16 Microservices | `deployPayments`, `deployShipping` (+ app registrations) | Payments **Payments API**, Shipping **Shipping API** |
@@ -182,8 +186,10 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 - Defaults deploy only cheap or free tiers: B1 App Service, Flex Consumption, Static Web Apps Free, Cosmos DB free
   tier, serverless SQL that auto-pauses, Log Analytics with a 1 GB/day cap, and a **budget alert** at 50% / 80% /
   forecast 100% of `monthlyBudget`.
-- Expensive switches (AKS, Application Gateway, Grafana, Front Door Premium, Bastion Basic) are off by default and
-  flagged in the learning path. Turn them on, learn, turn them off.
+- Expensive switches (AKS, Application Gateway, Grafana, Front Door Premium, Bastion Basic, Azure Firewall, the SQL
+  failover group, zone redundancy) are off by default and flagged in the learning path. Turn them on, learn, turn them
+  off. The SQL failover group is the one people forget: geo-replicated serverless databases never auto-pause, so it
+  costs about $750/month while it exists.
 - `deployFirewall` is one of the most expensive switches: Azure Firewall Basic is **≈ $290/month plus about $0.065
   per GB**, billed every hour it exists. It is off by default. Deploy it, do the phase 13 lab and delete it the same
   day.

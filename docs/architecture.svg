@@ -283,6 +283,7 @@
   <!-- ============ Azure region ============ -->
   <rect x="310" y="150" width="1541" height="1140" rx="6" class="zone"/>
   <text x="326" y="176" class="zonetitle">Azure region (eastus2) · resource group rg-cloudmart-dev</text>
+  <text x="1835" y="176" class="flowlabel" text-anchor="end">Second region, failover order and backups: docs/continuity.svg (phase 11)</text>
 
   <!-- Front Door to the API (public inbound, locked to Front Door) -->
   <path d="M215 570 H335 V383 H358" class="flow"/>

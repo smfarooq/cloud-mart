@@ -1,0 +1,285 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1390" width="1700" height="1390" role="img" aria-labelledby="title desc">
+  <title id="title">CloudMart business continuity diagram</title>
+  <desc id="desc">CloudMart's disaster recovery design (learning path phase 11). Front Door sends traffic to the primary region and fails over to a second copy of the app. Per service: Azure SQL auto-failover group with a listener, Cosmos DB multi-region with service-managed failover, RA-GZRS storage, Event Hubs metadata geo-disaster recovery behind an alias, Service Bus Standard without geo-replication, and Key Vault copied to the paired region by the platform. Also the failover order, zone redundancy and backups.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#404040"/>
+    </marker>
+    <marker id="arrow-log" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ED7D31"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2E75B6"/>
+    </marker>
+    <style>
+      text { font-family: 'Segoe UI', Calibri, Arial, sans-serif; }
+      .svc { fill: #ffffff; stroke: #00B050; stroke-width: 3; }
+      .opt { fill: #ffffff; stroke: #BFBFBF; stroke-width: 3; }
+      .note { fill: #ffffff; stroke: #70AD47; stroke-width: 1.5; }
+      .zone { fill: none; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .band { fill: #FAFAFA; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .group { fill: #F4FAF0; stroke: #70AD47; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .vnet { fill: #F7FAFE; stroke: #2E75B6; stroke-width: 2; }
+      .subnet { fill: #EEF5FC; stroke: #5B9BD5; stroke-width: 1.5; stroke-dasharray: 5 3; }
+      .optsub { fill: #F7F7F7; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 5 3; }
+      .pechip { fill: #ffffff; stroke: #00A2AD; stroke-width: 1.5; }
+      .rtchip { fill: #ffffff; stroke: #2E75B6; stroke-width: 1.5; }
+      .name { font-size: 14px; font-weight: 600; fill: #262626; text-anchor: middle; }
+      .role { font-size: 15px; font-weight: 700; fill: #000000; text-anchor: middle; }
+      .sub { font-size: 12px; fill: #595959; text-anchor: middle; }
+      .notetext { font-size: 13px; fill: #262626; }
+      .smallnote { font-size: 12px; fill: #262626; }
+      .zonetitle { font-size: 14px; font-weight: 700; fill: #404040; }
+      .tiletitle { font-size: 12.5px; font-weight: 700; fill: #1F3864; }
+      .tiletext { font-size: 12px; fill: #404040; }
+      .mono { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 11.5px; fill: #404040; }
+      .flow { stroke: #404040; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 6 4; }
+      .vint { stroke: #2E75B6; stroke-width: 1.8; stroke-dasharray: 4 3; fill: none; marker-end: url(#arrow-blue); }
+      .peer { stroke: #2E75B6; stroke-width: 2.4; fill: none; marker-start: url(#arrow-blue); marker-end: url(#arrow-blue); }
+      .log { stroke: #ED7D31; stroke-width: 2; stroke-dasharray: 2 4; stroke-linecap: round; fill: none; marker-end: url(#arrow-log); }
+      .flowlabel { font-size: 12px; font-style: italic; fill: #404040; }
+      .loglabel { font-size: 12px; font-style: italic; fill: #C55A11; }
+      .paneltitle { font-size: 15px; font-weight: 700; fill: #000000; }
+      .itemname { font-size: 13px; font-weight: 600; fill: #262626; }
+      .itemdesc { font-size: 12px; fill: #595959; }
+      .repl { stroke: #2E75B6; stroke-width: 1.8; stroke-dasharray: 6 4; fill: none; marker-end: url(#arrow-blue); }
+      .warn { font-size: 12px; font-style: italic; fill: #C00000; }
+      .rowlabel { font-size: 14px; font-weight: 700; fill: #1F3864; }
+    </style>
+    <symbol id="i-frontdoor" viewBox="0 0 48 48">
+      <path d="M14 36 h22 a9 9 0 0 0 0 -18 a12 12 0 0 0 -23 -3 a9 9 0 0 0 1 21 z" fill="#0078D4"/>
+      <path d="M16 27 h14 m-5 -5 l5 5 -5 5" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-swa" viewBox="0 0 48 48">
+      <rect x="6" y="8" width="36" height="32" rx="4" fill="#5C2D91"/>
+      <path d="M19 18 l-6 6 6 6 M29 18 l6 6 -6 6" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-entra" viewBox="0 0 48 48">
+      <polygon points="24,4 44,30 24,44 4,30" fill="#0078D4"/>
+      <polygon points="24,4 24,44 4,30" fill="#50A0E8"/>
+      <polygon points="24,18 33,30 24,36 15,30" fill="#ffffff" opacity="0.85"/>
+    </symbol>
+    <symbol id="i-appservice" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="18" fill="#0078D4"/>
+      <ellipse cx="24" cy="24" rx="8" ry="18" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <path d="M6 24 h36 M9 15 h30 M9 33 h30" stroke="#ffffff" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-sql" viewBox="0 0 48 48">
+      <path d="M8 10 v28 c0 2.8 7.2 5 16 5 s16 -2.2 16 -5 V10 c0 2.8 -7.2 5 -16 5 S8 12.8 8 10 z" fill="#0072C6"/>
+      <ellipse cx="24" cy="10" rx="16" ry="5" fill="#50A0E8"/>
+      <text x="24" y="33" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">SQL</text>
+    </symbol>
+    <symbol id="i-cosmos" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="13" fill="#0F4C8A"/>
+      <ellipse cx="24" cy="24" rx="22" ry="8" fill="none" stroke="#50A0E8" stroke-width="2.5" transform="rotate(-25 24 24)"/>
+      <circle cx="40" cy="8" r="2" fill="#50A0E8"/>
+      <circle cx="7" cy="40" r="1.6" fill="#50A0E8"/>
+    </symbol>
+    <symbol id="i-blob" viewBox="0 0 48 48">
+      <rect x="4" y="10" width="40" height="30" rx="2" fill="#E6E6E6"/>
+      <rect x="4" y="10" width="40" height="8" fill="#5EA830"/>
+      <path d="M8 24 h32 M8 30 h32 M8 36 h32 M17 18 v22 M31 18 v22" stroke="#0072C6" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-eventhubs" viewBox="0 0 48 48">
+      <rect x="4" y="8" width="40" height="32" rx="3" fill="#0072C6"/>
+      <path d="M10 16 h22 M10 24 h28 M10 32 h22" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M33 13 l4 3 -4 3 M33 29 l4 3 -4 3" stroke="#ffffff" stroke-width="2" fill="none"/>
+    </symbol>
+    <symbol id="i-servicebus" viewBox="0 0 48 48">
+      <rect x="4" y="10" width="40" height="28" rx="3" fill="#0072C6"/>
+      <rect x="9" y="17" width="9" height="14" fill="#ffffff"/>
+      <rect x="20" y="17" width="9" height="14" fill="#ffffff" opacity="0.8"/>
+      <rect x="31" y="17" width="9" height="14" fill="#ffffff" opacity="0.6"/>
+    </symbol>
+    <symbol id="i-keyvault" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="19" fill="#FFB900"/>
+      <circle cx="19" cy="21" r="6" fill="none" stroke="#ffffff" stroke-width="3"/>
+      <path d="M23 25 l12 12 m-4 -4 l3 -3 m-6 0 l3 -3" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none"/>
+    </symbol>
+  </defs>
+  <rect width="1700" height="1390" fill="#ffffff"/>
+  <rect x="30" y="24" width="430" height="66" fill="#4472C4"/>
+  <text x="245" y="69" font-size="34" fill="#ffffff" text-anchor="middle">Business Continuity</text>
+  <text x="30" y="132" font-size="15" fill="#404040">CloudMart's disaster recovery (learning path, phase 11): what each service fails over to, what the copy costs, and the order to fail over in. Grey = a switch in infra/main.bicepparam.</text>
+  <rect x="500" y="24" width="1170" height="82" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="514" y="70" font-size="14" font-weight="700" fill="#000000">Legend</text>
+  <rect x="590" y="41" width="26" height="18" class="svc"/>
+  <text x="626" y="55" class="notetext">Deployed by default</text>
+  <rect x="850" y="41" width="26" height="18" class="opt"/>
+  <text x="886" y="55" class="notetext">Optional: a phase 10/11 switch</text>
+  <path d="M1170 50 H1196" class="flow"/>
+  <text x="1206" y="55" class="notetext">Traffic</text>
+  <path d="M590 84 H616" class="repl"/>
+  <text x="626" y="88" class="notetext">Replication (asynchronous)</text>
+  <path d="M850 84 H876" class="flow dash"/>
+  <text x="886" y="88" class="notetext">Failover path</text>
+  <text x="1170" y="88" class="warn">Red: not protected</text>
+  <rect x="30" y="150" width="1640" height="124" rx="6" class="band"/>
+  <text x="46" y="170" class="zonetitle">Global services: no regional failover needed</text>
+  <rect x="50" y="180" width="480" height="84" class="svc"/>
+  <use href="#i-swa" x="62" y="200" width="40" height="40"/>
+  <text x="114" y="206" class="itemname">Static Web Apps · the SPA</text>
+  <text class="itemdesc"><tspan x="114" y="226">Static content served from global edge locations.</tspan><tspan x="114" y="242">Same files in every region: nothing to fail over.</tspan></text>
+  <rect x="575" y="180" width="550" height="84" class="svc"/>
+  <use href="#i-frontdoor" x="587" y="200" width="40" height="40"/>
+  <text x="639" y="206" class="itemname">Front Door + WAF</text>
+  <text class="itemdesc"><tspan x="639" y="226">Origin group: priority 1 = this region's API, priority 2 = the</tspan><tspan x="639" y="242">second copy (secondaryApiHostName). Probes decide.</tspan></text>
+  <rect x="1170" y="180" width="480" height="84" class="svc"/>
+  <use href="#i-entra" x="1182" y="200" width="40" height="40"/>
+  <text x="1234" y="206" class="itemname">Microsoft Entra ID</text>
+  <text class="itemdesc"><tspan x="1234" y="226">A global service: sign-in and app-role tokens keep</tspan><tspan x="1234" y="242">working through a regional outage.</tspan></text>
+  <rect x="30" y="300" width="730" height="760" rx="6" class="zone"/>
+  <text x="46" y="326" class="zonetitle">Primary region · eastus2 (location)</text>
+  <rect x="940" y="300" width="730" height="760" rx="6" class="zone"/>
+  <text x="956" y="326" class="zonetitle">Secondary region · centralus</text>
+  <text x="1466" y="326" class="tiletitle">Switch · cost</text>
+  <path d="M700 264 V348" class="flow"/>
+  <text x="708" y="290" class="flowlabel">priority 1 · active</text>
+  <path d="M1110 264 V288 H1350 V348" class="flow dash"/>
+  <text x="1342" y="330" class="flowlabel" text-anchor="end">priority 2 · on failover</text>
+  <!-- Compute -->
+  <text x="50" y="382" class="rowlabel">Compute</text>
+  <text x="50" y="402" class="itemdesc">RTO: minutes if warm</text>
+  <rect x="250" y="350" width="490" height="84" class="svc"/>
+  <use href="#i-appservice" x="262" y="370" width="40" height="40"/>
+  <text x="314" y="376" class="itemname">App Service plan + Function App</text>
+  <text class="itemdesc"><tspan x="314" y="396">API, Payments and Shipping on one plan; the saga and triggers</tspan><tspan x="314" y="412">on Flex Consumption. zoneRedundant: P1v3 x 2 across zones.</tspan></text>
+  <rect x="960" y="350" width="490" height="84" class="opt"/>
+  <use href="#i-appservice" x="972" y="370" width="40" height="40"/>
+  <text x="1024" y="376" class="itemname">Second copy of the app (phase 10)</text>
+  <text class="itemdesc"><tspan x="1024" y="396">environmentName = 'dr', deploySql = false, and</tspan><tspan x="1024" y="412">sharedSqlListenerFqdn = the primary's SQL listener.</tspan></text>
+  <text x="850" y="384" class="flowlabel" text-anchor="middle">no replication:</text>
+  <text x="850" y="412" class="flowlabel" text-anchor="middle">a second deployment</text>
+  <text x="1466" y="376" class="mono">secondaryApiHostName</text>
+  <text x="1466" y="396" class="itemdesc">a second B1 plan + Flex:</text>
+  <text x="1466" y="412" class="itemdesc">about $15/month idle</text>
+  <!-- Orders, payments -->
+  <text x="50" y="482" class="rowlabel">Orders, payments</text>
+  <text x="50" y="502" class="itemdesc">RPO 5 min · RTO 1 h</text>
+  <rect x="250" y="450" width="490" height="84" class="svc"/>
+  <use href="#i-sql" x="262" y="470" width="40" height="40"/>
+  <text x="314" y="476" class="itemname">Azure SQL · primary server</text>
+  <text class="itemdesc"><tspan x="314" y="496">cloudmart + payments databases, read-write. PITR 7 days,</tspan><tspan x="314" y="512">geo-redundant backups (sqlBackupRedundancy = Geo).</tspan></text>
+  <rect x="960" y="450" width="490" height="84" class="opt"/>
+  <use href="#i-sql" x="972" y="470" width="40" height="40"/>
+  <text x="1024" y="476" class="itemname">Azure SQL · &lt;server&gt;-dr</text>
+  <text class="itemdesc"><tspan x="1024" y="496">Readable geo-secondaries of both databases. The listener</tspan><tspan x="1024" y="512">&lt;server&gt;-fog always points at the current primary.</tspan></text>
+  <path d="M742 492 H958" class="repl"/>
+  <text x="850" y="484" class="flowlabel" text-anchor="middle">async geo-replication</text>
+  <text x="850" y="512" class="flowlabel" text-anchor="middle">lag: seconds</text>
+  <text x="1466" y="476" class="mono">sqlSecondaryLocation</text>
+  <text x="1466" y="496" class="itemdesc">about $750/month: geo-</text>
+  <text x="1466" y="512" class="itemdesc">replicas never auto-pause</text>
+  <!-- Catalog -->
+  <text x="50" y="582" class="rowlabel">Catalog</text>
+  <text x="50" y="602" class="itemdesc">RPO 1 h · RTO 15 min</text>
+  <rect x="250" y="550" width="490" height="84" class="svc"/>
+  <use href="#i-cosmos" x="262" y="570" width="40" height="40"/>
+  <text x="314" y="576" class="itemname">Cosmos DB · write region</text>
+  <text class="itemdesc"><tspan x="314" y="596">products and product-stats, session consistency.</tspan><tspan x="314" y="612">Continuous backup: 7-day point-in-time restore.</tspan></text>
+  <rect x="960" y="550" width="490" height="84" class="opt"/>
+  <use href="#i-cosmos" x="972" y="570" width="40" height="40"/>
+  <text x="1024" y="576" class="itemname">Cosmos DB · read region</text>
+  <text class="itemdesc"><tspan x="1024" y="596">Service-managed failover promotes it to the write region.</tspan><tspan x="1024" y="612">Needs provisioned throughput (free tier), not serverless.</tspan></text>
+  <path d="M742 592 H958" class="repl"/>
+  <text x="850" y="584" class="flowlabel" text-anchor="middle">multi-region</text>
+  <text x="850" y="612" class="flowlabel" text-anchor="middle">replication</text>
+  <text x="1466" y="576" class="mono">cosmosSecondaryLocation</text>
+  <text x="1466" y="596" class="itemdesc">bills the RU/s again</text>
+  <text x="1466" y="612" class="itemdesc">in the second region</text>
+  <!-- Images, state -->
+  <text x="50" y="682" class="rowlabel">Images, state</text>
+  <text x="50" y="702" class="itemdesc">RPO 1 day</text>
+  <rect x="250" y="650" width="490" height="84" class="svc"/>
+  <use href="#i-blob" x="262" y="670" width="40" height="40"/>
+  <text x="314" y="676" class="itemname">Storage account</text>
+  <text class="itemdesc"><tspan x="314" y="696">Images, the shipments table, dead letters, and the Durable</tspan><tspan x="314" y="712">Functions task hub: in-flight saga state lives here.</tspan></text>
+  <rect x="960" y="650" width="490" height="84" class="opt"/>
+  <use href="#i-blob" x="972" y="670" width="40" height="40"/>
+  <text x="1024" y="676" class="itemname">Storage · secondary endpoint (RA-GZRS)</text>
+  <text class="itemdesc"><tspan x="1024" y="696">Read-only until a customer-initiated account failover.</tspan><tspan x="1024" y="712">Afterwards the account is LRS: turn geo-redundancy back on.</tspan></text>
+  <path d="M742 692 H958" class="repl"/>
+  <text x="850" y="684" class="flowlabel" text-anchor="middle">async geo-replication</text>
+  <text x="850" y="712" class="flowlabel" text-anchor="middle">Last Sync Time = RPO</text>
+  <text x="1466" y="676" class="mono">storageSku</text>
+  <text x="1466" y="696" class="itemdesc">RA-GZRS: roughly 2x the</text>
+  <text x="1466" y="712" class="itemdesc">LRS price per GB</text>
+  <!-- Click stream -->
+  <text x="50" y="782" class="rowlabel">Click stream</text>
+  <text x="50" y="802" class="itemdesc">best effort</text>
+  <rect x="250" y="750" width="490" height="84" class="svc"/>
+  <use href="#i-eventhubs" x="262" y="770" width="40" height="40"/>
+  <text x="314" y="776" class="itemname">Event Hubs namespace</text>
+  <text class="itemdesc"><tspan x="314" y="796">telemetry hub and the functions consumer group.</tspan><tspan x="314" y="812">Standard is zone-redundant automatically.</tspan></text>
+  <rect x="960" y="750" width="490" height="84" class="opt"/>
+  <use href="#i-eventhubs" x="972" y="770" width="40" height="40"/>
+  <text x="1024" y="776" class="itemname">Event Hubs · paired namespace</text>
+  <text class="itemdesc"><tspan x="1024" y="796">The apps use the alias &lt;namespace&gt;-geo. Failover is one-way;</tspan><tspan x="1024" y="812">events still in the old primary stay there.</tspan></text>
+  <path d="M742 792 H958" class="repl"/>
+  <text x="850" y="784" class="flowlabel" text-anchor="middle">metadata pairing:</text>
+  <text x="850" y="812" class="flowlabel" text-anchor="middle">no events copied</text>
+  <text x="1466" y="776" class="mono">eventHubsSecondaryLocation</text>
+  <text x="1466" y="796" class="itemdesc">about $22/month</text>
+  <!-- Order events -->
+  <text x="50" y="882" class="rowlabel">Order events</text>
+  <text x="50" y="902" class="itemdesc">in flight: at risk</text>
+  <rect x="250" y="850" width="490" height="84" class="svc"/>
+  <use href="#i-servicebus" x="262" y="870" width="40" height="40"/>
+  <text x="314" y="876" class="itemname">Service Bus Standard</text>
+  <text class="itemdesc"><tspan x="314" y="896">orders topic, three subscriptions, dead-letter queues.</tspan><tspan x="314" y="912">No geo-disaster recovery and no zones on Standard.</tspan></text>
+  <rect x="960" y="850" width="490" height="84" class="opt"/>
+  <use href="#i-servicebus" x="972" y="870" width="40" height="40"/>
+  <text x="1024" y="876" class="itemname">Service Bus · second copy's own namespace</text>
+  <text class="itemdesc"><tspan x="1024" y="896">New orders flow again. Messages queued in the primary wait</tspan><tspan x="1024" y="912">for it or are lost. Premium: geo-DR and geo-replication.</tspan></text>
+  <text x="850" y="884" class="warn" text-anchor="middle">no replication</text>
+  <text x="850" y="912" class="warn" text-anchor="middle">on Standard</text>
+  <text x="1466" y="876" class="itemdesc">Premium: about $680/month</text>
+  <text x="1466" y="896" class="itemdesc">per messaging unit</text>
+  <!-- Secrets -->
+  <text x="50" y="982" class="rowlabel">Secrets</text>
+  <text x="50" y="1002" class="itemdesc">platform-managed</text>
+  <rect x="250" y="950" width="490" height="84" class="svc"/>
+  <use href="#i-keyvault" x="262" y="970" width="40" height="40"/>
+  <text x="314" y="976" class="itemname">Key Vault</text>
+  <text class="itemdesc"><tspan x="314" y="996">The payment-gateway key, soft delete 7 days. Microsoft</tspan><tspan x="314" y="1012">copies the vault to the paired region for you.</tspan></text>
+  <rect x="960" y="950" width="490" height="84" class="opt"/>
+  <use href="#i-keyvault" x="972" y="970" width="40" height="40"/>
+  <text x="1024" y="976" class="itemname">Key Vault · paired-region copy</text>
+  <text class="itemdesc"><tspan x="1024" y="996">Read-only during a regional outage: reads work, writes</tspan><tspan x="1024" y="1012">wait. The second copy can also have a vault of its own.</tspan></text>
+  <path d="M742 992 H958" class="repl"/>
+  <text x="850" y="984" class="flowlabel" text-anchor="middle">platform copy</text>
+  <text x="850" y="1012" class="flowlabel" text-anchor="middle">(paired region)</text>
+  <text x="1466" y="976" class="itemdesc">no switch: built in</text>
+  <rect x="30" y="1090" width="800" height="270" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="46" y="1118" class="paneltitle">Failover order (runbook in phase 11)</text>
+  <text x="46" y="1146" class="itemname">1 · Declare</text>
+  <text class="itemdesc"><tspan x="150" y="1146">One named person decides. The RTO clock started at the outage, not at the decision.</tspan></text>
+  <text x="46" y="1180" class="itemname">2 · Data</text>
+  <text class="itemdesc"><tspan x="150" y="1180">SQL: failover-group set-primary on the secondary. Cosmos DB: service-managed failover.</tspan><tspan x="150" y="1196">Storage: account failover. Event Hubs: alias fail-over.</tspan></text>
+  <text x="46" y="1230" class="itemname">3 · Compute</text>
+  <text class="itemdesc"><tspan x="150" y="1230">The second copy is already deployed: scale it out, and delete the Event Hubs checkpoints so its trigger starts clean.</tspan></text>
+  <text x="46" y="1264" class="itemname">4 · Traffic</text>
+  <text class="itemdesc"><tspan x="150" y="1264">Front Door's probes move traffic to priority 2. Disable the primary origin so it can't flap back.</tspan></text>
+  <text x="46" y="1298" class="itemname">5 · Verify</text>
+  <text class="itemdesc"><tspan x="150" y="1298">Place an order, follow its trace in Application Insights, and watch the alerts.</tspan></text>
+  <text x="46" y="1332" class="itemname">6 · Fail back</text>
+  <text class="itemdesc"><tspan x="150" y="1332">Same order, reversed, once the region is healthy. Re-pair Event Hubs and turn geo-redundancy back on.</tspan></text>
+  <rect x="870" y="1090" width="800" height="270" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="886" y="1118" class="paneltitle">Inside each region</text>
+  <text x="886" y="1144" class="itemname">Zones (zoneRedundant): a datacentre fails</text>
+  <text x="886" y="1166" class="itemdesc">SQL: zone-redundant databases</text>
+  <text x="886" y="1184" class="itemdesc">Cosmos DB: replicas across zones (set at creation)</text>
+  <text x="886" y="1202" class="itemdesc">App Service: P1v3 x 2 instances across zones</text>
+  <text x="886" y="1220" class="itemdesc">Storage: ZRS or GZRS (storageSku)</text>
+  <text x="886" y="1238" class="itemdesc">Event Hubs Standard: automatic</text>
+  <text x="886" y="1256" class="itemdesc">Functions Flex: check the region supports zones</text>
+  <text x="1270" y="1144" class="itemname">Backups: deletion, corruption, ransomware</text>
+  <text x="1270" y="1166" class="itemdesc">SQL: PITR 7 days + geo-restore (RPO up to 1 h)</text>
+  <text x="1270" y="1184" class="itemdesc">Cosmos DB: continuous backup, 7 days</text>
+  <text x="1270" y="1202" class="itemdesc">Blob: soft delete, versioning, lifecycle</text>
+  <text x="1270" y="1220" class="itemdesc">Azure Backup vault: VM and blob backups</text>
+  <text x="1270" y="1238" class="itemdesc">Site Recovery: the jumpbox VM</text>
+  <text x="886" y="1304" class="smallnote">Replication copies a bad write or a deletion to the other region within seconds.</text>
+  <text x="886" y="1322" class="smallnote">Backups are what bring the data back; zones and regions only keep it available.</text>
+</svg>

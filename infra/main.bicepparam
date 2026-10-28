@@ -61,6 +61,16 @@ param secondaryApiHostName = ''
 param cosmosSecondaryLocation = ''
 param deployAppGateway = false
 
+// Phase 11 · Business continuity (docs/continuity.svg). Geo-redundant SQL backups are on from day one.
+param sqlBackupRedundancy = 'Geo'
+// COST: about $750/month while it exists. Geo-replicated serverless databases never auto-pause. Drill, then remove it.
+param sqlSecondaryLocation = ''
+// Only in the phase 10 second copy's parameter file: the first environment's sqlListenerFqdn output (with deploySql = false).
+param sharedSqlListenerFqdn = ''
+param eventHubsSecondaryLocation = ''
+// Set before the first deployment. COST: the App Service plan becomes P1v3 x 2 (about $250/month).
+param zoneRedundant = false
+
 // Gap topics (AZ-305 "application architecture")
 param deployAppConfig = false
 param deployRedis = false

@@ -580,6 +580,8 @@ fixed, so deploy, test and remove the same day).
    `environmentName = 'dr'`, `location = 'centralus'`, `deployFrontDoor = false`. Put its API host name in
    `secondaryApiHostName` of the first environment. Stop the primary web app: within a couple of probe intervals Front
    Door fails over, and the Platform page shows the other region. Data stays in the primary region until phase 11.
+   Then give the second copy `deploySql = false` and the first environment's `sqlListenerFqdn` output as
+   `sharedSqlListenerFqdn`, so it works on the same replicated databases.
 
 ### Architect's questions
 
@@ -595,40 +597,120 @@ fixed, so deploy, test and remove the same day).
 
 ## Phase 11 · Business continuity (new: 15–20% of the exam)
 
-**Switches:** `storageSku = 'Standard_RAGZRS'`, `cosmosSecondaryLocation = 'centralus'` (free-tier/provisioned mode).
+**The picture:** [continuity.svg](continuity.svg) ([PNG](continuity.png)) shows each service's copy in the second
+region, what that copy costs, and the failover order.
+
+**Switches** (in `main.bicepparam`; try them one at a time):
+
+| Switch | What you get | Cost |
+|---|---|---|
+| `sqlBackupRedundancy = 'Geo'` (the default) | Backups copied to the paired region, so you can **geo-restore** anywhere (RPO up to 1 hour, RTO hours) | Little or nothing at this size |
+| `storageSku = 'Standard_RAGZRS'` | Zones in this region, plus a readable copy in the paired region | Roughly 2x LRS per GB |
+| `cosmosSecondaryLocation = 'centralus'` | A read region with service-managed failover (free-tier or provisioned mode only) | The RU/s again in the second region |
+| `sqlSecondaryLocation = 'centralus'` | An auto-failover group for both databases; the apps connect through its listener | **About $750/month**: geo-replicated serverless databases never auto-pause |
+| `eventHubsSecondaryLocation = 'centralus'` | A paired namespace behind an alias (metadata only) | About $22/month |
+| `zoneRedundant = true` | Zone-redundant SQL, Cosmos DB and App Service plan (P1v3 x 2) | About $250/month for the plan. Set it before the first deployment |
+
+The expensive ones bill by the hour: deploy them, run the drill, and remove them the same day.
 
 ### Lab
 
 1. **Write the targets first.** Orders: RPO 5 minutes, RTO 1 hour. Catalog: RPO 1 hour, RTO 15 minutes. Images:
    RPO 1 day. Every design choice below must satisfy a line in that table.
-2. **SQL auto-failover group.** Create a secondary server in the paired region and a failover group:
+2. **SQL auto-failover group.** Set `sqlSecondaryLocation = 'centralus'` and redeploy.
+   [`sql.bicep`](../infra/modules/sql.bicep) creates a secondary server (`<server>-dr`) and a failover group with both
+   databases. Every app already connects through the listener `<server>-fog.database.windows.net`, so nothing else
+   changes. The database users replicate with the databases, so the grant script doesn't need to run again. Fail over
+   while placing orders:
 
    ```bash
-   az sql server create -g rg-cloudmart-dev -n sql-cloudmart-dr-<x> -l centralus --enable-ad-only-auth \
-     --external-admin-principal-type User --external-admin-name <you> --external-admin-sid <your-object-id>
-   az sql failover-group create -g rg-cloudmart-dev -s <primary-server> -n fog-cloudmart-<x> \
-     --partner-server sql-cloudmart-dr-<x> --add-db cloudmart --failover-policy Automatic
+   az sql failover-group set-primary -g rg-cloudmart-dev -s <server>-dr -n <server>-fog
    ```
 
-   Point `ConnectionStrings__OrdersSql` at the listener `fog-cloudmart-<x>.database.windows.net`, then
-   `az sql failover-group set-primary` on the secondary and watch the app reconnect. Delete it afterwards (the
-   secondary database is billed).
+   Fail back with the same command and `-s <server>`. The group's policy is **customer-managed**, which is Microsoft's
+   recommendation: you decide when to fail over. With *Automatic*, Microsoft fails over only during a region-wide
+   outage, after a grace period, which can be later than your RTO. When you're done, remove the switch and delete
+   `<server>-dr`: the failover group keeps both databases from auto-pausing.
 3. **Cosmos DB multi-region.** With the secondary region added, run *Service-managed failover* in the portal. Discuss
    single-write versus multi-write regions and how the consistency level affects RPO.
 4. **Storage.** With RA-GZRS, read from `https://<account>-secondary.blob.core.windows.net`, check the
    **Last Sync Time**, and read how customer-initiated account failover works.
-5. **Azure Backup.** Create a Recovery Services vault, back up the jumpbox VM, restore a single file, and look at soft
+5. **Event Hubs geo-disaster recovery.** Set `eventHubsSecondaryLocation = 'centralus'`. The apps now connect to the
+   alias `<namespace>-geo.servicebus.windows.net` ([`messaging.bicep`](../infra/modules/messaging.bicep)). Open the
+   secondary namespace:
+   - The `telemetry` hub and the `functions` consumer group appeared on their own.
+   - There are no events.
+   - There are no role assignments of its own, so Bicep adds them. Without them, a failover would lock the apps out.
+
+   Then fail over:
+
+   ```bash
+   az eventhubs georecovery-alias fail-over -g rg-cloudmart-dev --namespace-name <namespace>-dr -a <namespace>-geo
+   ```
+
+   The pairing is gone, and the old primary keeps any events nobody read: failover is one-way. Clicks flow again
+   once the Functions app restarts. If its trigger complains about checkpoints, delete the consumer group's blobs in
+   the `azure-webjobs-eventhub` container. To pair again, redeploy with a new secondary.
+6. **Zones.** `zoneRedundant` survives a datacentre failure for much less than a second region costs. Work out:
+   - what it costs here;
+   - what it protects against;
+   - why it can't help with a region-wide outage or a bad deployment.
+7. **Azure Backup.** Create a Recovery Services vault, back up the jumpbox VM, restore a single file, and look at soft
    delete and immutable vaults. Create a **Backup vault** and enable operational backup for the blob containers.
-6. **Azure Site Recovery.** Replicate the jumpbox to another region, run a **test failover** into an isolated VNet,
+8. **Azure Site Recovery.** Replicate the jumpbox to another region, run a **test failover** into an isolated VNet,
    then clean up the test.
-7. **Point-in-time restore.** `az sql db restore --dest-name cloudmart-pitr --time <UTC 10 minutes ago>`;
-   restore a Cosmos container from continuous backup.
+9. **Point-in-time restore and geo-restore.**
+   - `az sql db restore --dest-name cloudmart-pitr --time <UTC 10 minutes ago>` restores the database as it was ten
+     minutes ago.
+   - Restore a Cosmos DB container from continuous backup.
+   - With geo-redundant backups, the portal's *Geo-restore* (or `az sql db geo-backup restore`) recreates a database
+     in another region from its latest geo-replicated backup. No standby is needed, but expect hours, not minutes.
+10. **The drill.** Combine this with phase 10's second copy and follow the runbook below. Time each step: the total is
+    your real RTO.
+
+### Failover runbook
+
+Do it in this order: data first, then compute, then traffic. If traffic moves before the data has failed over, users
+reach an app that can't write.
+
+| Step | Action | Check |
+|---|---|---|
+| 1 Declare | One named person decides to fail over. The RTO clock started at the outage, not at the decision. | Service Health shows a regional incident, not just a problem in your app |
+| 2 Data | **SQL:** `az sql failover-group set-primary` on `<server>-dr`, with `--allow-data-loss` if the primary is unreachable. **Cosmos DB:** service-managed failover. **Storage:** customer-initiated account failover. **Event Hubs:** `georecovery-alias fail-over`. | Each service reports the second region as primary |
+| 3 Compute | The phase 10 second copy is already deployed with `deploySql = false` and `sharedSqlListenerFqdn` set to the listener. Scale it out, and delete the Event Hubs checkpoints. | `/health/ready` is green in the second region |
+| 4 Traffic | Front Door's probes have already moved traffic to priority 2. Disable the primary origin so traffic can't flap back while it's half healthy. | The Platform page shows the second region |
+| 5 Verify | Place an order and follow its trace; watch the phase 7 alerts. | The order confirms, with no dead letters |
+| 6 Fail back | Once the primary region is healthy, do the same in reverse. **SQL** and **Cosmos DB:** switch primary and write region back. **Storage:** turn geo-redundancy on again, because an account failover leaves it LRS. **Event Hubs:** pair again. | The same checks, in the first region |
+
+**What you lose:**
+- **SQL:** nothing in a planned failover. With `--allow-data-loss`, the last few seconds of replication lag. With
+  geo-restore alone, up to an hour.
+- **Service Bus Standard:** messages still queued in the primary namespace. They're delivered when the region comes
+  back, or never. Their orders stay Pending, so publish them again after the outage. A client retry with the same
+  `Idempotency-Key` does that for you (phase 16).
+- **Sagas in flight:** their Durable Functions state is in the primary storage account. They resume after the
+  storage account fails over, or when the primary region returns.
+- **Event Hubs:** events nobody had read yet in the primary namespace. The click stream is best effort, so that's
+  accepted.
+
+**The second copy's identities.** The second copy's managed identities are different principals. Before the drill, run
+[grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql) once more on the **primary** server, with
+the second copy's identity names. The users then replicate to the secondary. With private endpoints on, the second
+copy's VNet also needs private endpoints to both SQL servers and a link to their DNS records: phase 13's
+hub-and-spoke DNS problem.
 
 ### Architect's questions
 
 | Requirement | Recommendation |
 |---|---|
-| Survive a datacentre failure | **Availability zones** (99.99% VM SLA) |
+| Survive a datacentre failure | **Availability zones** (99.99% VM SLA): zone-redundant SQL and Cosmos DB, ZRS storage, a zone-redundant App Service plan (Premium v2 or later, at least 2 instances) |
+| Cheapest cross-region recovery for Azure SQL | **Geo-restore** from geo-redundant backups: RPO up to 1 hour, RTO in hours, no standby to pay for |
+| SQL failover with an RPO of seconds and no config change | **Auto-failover group**: asynchronous geo-replication plus a listener. Serverless replicas don't auto-pause |
+| Who triggers the SQL failover | A **customer-managed** policy (recommended). Microsoft-managed waits for a region-wide outage and a grace period |
+| Event Hubs regional DR | **Geo-disaster recovery** (Standard and up): metadata only, an alias, one-way. **Geo-replication** (Premium, Dedicated): the events too |
+| Service Bus regional DR | **Premium**: geo-disaster recovery (metadata) or geo-replication (messages). Standard has neither |
+| Key Vault during a regional outage | Built in: a read-only copy in the paired region until the region recovers |
+| Order of a regional failover | Data, then compute, then traffic. Fail back in the reverse order |
 | Survive rack / update failures where zones are unavailable | **Availability sets** (99.95%) |
 | Survive a region failure | Multi-region + replication: **SQL failover groups**, **Cosmos multi-region**, **GZRS/RA-GZRS**, **ASR** for VMs |
 | Recover from deletion, corruption or ransomware | **Backup** (not replication: replication copies the corruption too), soft delete, immutability, PITR |

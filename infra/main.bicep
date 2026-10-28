@@ -103,6 +103,19 @@ param secondaryApiHostName string = ''
 param cosmosSecondaryLocation string = ''
 param deployAppGateway bool = false
 
+// ------------------------------------------------------------------ Phase 11 · Business continuity
+@description('Where SQL backups are copied. Geo lets you geo-restore into any region if this one is lost (RPO up to 1 hour); Local is a little cheaper and dies with the region.')
+@allowed(['Local', 'Zone', 'Geo', 'GeoZone'])
+param sqlBackupRedundancy string = 'Geo'
+@description('A second region for a SQL auto-failover group (e.g. centralus); the apps connect through its listener. EXPENSIVE: geo-replicated serverless databases never auto-pause, about $190/month per database copy (about $750/month with the payments database). Deploy, run the drill, remove it.')
+param sqlSecondaryLocation string = ''
+@description('For the phase 10 second-region copy only: the primary environment\'s sqlListenerFqdn output. With deploySql = false, this copy\'s apps use the replicated databases instead of their own.')
+param sharedSqlListenerFqdn string = ''
+@description('A second region for Event Hubs metadata geo-disaster recovery (e.g. centralus): a paired Standard namespace (about $22/month) behind an alias. Copies configuration, not events.')
+param eventHubsSecondaryLocation string = ''
+@description('Zone-redundant SQL databases, Cosmos DB regions and App Service plan (P1v3 x 2, about $250/month). Set it before the first deployment: Cosmos DB regions and App Service plans can\'t switch later. For Storage, choose a ZRS or GZRS storageSku.')
+param zoneRedundant bool = false
+
 // ------------------------------------------------------------------ Gap topics
 param deployAppConfig bool = false
 param deployRedis bool = false
@@ -185,6 +198,10 @@ var needAcr = deployAcr || deployAks || (deployContainerApps && !empty(container
 // Phase 16: both services run on the API's App Service plan. Each gets Entra protection once its app registration
 // exists; until then it runs in the same lab-only "anonymous" mode as the API before phase 6.
 var usePayments = deployPayments && deployAppService
+
+// Fixed, so a second-region copy finds both databases behind the primary environment's failover-group listener.
+var ordersDatabaseName = 'cloudmart'
+var paymentsDatabaseName = 'payments'
 var useShipping = deployShipping && deployAppService
 var paymentsEntra = enableEntraAuth && !empty(entraPaymentsClientId)
 var shippingEntra = enableEntraAuth && !empty(entraShippingClientId)
@@ -201,7 +218,11 @@ module governance 'modules/governance.bicep' = if (deployGovernance) {
   name: 'governance'
   params: {
     location: location
-    allowedLocations: union([location, staticWebAppLocation], empty(cosmosSecondaryLocation) ? [] : [cosmosSecondaryLocation])
+    // Every region this deployment may use, or the policy blocks the phase 11 secondaries.
+    allowedLocations: union(
+      [location, staticWebAppLocation],
+      filter([cosmosSecondaryLocation, sqlSecondaryLocation, eventHubsSecondaryLocation], l => !empty(l))
+    )
     budgetAmount: monthlyBudget
     budgetContactEmails: [ownerEmail]
     budgetStartDate: budgetStartDate
@@ -383,6 +404,7 @@ module cosmos 'modules/cosmos.bicep' = if (deployCosmos) {
     privateEndpointSubnetId: peSubnetId
     privateDnsZoneId: dnsZones.?cosmos ?? ''
     actionGroupId: monitoring.outputs.actionGroupId
+    zoneRedundant: zoneRedundant
     dataContributorPrincipalIds: [identity.outputs.apiPrincipalId, identity.outputs.functionsPrincipalId, deployerPrincipalId]
   }
 }
@@ -392,6 +414,7 @@ module sql 'modules/sql.bicep' = if (deploySql) {
   name: 'sql'
   params: {
     serverName: names.sql
+    databaseName: ordersDatabaseName
     location: location
     tags: tags
     workspaceId: monitoring.outputs.workspaceId
@@ -399,9 +422,18 @@ module sql 'modules/sql.bicep' = if (deploySql) {
     adminObjectId: deployerPrincipalId
     privateEndpointSubnetId: peSubnetId
     privateDnsZoneId: dnsZones.?sql ?? ''
-    paymentsDatabaseName: usePayments ? 'payments' : ''
+    paymentsDatabaseName: usePayments ? paymentsDatabaseName : ''
+    backupStorageRedundancy: sqlBackupRedundancy
+    zoneRedundant: zoneRedundant
+    secondaryLocation: sqlSecondaryLocation
   }
 }
+
+// Orders and payments live on this deployment's server, or (phase 10 second-region copy) on the primary
+// environment's failover group. Either way the apps get one host name that survives a failover.
+var useSharedSql = !empty(sharedSqlListenerFqdn)
+var useSqlOrders = deploySql || useSharedSql
+var ordersSqlFqdn = useSharedSql ? sharedSqlListenerFqdn : (deploySql ? sql!.outputs.connectionFqdn : '')
 
 module postgres 'modules/postgres.bicep' = if (deployPostgres) {
   scope: rg
@@ -432,6 +464,7 @@ module messaging 'modules/messaging.bicep' = if (deployMessaging) {
     privateEndpointSubnetId: peSubnetId
     privateDnsZoneId: dnsZones.?serviceBus ?? ''
     actionGroupId: monitoring.outputs.actionGroupId
+    eventHubsSecondaryLocation: eventHubsSecondaryLocation
     // Least privilege: the API only sends, the Functions app only receives.
     serviceBusRoleAssignments: [
       { principalId: identity.outputs.apiPrincipalId, roleDefinitionId: roles.serviceBusDataSender }
@@ -530,7 +563,7 @@ var apiSettings = union(
         AzureAd__Audience: 'api://${entraApiClientId}'
       }
     : {},
-  deploySql ? { ConnectionStrings__OrdersSql: sqlConnectionString(sql!.outputs.fqdn, sql!.outputs.databaseName, identity.outputs.apiClientId) } : {},
+  useSqlOrders ? { ConnectionStrings__OrdersSql: sqlConnectionString(ordersSqlFqdn, ordersDatabaseName, identity.outputs.apiClientId) } : {},
   deployPostgres ? { ConnectionStrings__OrdersPostgres: postgresConnectionString(postgres!.outputs.fqdn, postgres!.outputs.databaseName, identity.outputs.apiName) } : {},
   deployMessaging
     ? {
@@ -554,7 +587,7 @@ var functionsSettings = union(
   },
   // Key Vault reference: the platform resolves the secret; the code just reads an app setting.
   usePayments ? {} : { PaymentGateway__ApiKey: keyVaultReference },
-  deploySql ? { ConnectionStrings__OrdersSql: sqlConnectionString(sql!.outputs.fqdn, sql!.outputs.databaseName, identity.outputs.functionsClientId) } : {},
+  useSqlOrders ? { ConnectionStrings__OrdersSql: sqlConnectionString(ordersSqlFqdn, ordersDatabaseName, identity.outputs.functionsClientId) } : {},
   deployPostgres ? { ConnectionStrings__OrdersPostgres: postgresConnectionString(postgres!.outputs.fqdn, postgres!.outputs.databaseName, identity.outputs.functionsName) } : {},
   deployMessaging
     ? {
@@ -575,7 +608,7 @@ var functionsSettings = union(
       },
   // Phase 13: the Service Bus trigger's transport is a host.json setting; an app setting overrides it per environment.
   useFirewall && deployMessaging ? { AzureFunctionsJobHost__extensions__serviceBus__transportType: 'AmqpWebSockets' } : {},
-  deploySql || deployPostgres ? {} : { 'AzureWebJobs.DailyOrderReport.Disabled': 'true' }
+  useSqlOrders || deployPostgres ? {} : { 'AzureWebJobs.DailyOrderReport.Disabled': 'true' }
 )
 
 var serviceBaseSettings = {
@@ -597,8 +630,8 @@ var paymentsSettings = union(
         AzureAd__Audience: 'api://${entraPaymentsClientId}'
       }
     : {},
-  deploySql && usePayments
-    ? { ConnectionStrings__PaymentsSql: sqlConnectionString(sql!.outputs.fqdn, sql!.outputs.paymentsDatabaseName, identity.outputs.paymentsClientId) }
+  useSqlOrders && usePayments
+    ? { ConnectionStrings__PaymentsSql: sqlConnectionString(ordersSqlFqdn, paymentsDatabaseName, identity.outputs.paymentsClientId) }
     : {}
 )
 
@@ -627,7 +660,9 @@ module apiApp 'modules/appservice.bicep' = if (deployAppService) {
     siteName: names.apiApp
     location: location
     tags: tags
-    skuName: appServiceSku
+    // Zone redundancy needs Premium v2 or later; the Payments and Shipping APIs share this plan, so they get it too.
+    skuName: zoneRedundant && startsWith(appServiceSku, 'B') ? 'P1v3' : appServiceSku
+    zoneRedundant: zoneRedundant
     workspaceId: monitoring.outputs.workspaceId
     identityId: identity.outputs.apiId
     appSettings: apiSettings
@@ -803,6 +838,10 @@ output aksName string = deployAks ? aks!.outputs.name : ''
 output keyVaultName string = keyVault.outputs.name
 output storageAccountName string = storage.outputs.name
 output sqlServerName string = deploySql ? sql!.outputs.serverName : ''
+@description('Phase 11: give this to the second-region copy as sharedSqlListenerFqdn.')
+output sqlListenerFqdn string = deploySql ? sql!.outputs.listenerFqdn : ''
+output sqlSecondaryServerName string = deploySql ? sql!.outputs.secondaryServerName : ''
+output eventHubsAliasName string = deployMessaging ? messaging!.outputs.eventHubsAliasName : ''
 output apiIdentityName string = identity.outputs.apiName
 output apiIdentityClientId string = identity.outputs.apiClientId
 output functionsIdentityName string = identity.outputs.functionsName
@@ -830,7 +869,7 @@ output spaConfig object = {
 output localDevelopmentSettings object = {
   Cosmos: { Endpoint: deployCosmos ? cosmos!.outputs.endpoint : '' }
   ConnectionStrings: {
-    OrdersSql: deploySql ? 'Server=tcp:${sql!.outputs.fqdn},1433;Database=${sql!.outputs.databaseName};Authentication=Active Directory Default;Encrypt=True;' : ''
+    OrdersSql: useSqlOrders ? 'Server=tcp:${ordersSqlFqdn},1433;Database=${ordersDatabaseName};Authentication=Active Directory Default;Encrypt=True;' : ''
   }
   Storage: { BlobEndpoint: storage.outputs.blobEndpoint }
   ServiceBus: { FullyQualifiedNamespace: deployMessaging ? messaging!.outputs.serviceBusFqdn : '' }
