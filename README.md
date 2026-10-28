@@ -49,8 +49,10 @@ can't have one, so it stays public but accepts only Entra ID (Premium is the tie
 has its own **NSG**, and
 every service sends its logs to one **Log Analytics** workspace through diagnostic settings. In phase 16 a **Durable
 Functions saga** takes over checkout: it charges through the **Payments API**, books through the **Shipping API**, and
-refunds if shipping fails. Both APIs share the App Service plan and are reachable only through private endpoints. For
-slides or documents, use the 2× PNG: [docs/architecture.png](docs/architecture.png).
+refunds if shipping fails. Both APIs share the App Service plan and are reachable only through private endpoints. In
+phase 13 an optional **hub VNet** with **Azure Firewall** is peered to this one, and a route table sends the app
+subnets' internet-bound traffic through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
+is allowed out. For slides or documents, use the 2× PNG: [docs/architecture.png](docs/architecture.png).
 
 <details>
 <summary>Text version (Mermaid, editable)</summary>
@@ -69,13 +71,20 @@ flowchart LR
   blob -- BlobCreated --> eg[[Event Grid]]
   sb --> func
   eg -- "push · public endpoint" --> func
-  subgraph vnet [VNet 10.20.0.0/16: phase 2, one NSG per subnet]
+  subgraph vnet [Spoke VNet 10.20.0.0/16: phase 2, one NSG per subnet]
     snetapp[snet-appservice<br/>apps-nsg]
     snetfunc[snet-functions<br/>apps-nsg]
     pe[snet-private-endpoints<br/>pe-nsg]
   end
+  subgraph hub [Hub VNet 10.0.0.0/16: phase 13, optional]
+    fw[Azure Firewall Basic<br/>allow-list policy]
+  end
+  vnet -. "peering, both ways" .- hub
   api -- outbound --> snetapp --> pe
   func -- "outbound: saga + data" --> snetfunc --> pe
+  snetapp & snetfunc -- "UDR 0.0.0.0/0" --> fw
+  fw -- "AMQP over WebSockets, 443" --> sb
+  fw -- "service tags" --> entra & ai
   pe -- "pe-pay: charge, refund" --> pay[Payments API<br/>phase 16]
   pe -- "pe-ship: book parcel" --> ship[Shipping API<br/>phase 16]
   pe -- "pe-evh: API sends clicks, Functions read" --> eh[[Event Hubs<br/>click stream]]
@@ -108,7 +117,7 @@ src/CloudMart.ServiceDefaults/ what every web service shares: telemetry, health,
 src/cloudmart-web/             React 19 + TypeScript + Vite SPA (MSAL, App Insights, runtime config.json)
 tests/CloudMart.Core.Tests     business rules, saga failure paths, payment and shipping idempotency
 infra/main.bicep               subscription-scoped entry point; one switch per phase
-infra/modules/                 25 modules + shared types: network, data, messaging, compute, edge, governance...
+infra/modules/                 27 modules + shared types: network, hub firewall, data, messaging, compute, edge...
 pipelines/                     Azure Pipelines: build → what-if/deploy infra → deploy apps
 deploy/                        SQL/PostgreSQL identity grants, Entra app roles, Kubernetes manifest, LB lab script
 docs/                          learning path, gap analysis, KQL queries
@@ -163,6 +172,7 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 | 10 Architecture | `deployFrontDoor`, `deployAppGateway`, `secondaryApiHostName` | Front Door lock ✓; region flips on failover |
 | 11 Continuity | `storageSku`, `cosmosSecondaryLocation` | Multi-region data |
 | 12 Integration | `deployAppConfig`, `deployRedis`, `deployApim` | Feature flags, Redis L2 cache |
+| 13 Hub-and-spoke | `deployFirewall` (needs `enablePrivateEndpoints`; **≈ $290/month**) | Order events **Service Bus (WebSockets)**; egress through Azure Firewall |
 | 16 Microservices | `deployPayments`, `deployShipping` (+ app registrations) | Payments **Payments API**, Shipping **Shipping API** |
 
 ## Cost guard rails
@@ -172,6 +182,9 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
   forecast 100% of `monthlyBudget`.
 - Expensive switches (AKS, Application Gateway, Grafana, Front Door Premium, Bastion Basic) are off by default and
   flagged in the learning path. Turn them on, learn, turn them off.
+- `deployFirewall` is one of the most expensive switches: Azure Firewall Basic is **≈ $290/month plus about $0.065
+  per GB**, billed every hour it exists. It is off by default. Deploy it, do the phase 13 lab and delete it the same
+  day.
 - `false` does not delete anything with `az deployment sub create`. Use a **deployment stack** (phase 8) so removed
   switches delete their resources, or delete the resource group:
   `az group delete -n rg-cloudmart-dev --yes`.

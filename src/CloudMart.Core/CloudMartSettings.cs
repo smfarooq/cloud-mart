@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Configuration;
 
 namespace CloudMart.Core;
@@ -22,6 +23,9 @@ public sealed record CloudMartSettings
 
     public string? ServiceBusNamespace { get; init; }
     public string OrdersTopic { get; init; } = "orders";
+
+    /// <summary>AmqpTcp (port 5671), or AmqpWebSockets (443) behind a firewall that only lets HTTPS out (phase 13).</summary>
+    public ServiceBusTransportType ServiceBusTransport { get; init; } = ServiceBusTransportType.AmqpTcp;
 
     public string? EventHubsNamespace { get; init; }
     public string TelemetryHub { get; init; } = "telemetry";
@@ -59,6 +63,7 @@ public sealed record CloudMartSettings
             },
             EnsureOrdersSchema = config.GetValue("Orders:EnsureCreated", true),
             ServiceBusNamespace = Blank(config["ServiceBus:FullyQualifiedNamespace"]),
+            ServiceBusTransport = config.GetValue("ServiceBus:TransportType", ServiceBusTransportType.AmqpTcp),
             EventHubsNamespace = Blank(config["EventHubs:FullyQualifiedNamespace"]),
             BlobEndpoint = Blank(config["Storage:BlobEndpoint"]),
             PaymentsBaseUrl = Blank(config["Payments:BaseUrl"]),

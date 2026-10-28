@@ -125,9 +125,10 @@ public static class CloudMartServiceCollectionExtensions
         // Order events: Service Bus topic (phase 5)
         if (settings.ServiceBusNamespace is { } serviceBusNamespace)
         {
-            services.AddSingleton(_ => new ServiceBusClient(serviceBusNamespace, credential));
+            services.AddSingleton(_ => new ServiceBusClient(serviceBusNamespace, credential,
+                new ServiceBusClientOptions { TransportType = settings.ServiceBusTransport }));
             services.AddSingleton<IOrderEventPublisher, ServiceBusOrderEventPublisher>();
-            messaging = "Service Bus";
+            messaging = settings.ServiceBusTransport == ServiceBusTransportType.AmqpWebSockets ? "Service Bus (WebSockets)" : "Service Bus";
         }
         else
         {

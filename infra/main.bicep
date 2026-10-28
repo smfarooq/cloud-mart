@@ -10,6 +10,7 @@
 targetScope = 'subscription'
 
 import { roles } from 'modules/types.bicep'
+import { subnetPrefixes as spokeSubnets } from 'modules/network.bicep'
 
 @minLength(3)
 @maxLength(10)
@@ -107,6 +108,10 @@ param deployAppConfig bool = false
 param deployRedis bool = false
 param deployApim bool = false
 
+// ------------------------------------------------------------------ Phase 13 · Hub-and-spoke
+@description('Requires deployNetwork and enablePrivateEndpoints. A hub VNet with Azure Firewall Basic; the app subnets\' internet-bound traffic goes through it. About $290/month plus data: deploy, do the lab, remove it.')
+param deployFirewall bool = false
+
 // ------------------------------------------------------------------ Phase 16 · Microservices
 @description('Payments API on the App Service plan. Its ledger database needs deploySql; without it, payments are in memory.')
 param deployPayments bool = false
@@ -138,6 +143,9 @@ var names = {
   paymentsIdentity: 'id-${prefix}-pay'
   shippingIdentity: 'id-${prefix}-ship'
   vnet: 'vnet-${prefix}'
+  hubVnet: 'vnet-${prefix}-hub'
+  firewall: 'afw-${prefix}'
+  firewallPolicy: 'afwp-${prefix}'
   keyVault: 'kv-${compact}-${take(suffix, 8)}'
   storage: take('st${compact}${suffix}', 24)
   cosmos: 'cosmos-${prefix}-${short}'
@@ -169,6 +177,9 @@ var names = {
 }
 
 var usePrivateEndpoints = deployNetwork && enablePrivateEndpoints
+// Phase 13 needs private endpoints: the firewall only allows the few public services the apps use, so without them
+// every data store would be blocked.
+var useFirewall = deployFirewall && usePrivateEndpoints
 var needAcr = deployAcr || deployAks || (deployContainerApps && !empty(containerImage))
 
 // Phase 16: both services run on the API's App Service plan. Each gets Entra protection once its app registration
@@ -224,6 +235,29 @@ module identity 'modules/identity.bicep' = {
   }
 }
 
+// Phase 13: the hub goes first. The spoke's route table needs the firewall's private IP, which Azure assigns when it
+// creates the firewall, so the spoke waits for the hub, and the peering waits for both.
+module firewallHub 'modules/firewall-hub.bicep' = if (useFirewall) {
+  scope: rg
+  name: 'firewall-hub'
+  params: {
+    location: location
+    tags: tags
+    vnetName: names.hubVnet
+    firewallName: names.firewall
+    policyName: names.firewallPolicy
+    workspaceId: monitoring.outputs.workspaceId
+    appSubnetPrefixes: [spokeSubnets.appService, spokeSubnets.functions, spokeSubnets.containerApps]
+    containerAppsSubnetPrefix: spokeSubnets.containerApps
+    // Built from the names, like the phase 16 base URLs below: the messaging module needs the spoke's private endpoint
+    // subnet, and the spoke needs this module's firewall IP, so reading its output would be a cycle.
+    serviceBusHostName: deployMessaging ? '${names.serviceBus}.servicebus.windows.net' : ''
+    appConfigHostName: deployAppConfig ? '${names.appConfig}.azconfig.io' : ''
+    allowContainerApps: deployContainerApps
+    allowContainerRegistry: deployContainerApps && !empty(containerImage)
+  }
+}
+
 module network 'modules/network.bicep' = if (deployNetwork) {
   scope: rg
   name: 'network'
@@ -231,6 +265,16 @@ module network 'modules/network.bicep' = if (deployNetwork) {
     location: location
     tags: tags
     vnetName: names.vnet
+    egressFirewallIp: useFirewall ? firewallHub!.outputs.privateIp : ''
+  }
+}
+
+module hubPeering 'modules/vnet-peering.bicep' = if (useFirewall) {
+  scope: rg
+  name: 'hub-spoke-peering'
+  params: {
+    hubVnetName: firewallHub!.outputs.vnetName
+    spokeVnetName: network!.outputs.vnetName
   }
 }
 
@@ -455,6 +499,8 @@ var sharedSettings = union(
   },
   deployCosmos ? { Cosmos__Endpoint: cosmos!.outputs.endpoint } : {},
   deploySql && deployPostgres ? { Orders__Provider: ordersProvider } : {},
+  // Phase 13: AMQP over WebSockets (443) instead of AMQP (5671), so the firewall can allow this one namespace by name.
+  useFirewall && deployMessaging ? { ServiceBus__TransportType: 'AmqpWebSockets' } : {},
   // Phase 16: where the order saga finds the two services, and which token audience to ask Entra for. The host
   // names are built from the site names: reading them from the modules would make the API depend on itself
   // (API settings -> Payments app -> the API's App Service plan -> API).
@@ -525,6 +571,8 @@ var functionsSettings = union(
         'AzureWebJobs.NotifyCustomer.Disabled': 'true'
         'AzureWebJobs.AggregateProductViews.Disabled': 'true'
       },
+  // Phase 13: the Service Bus trigger's transport is a host.json setting; an app setting overrides it per environment.
+  useFirewall && deployMessaging ? { AzureFunctionsJobHost__extensions__serviceBus__transportType: 'AmqpWebSockets' } : {},
   deploySql || deployPostgres ? {} : { 'AzureWebJobs.DailyOrderReport.Disabled': 'true' }
 )
 
@@ -760,6 +808,7 @@ output paymentsIdentityName string = identity.outputs.paymentsName
 output shippingIdentityName string = identity.outputs.shippingName
 output appGatewayUrl string = (deployAppGateway && deployNetwork && deployAppService) ? 'http://${appGateway!.outputs.publicHostName}' : ''
 output grafanaUrl string = deployGrafana ? grafana!.outputs.url : ''
+output firewallPublicIp string = useFirewall ? firewallHub!.outputs.publicIp : ''
 
 @description('Written to the SPA\'s config.json by the pipeline (build once, deploy anywhere).')
 output spaConfig object = {
