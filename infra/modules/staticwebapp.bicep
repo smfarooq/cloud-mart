@@ -8,11 +8,15 @@ param name string
 param location string
 param tags object
 
+@description('Phase 10: Standard (≈ $9/month) can refuse requests that didn\'t come through your Front Door. Free can\'t.')
+@allowed(['Free', 'Standard'])
+param sku string = 'Free'
+
 resource site 'Microsoft.Web/staticSites@2024-04-01' = {
   name: name
   location: location
   tags: tags
-  sku: { name: 'Free', tier: 'Free' }
+  sku: { name: sku, tier: sku }
   properties: {
     allowConfigFileUpdates: true
     stagingEnvironmentPolicy: 'Enabled'

@@ -38,6 +38,18 @@ var privateDnsZoneNames = {
   serviceBus: 'privatelink.servicebus.windows.net'
 }
 
+// Only subnets whose code calls a private endpoint are allowed in. Bastion, Application Gateway and the phase 13 hub
+// never do, so "VirtualNetwork" (which includes peered VNets) would be wider than needed.
+var appSubnets = [subnetPrefixes.appService, subnetPrefixes.functions, subnetPrefixes.containerApps, subnetPrefixes.aks]
+
+// An application security group names a set of NICs, so a rule can target "Cosmos DB's private endpoint" instead of
+// an IP address that changes when the endpoint is recreated.
+resource asgCosmos 'Microsoft.Network/applicationSecurityGroups@2024-05-01' = {
+  name: '${vnetName}-asg-cosmos'
+  location: location
+  tags: tags
+}
+
 resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   name: '${vnetName}-pe-nsg'
   location: location
@@ -45,17 +57,46 @@ resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2024-05-01
   properties: {
     securityRules: [
       {
-        name: 'AllowVnetToPaaS'
+        name: 'AllowAppsToPrivateEndpoints'
         properties: {
           priority: 100
           direction: 'Inbound'
           access: 'Allow'
           protocol: 'Tcp'
-          sourceAddressPrefix: 'VirtualNetwork'
+          sourceAddressPrefixes: appSubnets
           sourcePortRange: '*'
-          destinationAddressPrefix: '*'
-          // HTTPS, SQL, PostgreSQL, and AMQP over TLS: the Event Hubs SDK and trigger use 5671, not 443.
+          destinationAddressPrefix: subnetPrefixes.privateEndpoints
+          // HTTPS, SQL (the servers use the Proxy policy: 1433 only), PostgreSQL, and AMQP over TLS: the Event Hubs
+          // SDK and trigger use 5671, not 443.
           destinationPortRanges: ['443', '1433', '5432', '5671-5672']
+        }
+      }
+      {
+        name: 'AllowAppsToCosmosDirectMode'
+        properties: {
+          priority: 110
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefixes: appSubnets
+          sourcePortRange: '*'
+          // The Cosmos DB SDK's default, direct mode, connects to replica ports anywhere in 0-65535 through a private
+          // endpoint. Allowing only 443 gives 503s. The ASG keeps that wide rule on Cosmos DB's endpoint alone.
+          destinationApplicationSecurityGroups: [{ id: asgCosmos.id }]
+          destinationPortRange: '*'
+        }
+      }
+      {
+        name: 'AllowJumpboxAdmin'
+        properties: {
+          priority: 120
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: subnetPrefixes.vm
+          sourcePortRange: '*'
+          destinationAddressPrefix: subnetPrefixes.privateEndpoints
+          destinationPortRanges: ['443', '1433', '5432'] // curl, sqlcmd, psql: what the labs run from the jumpbox
         }
       }
       {
@@ -278,6 +319,7 @@ func subnetId(vnetName string, subnetName string) string =>
   resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName)
 
 output vnetId string = vnet.id
+output cosmosAsgId string = asgCosmos.id
 output vnetName string = vnet.name
 output appServiceSubnetId string = subnetId(vnet.name, 'snet-appservice')
 output functionsSubnetId string = subnetId(vnet.name, 'snet-functions')

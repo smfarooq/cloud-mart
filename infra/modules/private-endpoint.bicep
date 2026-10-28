@@ -11,12 +11,16 @@ param privateLinkServiceId string
 param groupId string
 param privateDnsZoneId string
 
+@description('Application security groups for the endpoint\'s NIC, so NSG rules can target it by name.')
+param applicationSecurityGroupIds string[] = []
+
 resource endpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
   name: name
   location: location
   tags: tags
   properties: {
     subnet: { id: subnetId }
+    applicationSecurityGroups: [for id in applicationSecurityGroupIds: { id: id }]
     privateLinkServiceConnections: [
       {
         name: name

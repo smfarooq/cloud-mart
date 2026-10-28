@@ -102,6 +102,8 @@ param frontDoorSku string = 'Standard_AzureFrontDoor'
 param secondaryApiHostName string = ''
 param cosmosSecondaryLocation string = ''
 param deployAppGateway bool = false
+@description('Requires deployFrontDoor. Moves Static Web Apps to Standard (about $9/month) so the pipeline can make the SPA refuse requests that didn\'t come through Front Door and its WAF.')
+param lockStaticWebAppToFrontDoor bool = false
 
 // ------------------------------------------------------------------ Phase 11 · Business continuity
 @description('Where SQL backups are copied. Geo lets you geo-restore into any region if this one is lost (RPO up to 1 hour); Local is a little cheaper and dies with the region.')
@@ -124,6 +126,8 @@ param deployApim bool = false
 // ------------------------------------------------------------------ Phase 13 · Hub-and-spoke
 @description('Requires deployNetwork and enablePrivateEndpoints. A hub VNet with Azure Firewall Basic; the app subnets\' internet-bound traffic goes through it. About $290/month plus data: deploy, do the lab, remove it.')
 param deployFirewall bool = false
+@description('Your public IP addresses (curl ifconfig.me). With the firewall, Service Bus accepts only its egress IP and these, so the portal\'s Service Bus Explorer and local runs keep working.')
+param adminIpAddresses string[] = []
 
 // ------------------------------------------------------------------ Phase 16 · Microservices
 @description('Payments API on the App Service plan. Its ledger database needs deploySql; without it, payments are in memory.')
@@ -193,6 +197,7 @@ var usePrivateEndpoints = deployNetwork && enablePrivateEndpoints
 // Phase 13 needs private endpoints: the firewall only allows the few public services the apps use, so without them
 // every data store would be blocked.
 var useFirewall = deployFirewall && usePrivateEndpoints
+var lockSpa = lockStaticWebAppToFrontDoor && deployFrontDoor && deployStaticWebApp
 var needAcr = deployAcr || deployAks || (deployContainerApps && !empty(containerImage))
 
 // Phase 16: both services run on the API's App Service plan. Each gets Entra protection once its app registration
@@ -310,6 +315,7 @@ module staticWebApp 'modules/staticwebapp.bicep' = if (deployStaticWebApp) {
     name: names.staticWebApp
     location: staticWebAppLocation
     tags: tags
+    sku: lockSpa ? 'Standard' : 'Free'
   }
 }
 
@@ -403,6 +409,7 @@ module cosmos 'modules/cosmos.bicep' = if (deployCosmos) {
     secondaryLocation: cosmosSecondaryLocation
     privateEndpointSubnetId: peSubnetId
     privateDnsZoneId: dnsZones.?cosmos ?? ''
+    privateEndpointAsgId: usePrivateEndpoints ? network!.outputs.cosmosAsgId : ''
     actionGroupId: monitoring.outputs.actionGroupId
     zoneRedundant: zoneRedundant
     dataContributorPrincipalIds: [identity.outputs.apiPrincipalId, identity.outputs.functionsPrincipalId, deployerPrincipalId]
@@ -465,6 +472,8 @@ module messaging 'modules/messaging.bicep' = if (deployMessaging) {
     privateDnsZoneId: dnsZones.?serviceBus ?? ''
     actionGroupId: monitoring.outputs.actionGroupId
     eventHubsSecondaryLocation: eventHubsSecondaryLocation
+    // Phase 13: every app request to Service Bus leaves through the firewall, so that IP is the only one it needs.
+    serviceBusAllowedIpAddresses: useFirewall ? concat([firewallHub!.outputs.publicIp], adminIpAddresses) : []
     // Least privilege: the API only sends, the Functions app only receives.
     serviceBusRoleAssignments: [
       { principalId: identity.outputs.apiPrincipalId, roleDefinitionId: roles.serviceBusDataSender }
@@ -852,6 +861,16 @@ output shippingIdentityName string = identity.outputs.shippingName
 output appGatewayUrl string = (deployAppGateway && deployNetwork && deployAppService) ? 'http://${appGateway!.outputs.publicHostName}' : ''
 output grafanaUrl string = deployGrafana ? grafana!.outputs.url : ''
 output firewallPublicIp string = useFirewall ? firewallHub!.outputs.publicIp : ''
+
+// Static Web Apps reads this from staticwebapp.config.json, not from ARM, so the pipeline writes it in at deploy time.
+// Front Door adds the X-Azure-FDID header itself; a request straight to *.azurestaticapps.net doesn't have it.
+@description('Phase 10: the SPA\'s forwardingGateway setting. Empty = it accepts direct requests too.')
+output staticWebAppForwardingGateway object = lockSpa
+  ? {
+      requiredHeaders: { 'X-Azure-FDID': frontDoor!.outputs.frontDoorId }
+      allowedForwardedHosts: [frontDoor!.outputs.endpointHostName]
+    }
+  : {}
 
 @description('Written to the SPA\'s config.json by the pipeline (build once, deploy anywhere).')
 output spaConfig object = {

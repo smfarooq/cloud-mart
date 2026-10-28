@@ -268,7 +268,7 @@
   <use href="#i-swa" x="118" y="763" width="44" height="44"/>
   <text x="140" y="833" class="name">Static Web Apps</text>
   <text x="130" y="875" class="role">SPA hosting</text>
-  <text x="130" y="893" class="sub">day one</text>
+  <text x="130" y="893" class="sub">day one · lock: phase 10</text>
 
   <path d="M207 291 V363" class="flow dash"/>
   <text x="214" y="333" class="flowlabel">tokens</text>
@@ -409,7 +409,7 @@
   <rect x="345" y="800" width="1136" height="125" rx="3" class="subnet"/>
   <text x="355" y="819" class="tiletitle">snet-private-endpoints · 10.20.6.0/24</text>
   <use href="#i-nsg" x="1453" y="806" width="20" height="20"/>
-  <text x="355" y="837" class="tiletext"><tspan font-weight="700">NSG: pe-nsg</tspan> allows the VNet on TCP 443, 1433, 5432 and AMQP 5671-5672, denies the rest. Each name resolves to its endpoint through a private DNS zone.</text>
+  <text x="355" y="837" class="tiletext"><tspan font-weight="700">NSG: pe-nsg</tspan> allows the app subnets on 443, 1433, 5432 and 5671-5672 (any port to Cosmos DB's ASG: direct mode) and the jumpbox; denies the rest. Names resolve through private DNS zones.</text>
 
   <rect x="360" y="850" width="140" height="46" rx="4" class="pechip"/>
   <use href="#i-pe" x="366" y="858" width="30" height="30"/>
@@ -519,7 +519,7 @@
 
   <use href="#i-nsg" x="1550" y="303" width="24" height="24"/>
   <text x="1582" y="318" class="itemname">pe-nsg · private endpoints</text>
-  <text class="itemdesc"><tspan x="1582" y="335">Allow VNet → TCP 443, 1433, 5432</tspan><tspan x="1582" y="351">and AMQP 5671-5672; deny the rest.</tspan></text>
+  <text class="itemdesc"><tspan x="1582" y="335">App subnets: 443, 1433, 5432, 5671-2;</tspan><tspan x="1582" y="351">Cosmos ASG: any port; jumpbox: admin.</tspan></text>
 
   <use href="#i-nsg" x="1550" y="367" width="24" height="24"/>
   <text x="1582" y="382" class="itemname">vm-nsg · jumpbox</text>
@@ -538,7 +538,7 @@
   <line x1="1550" y1="679" x2="1822" y2="679" stroke="#D9D9D9"/>
   <use href="#i-servicebus" x="1550" y="693" width="24" height="24"/>
   <text x="1582" y="708" class="itemname">Messaging endpoints</text>
-  <text class="itemdesc"><tspan x="1582" y="725">Event Hubs: private endpoint, public</tspan><tspan x="1582" y="741">access off. Service Bus Standard: public,</tspan><tspan x="1582" y="757">Entra RBAC only (Premium adds private</tspan><tspan x="1582" y="773">endpoints, ≈ $680/month). Behind the hub</tspan><tspan x="1582" y="789">firewall: AMQP over WebSockets on 443.</tspan></text>
+  <text class="itemdesc"><tspan x="1582" y="725">Event Hubs: private endpoint, public</tspan><tspan x="1582" y="741">access off. Service Bus Standard: public,</tspan><tspan x="1582" y="757">Entra only. Behind the hub firewall:</tspan><tspan x="1582" y="773">WebSockets on 443, and its IP firewall</tspan><tspan x="1582" y="789">accepts only the firewall's egress IP.</tspan></text>
 
   <line x1="1550" y1="809" x2="1822" y2="809" stroke="#D9D9D9"/>
   <use href="#i-eventgrid" x="1550" y="823" width="24" height="24"/>
@@ -548,7 +548,7 @@
   <line x1="1550" y1="939" x2="1822" y2="939" stroke="#D9D9D9"/>
   <use href="#i-frontdoor" x="1550" y="953" width="24" height="24"/>
   <text x="1582" y="968" class="itemname">Front Door origin lock</text>
-  <text class="itemdesc"><tspan x="1582" y="985">App Service only accepts traffic</tspan><tspan x="1582" y="1001">from AzureFrontDoor.Backend with</tspan><tspan x="1582" y="1017">our X-Azure-FDID header.</tspan></text>
+  <text class="itemdesc"><tspan x="1582" y="985">App Service, and SWA on Standard,</tspan><tspan x="1582" y="1001">accept only AzureFrontDoor.Backend</tspan><tspan x="1582" y="1017">traffic with our X-Azure-FDID header.</tspan></text>
 
   <!-- ============ Phase 13 (optional): hub VNet with Azure Firewall, peered both ways ============ -->
   <!-- The app subnets' route table sends 0.0.0.0/0 here; the hop is where the peering crosses BlobCreated. -->

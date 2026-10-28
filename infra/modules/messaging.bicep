@@ -20,6 +20,9 @@ param eventHubsRoleAssignments roleAssignment[] = []
 @description('Phase 7: where the Service Bus alerts go. Empty = no alerts.')
 param actionGroupId string = ''
 
+@description('Phase 13: the only public IPs Service Bus accepts (the firewall\'s egress IP, plus yours). Empty = any IP; Entra ID is still required.')
+param serviceBusAllowedIpAddresses string[] = []
+
 @description('Set (with privateDnsZoneId) to put Event Hubs behind a private endpoint and turn its public access off.')
 param privateEndpointSubnetId string = ''
 param privateDnsZoneId string = ''
@@ -46,6 +49,19 @@ resource serviceBus 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
   properties: {
     disableLocalAuth: true // no SAS keys: Entra ID only
     minimumTlsVersion: '1.2'
+  }
+}
+
+// Standard has no private endpoints, but it does have an IP firewall. Behind the phase 13 firewall every app request
+// leaves from one public IP, so allowing only that IP turns "public, Entra-only" into "public, Entra-only, and only
+// from our egress". Always deployed, so removing the IPs opens the namespace again instead of leaving a stale Deny.
+resource serviceBusNetworkRules 'Microsoft.ServiceBus/namespaces/networkRuleSets@2024-01-01' = {
+  parent: serviceBus
+  name: 'default'
+  properties: {
+    publicNetworkAccess: 'Enabled'
+    defaultAction: empty(serviceBusAllowedIpAddresses) ? 'Allow' : 'Deny'
+    ipRules: [for ip in serviceBusAllowedIpAddresses: { ipMask: ip, action: 'Allow' }]
   }
 }
 

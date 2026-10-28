@@ -12,6 +12,12 @@ param roleAssignments roleAssignment[] = []
 @secure()
 param paymentGatewayApiKey string
 
+@description('Days until the payment-gateway secret expires. Key Vault raises a SecretNearExpiry event 30 days before.')
+param secretValidityDays int = 90
+
+@description('Deployment time: the secret\'s expiry counts from here. Leave the default.')
+param now string = utcNow()
+
 @description('Set (with privateDnsZoneId) to put the vault behind a private endpoint and turn public access off.')
 param privateEndpointSubnetId string = ''
 param privateDnsZoneId string = ''
@@ -44,6 +50,9 @@ resource paymentKey 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
   properties: {
     value: paymentGatewayApiKey
     contentType: 'text/plain'
+    // Expiry is a promise to rotate, not a kill switch: an expired secret can still be read, but the SecretNearExpiry
+    // event, the portal and Azure Policy ("secrets should have an expiration date") all key off it.
+    attributes: { exp: dateTimeToEpoch(dateTimeAdd(now, 'P${secretValidityDays}D')) }
   }
 }
 
