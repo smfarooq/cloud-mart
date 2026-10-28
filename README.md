@@ -58,6 +58,9 @@ is allowed out. For slides or documents, use the 2× PNG: [docs/architecture.png
 ([PNG](docs/continuity.png)). It shows what each service fails over to in a second region and what that copy costs.
 It also covers what isn't protected, the failover order, and the zones and backups inside each region (phase 11).
 
+**Deployment and operations** are in [docs/operations.svg](docs/operations.svg) ([PNG](docs/operations.png)): the
+pipeline, environments, secrets, schema delivery and rollback (phases 8 and 9).
+
 <details>
 <summary>Text version (Mermaid, editable)</summary>
 
