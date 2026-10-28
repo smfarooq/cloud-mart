@@ -2,6 +2,7 @@ using System.Security.Claims;
 using CloudMart.Core;
 using CloudMart.Core.Domain;
 using CloudMart.Core.Services;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.FeatureManagement;
 
 namespace CloudMart.Api.Endpoints;
@@ -29,16 +30,26 @@ public static class OrderEndpoints
         });
 
         // 202 Accepted: the order is stored, but confirmation happens asynchronously (Service Bus -> Function).
-        orders.MapPost("/", async (PlaceOrderRequest request, ClaimsPrincipal user, OrderService service, CancellationToken ct) =>
+        // A retry with the same Idempotency-Key gets the same 202 and the same order, never a second one.
+        orders.MapPost("/", async (
+            PlaceOrderRequest request,
+            [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+            ClaimsPrincipal user,
+            OrderService service,
+            CancellationToken ct) =>
         {
             try
             {
-                var order = await service.PlaceOrderAsync(user.ToCustomer(), request, ct);
+                var order = await service.PlaceOrderAsync(user.ToCustomer(), request, idempotencyKey, ct);
                 return Results.Accepted($"/api/orders/{order.Id}", order);
             }
             catch (OrderValidationException ex)
             {
                 return Results.Problem(ex.Message, statusCode: 400);
+            }
+            catch (IdempotencyConflictException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 422);
             }
         });
     }

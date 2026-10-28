@@ -15,6 +15,9 @@ param storageAccountId string
 param serviceBusRoleAssignments roleAssignment[] = []
 param eventHubsRoleAssignments roleAssignment[] = []
 
+@description('Phase 7: where the Service Bus alerts go. Empty = no alerts.')
+param actionGroupId string = ''
+
 @description('Set (with privateDnsZoneId) to put Event Hubs behind a private endpoint and turn its public access off.')
 param privateEndpointSubnetId string = ''
 param privateDnsZoneId string = ''
@@ -99,6 +102,58 @@ resource serviceBusDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01
   }
 }
 
+// Dead-lettering only helps if somebody looks. One time series per topic ("EntityName"), ≈ $0.10/month each.
+var serviceBusAlerts = [
+  {
+    name: 'dead-letters'
+    description: 'A message was dead-lettered: find it in Service Bus Explorer, fix the cause, then resubmit or purge it.'
+    metricName: 'DeadletteredMessages'
+    timeAggregation: 'Maximum'
+    threshold: 0
+    windowSize: 'PT5M'
+  }
+  {
+    name: 'backlog'
+    description: 'Messages are piling up: the Functions app is down, failing or too slow to keep up.'
+    metricName: 'ActiveMessages'
+    timeAggregation: 'Average'
+    threshold: 100
+    windowSize: 'PT15M'
+  }
+]
+
+resource serviceBusMetricAlerts 'Microsoft.Insights/metricAlerts@2018-03-01' = [
+  for alert in serviceBusAlerts: if (!empty(actionGroupId)) {
+    name: '${serviceBusName}-${alert.name}'
+    location: 'global'
+    tags: tags
+    properties: {
+      description: alert.description
+      severity: 2
+      enabled: true
+      scopes: [serviceBus.id]
+      evaluationFrequency: 'PT5M'
+      windowSize: alert.windowSize
+      criteria: {
+        'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+        allOf: [
+          {
+            criterionType: 'StaticThresholdCriterion'
+            name: alert.name
+            metricName: alert.metricName
+            metricNamespace: 'Microsoft.ServiceBus/namespaces'
+            dimensions: [{ name: 'EntityName', operator: 'Include', values: ['*'] }]
+            timeAggregation: alert.timeAggregation
+            operator: 'GreaterThan'
+            threshold: alert.threshold
+          }
+        ]
+      }
+      actions: [{ actionGroupId: actionGroupId }]
+    }
+  }
+]
+
 // ---------------------------------------------------------------- Event Hubs
 resource eventHubs 'Microsoft.EventHub/namespaces@2024-01-01' = {
   name: eventHubsName
@@ -171,6 +226,7 @@ resource storageEvents 'Microsoft.EventGrid/systemTopics@2025-02-15' = {
   name: eventGridTopicName
   location: location
   tags: tags
+  identity: { type: 'SystemAssigned' } // writes dead letters to Blob Storage without a key
   properties: {
     source: storageAccountId
     topicType: 'Microsoft.Storage.StorageAccounts'

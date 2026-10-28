@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1881 1570" width="1881" height="1570" role="img" aria-labelledby="title desc">
   <title id="title">CloudMart architecture diagram</title>
-  <desc id="desc">Browser and React SPA reach Static Web Apps and the App Service API through Front Door. The API publishes to Service Bus and Event Hubs; Event Grid relays Blob events; Azure Functions process all three, and run the order saga that charges through the Payments API, books through the Shipping API and refunds on failure. Service Bus Standard has no private endpoints, so it is reached on its public endpoint with Entra ID; Event Grid pushes to the Function App's public endpoint. The APIs and Functions send outbound traffic through VNet-integrated subnets to private endpoints for Azure SQL, Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs. Each subnet has a network security group. Optionally (phase 13), a hub VNet with Azure Firewall Basic is peered to this spoke, and a route table sends the app subnets' internet-bound traffic through the firewall, which allows only Service Bus, Entra ID and Azure Monitor; private endpoint traffic stays direct. Telemetry and diagnostic logs flow to Application Insights and Log Analytics, where a log search alert notifies an action group.</desc>
+  <desc id="desc">Browser and React SPA reach Static Web Apps and the App Service API through Front Door. The API publishes to Service Bus and Event Hubs; Event Grid relays Blob events; Azure Functions process all three, and run the order saga that charges through the Payments API, books through the Shipping API and refunds on failure. Service Bus Standard has no private endpoints, so it is reached on its public endpoint with Entra ID; Event Grid pushes to the Function App's public endpoint. The APIs and Functions send outbound traffic through VNet-integrated subnets to private endpoints for Azure SQL, Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs. Each subnet has a network security group. Optionally (phase 13), a hub VNet with Azure Firewall Basic is peered to this spoke, and a route table sends the app subnets' internet-bound traffic through the firewall, which allows only Service Bus, Entra ID and Azure Monitor; private endpoint traffic stays direct. Telemetry and diagnostic logs flow to Application Insights and Log Analytics, where log search and metric alerts (exceptions, dead letters, backlog, throttling, orders needing review) notify an action group.</desc>
 
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -319,7 +319,7 @@
   <use href="#i-eventgrid" x="1223" y="343" width="44" height="44"/>
   <text x="1245" y="413" class="name">Event Grid</text>
   <text x="1235" y="455" class="role">Image events</text>
-  <text x="1235" y="473" class="sub">system topic, push</text>
+  <text x="1235" y="473" class="sub">push · dead letters to Blob</text>
 
   <path d="M510 383 H628" class="flow"/>
   <path d="M780 383 H898" class="flow"/>
@@ -593,9 +593,9 @@
 
   <rect x="540" y="1343" width="150" height="96" class="svc"/>
   <use href="#i-alert" x="593" y="1351" width="44" height="44"/>
-  <text x="615" y="1421" class="name">Log search alert</text>
-  <text x="605" y="1463" class="role">Exception spike</text>
-  <text x="605" y="1481" class="sub">&gt; 5 exceptions in 5 min</text>
+  <text x="615" y="1421" class="name">Alert rules</text>
+  <text x="605" y="1463" class="role">Six alerts</text>
+  <text x="605" y="1481" class="sub">dead letters, 429s, refunds…</text>
 
   <rect x="780" y="1343" width="150" height="96" class="svc"/>
   <use href="#i-actiongroup" x="833" y="1351" width="44" height="44"/>
@@ -614,7 +614,7 @@
   <path d="M210 1391 H298" class="flow"/>
   <text x="254" y="1383" class="flowlabel" text-anchor="middle">stored in</text>
   <path d="M450 1391 H538" class="flow"/>
-  <text x="494" y="1383" class="flowlabel" text-anchor="middle">KQL query</text>
+  <text x="494" y="1383" class="flowlabel" text-anchor="middle">KQL + metrics</text>
   <path d="M690 1391 H778" class="flow"/>
   <text x="734" y="1383" class="flowlabel" text-anchor="middle">fires</text>
 

@@ -337,6 +337,12 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
 6. **Event Grid.** Upload an image in Admin. A few seconds later it appears on the product:
    `BlobCreated` → Event Grid system topic → `ProcessProductImage` → validate → copy to `product-images` → update
    Cosmos. Try a file over 5 MB: the function deletes it. Check the event subscription's delivery metrics.
+   - **Dead letters.** Event Grid retries a failed delivery for up to an hour. After that it doesn't drop the event:
+     it writes it as JSON to the `eventgrid-deadletter` container, with the reason and the last error. Stop the
+     Functions app (`az functionapp stop`) and upload an image. A stopped app answers 403, which Event Grid doesn't
+     retry, so the event is dead-lettered within a few minutes and the *Event Grid dead letters* alert emails you
+     (phase 7). Start the app again and replay the event by uploading the image again. The original stays in
+     `product-uploads` until the lifecycle rule removes it a day later.
 7. **What's private and what isn't** (with `enablePrivateEndpoints` on). From the jumpbox,
    `nslookup <event-hubs-namespace>.servicebus.windows.net` returns a **10.20.6.x** address from the
    `privatelink.servicebus.windows.net` zone. The same lookup for the Service Bus namespace returns a public IP:
@@ -346,7 +352,8 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
    endpoints anywhere" would cost: Service Bus Premium (≈ $680/month per messaging unit) with a private endpoint, and
    Event Grid delivering to a Storage queue or Service Bus that the function reads through a private endpoint.
 8. **Design exercise: transactional outbox.** `OrderService` saves the order and *then* publishes. If the publish
-   fails, the order is stuck Pending. Design the fix: write an `Outbox` row in the same SQL transaction as the
+   fails, the order stays Pending. A client retry with the same `Idempotency-Key` (phase 16) publishes again, but a
+   client that gives up leaves it stuck. Design the fix: write an `Outbox` row in the same SQL transaction as the
    order, and let a relay (a timer Function, or change data capture) publish and mark it sent. Stretch goal:
    implement it.
 
@@ -423,9 +430,28 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
    order id.
 2. **KQL.** Run the queries in [`docs/kql/cloudmart.kql`](kql/cloudmart.kql) in Log Analytics: slowest operations,
    orders per minute from custom metrics, Key Vault audit (who read the secret), dead-letter counts, and more.
-3. **Alerts.** Throw six exceptions within five minutes: the log search alert from
-   [`monitoring.bicep`](../infra/modules/monitoring.bicep) emails you through the action group. Then add a
-   *metric* alert on the Service Bus dead-letter count yourself.
+3. **Alerts.** Exceptions are only one symptom. Six alert rules email you through one action group, each defined
+   next to the resource it watches:
+
+   | Alert | Fires when | Kind | Defined in |
+   |---|---|---|---|
+   | Exception spike | More than 5 server exceptions in 5 minutes | Log search | [`monitoring.bicep`](../infra/modules/monitoring.bicep) |
+   | Order needs manual review | A refund failed, or a charge timed out and may have gone through | Log search | [`monitoring.bicep`](../infra/modules/monitoring.bicep) |
+   | Service Bus dead letters | Any topic has a dead-lettered message | Metric | [`messaging.bicep`](../infra/modules/messaging.bicep) |
+   | Service Bus backlog | More than 100 active messages for 15 minutes | Metric | [`messaging.bicep`](../infra/modules/messaging.bicep) |
+   | Event Grid dead letters | An upload event was dead-lettered | Metric | [`eventgrid-subscription.bicep`](../infra/modules/eventgrid-subscription.bicep) |
+   | Cosmos DB throttling | More than 10 HTTP 429s in 5 minutes | Metric | [`cosmos.bicep`](../infra/modules/cosmos.bicep) |
+
+   Fire three of them:
+   - Throw six exceptions with Admin → Chaos.
+   - Dead-letter an order with phase 5's *Simulate a processing failure*.
+   - In phase 16, set `Chaos__FailureRate = 1` on the Payments app and place an order. The charge fails after its
+     retries, and the order is flagged for review.
+
+   Metric alerts are *stateful*: the dead-letter alert stays fired until the queue is empty. Resubmit or purge the
+   message in Service Bus Explorer and it resolves on its own. Log search alerts fire once per evaluation that matches.
+   Cost: about $1.50/month for each 5-minute log search alert and $0.10/month per metric time series, so roughly
+   $4/month for all six.
 4. **Routing logs.** Every module has a diagnostic setting to the workspace. Add a second one for Key Vault that
    archives to a storage account:
    `az monitor diagnostic-settings create --resource <kv-id> -n archive --storage-account <st-id> --logs '[{"categoryGroup":"audit","enabled":true}]'`.
@@ -446,6 +472,9 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
 | SIEM / SOAR | **Microsoft Sentinel** on the workspace |
 | Dashboards | **Workbooks** (Azure-native), **Managed Grafana** (multi-source, Grafana skills), Azure dashboards (simple) |
 | Is it Azure or my app? | **Service Health** (platform incidents) and **Resource Health** (this resource) |
+| Alert on a platform metric, near real time, cheaply | **Metric alert** (stateful: fires once, resolves on its own) |
+| Alert on anything you can query, including app logs and business events | **Log search alert** (KQL; priced per rule by evaluation frequency) |
+| Know about failures before customers do | Alert on symptoms across the flow: dead letters, backlog, throttling, failed compensations, not just exceptions |
 
 ---
 
@@ -929,8 +958,21 @@ There is no distributed transaction. Each step commits on its own, and correctne
    | 11 desk lamps | *Shipping rejected* (more than 10 items per parcel), **refunded** |
 
    Confirm the refund in the Payments API itself: `curl "http://localhost:5081/payments?orderId=<id>"`.
-2. **Idempotency, two ways.**
-   - **POST with an idempotency key.** Send the same request twice. The first answers 201 and the second 200, with
+2. **Idempotency, three ways.**
+   - **Placing the order.** The SPA sends an `Idempotency-Key` with each checkout and reuses it if you retry. Send
+     the same POST twice: same order id, one order. Change the cart but keep the key: **422**.
+
+     ```bash
+     curl -i -X POST localhost:5080/api/orders -H "Idempotency-Key: checkout-1" -H "Content-Type: application/json" \
+       -d '{"lines":[{"productId":"woodgrove-desk-lamp","quantity":1}]}'
+     ```
+
+     The order id is a hash of your user id and the key
+     ([OrderService.cs](../src/CloudMart.Core/Services/OrderService.cs)). That way the primary key does the
+     de-duplication, with no new column and no schema change. A retry that arrives while the order is still Pending
+     publishes `OrderPlaced` again. Service Bus duplicate detection drops the copy, and the retry also repairs a first
+     attempt whose publish failed.
+   - **POST to Payments with an idempotency key.** Send the same request twice. The first answers 201 and the second 200, with
      the same payment id. Then reuse the key for another order and get 409.
 
      ```bash
@@ -941,8 +983,8 @@ There is no distributed transaction. Each step commits on its own, and correctne
    - **PUT to a client-chosen URL.** `PUT localhost:5082/shipments/<guid>` is idempotent by definition, so a retry needs
      no extra header.
 
-   Why does the saga need both? Because every retry layer re-sends the same request: the HTTP client, the Durable
-   activity retry and Service Bus redelivery.
+   Why all three? Because every retry layer re-sends the same request: the browser (or a proxy) retrying the POST,
+   the HTTP client, the Durable activity retry and Service Bus redelivery.
 3. **Deploy.** Flip the switches and redeploy.
    1. Run the second half of
       [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql) against the `payments` database.
@@ -958,6 +1000,11 @@ There is no distributed transaction. Each step commits on its own, and correctne
    - For the 11-lamp order, find `RefundPayment` in the history.
 
    Restart the Functions app in the middle of a saga. It resumes, and does not charge again.
+
+   Then follow one order end to end. [`host.json`](../src/CloudMart.Functions/host.json) turns on Durable Functions
+   distributed tracing (V2). In Application Insights → *Transaction search*, open the order's POST: one trace should
+   run through Service Bus, the orchestration and each activity, and into the Payments and Shipping APIs. If the
+   trace stops at the orchestrator, check that the setting deployed.
 5. **Resilience.** Set the app setting `Chaos__FailureRate = 0.5` on the Shipping app, then place five orders. In
    Application Insights:
    - Transaction search shows 503s, each followed by a retry, and every order still confirms.
@@ -997,6 +1044,8 @@ There is no distributed transaction. Each step commits on its own, and correctne
 | Long-running stateful workflow in code that survives restarts | **Durable Functions**. The Azure Storage backend is the default; **Durable Task Scheduler** is the managed, higher-throughput backend |
 | Service-to-service calls with no secrets | **Managed identity** + an **app role** on the target's app registration (client-credentials flow, `roles` claim) |
 | Retry a non-idempotent call safely | An **idempotency key** (POST), or **PUT** to a client-chosen id |
+| A retried checkout must not create a second order | An `Idempotency-Key` per checkout, stored with the order or hashed into its id; same key, different body → 422 |
+| Event-handler failures must not lose events | Event Grid **dead-lettering** to Blob Storage (with a managed identity) + an alert + a replay procedure |
 | Ride out transient faults between services | **Retries with backoff and jitter, timeouts, circuit breaker** (`Microsoft.Extensions.Http.Resilience`) |
 | Tamper-evident records for auditors | **Azure SQL ledger** tables (updatable or append-only) + automatic digest storage |
 | Cheap key-value storage, lookups by key only | **Table Storage**; **Cosmos DB for Table** for global distribution, SLAs and automatic indexing |

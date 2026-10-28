@@ -95,8 +95,10 @@ flowchart LR
   pe --> kv[(Key Vault)]
   api & func -.-> ai[App Insights]
   ai -.-> law[Log Analytics]
+  eg -. "dead letters" .-> blob
   sql & cosmos & blob & kv & sb & eh -. diagnostic settings .-> law
-  law -- KQL alert --> ag[Action group: email]
+  law -- "log alerts: exceptions, orders needing review" --> ag[Action group: email]
+  sb & eg & cosmos -. "metric alerts: dead letters, backlog, 429s" .-> ag
   entra[Entra ID] -.-> user
   entra -.-> api
 ```
@@ -193,7 +195,7 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 
 ## Status
 
-All .NET projects build, the 23 unit tests pass, the SPA type-checks and builds, and every Bicep file compiles with
+All .NET projects build, the 30 unit tests pass, the SPA type-checks and builds, and every Bicep file compiles with
 zero warnings (Bicep 0.48). Locally, the API, Payments API and Shipping API run together and the saga confirms,
 declines and refunds orders as described in phase 16. Nothing has been deployed to a real subscription from this repository yet, so treat the
 first deployment of each phase as part of the lab. `what-if` first, and read the error messages: they are usually

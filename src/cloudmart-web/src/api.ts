@@ -49,8 +49,12 @@ export const api = {
   saveProduct: (product: Partial<Product>) => request<Product>('/api/products', json(product)),
 
   orders: (all = false) => request<Order[]>(`/api/orders${all ? '?all=true' : ''}`),
-  placeOrder: (lines: { productId: string; quantity: number }[], simulateFailure: boolean) =>
-    request<Order>('/api/orders', json({ lines, simulateFailure })),
+  /** Send the same idempotencyKey on every retry of one checkout: the API then returns the same order. */
+  placeOrder: (lines: { productId: string; quantity: number }[], simulateFailure: boolean, idempotencyKey: string) =>
+    request<Order>('/api/orders', {
+      ...json({ lines, simulateFailure }),
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }),
 
   chaos: (kind: 'exception' | 'latency' | 'dependency') => request<unknown>(`/api/platform/chaos/${kind}`, { method: 'POST' }),
 

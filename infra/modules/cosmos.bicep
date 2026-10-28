@@ -18,6 +18,9 @@ param dataContributorPrincipalIds array = []
 param privateEndpointSubnetId string = ''
 param privateDnsZoneId string = ''
 
+@description('Phase 7: where the throttling alert goes. Empty = no alert.')
+param actionGroupId string = ''
+
 var usePrivateEndpoint = !empty(privateEndpointSubnetId)
 var multiRegion = freeTier && !empty(secondaryLocation)
 
@@ -92,6 +95,38 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
     logAnalyticsDestinationType: 'Dedicated'
     logs: [{ categoryGroup: 'allLogs', enabled: true }]
     metrics: [{ category: 'Requests', enabled: true }]
+  }
+}
+
+// A few 429s are normal: the SDK waits and retries them. A steady stream means the workload needs more RU/s than
+// the account has (1000 on the free tier), or a query fans out across every partition.
+resource throttlingAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!empty(actionGroupId)) {
+  name: '${name}-throttling'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'Cosmos DB is rate-limiting requests (HTTP 429). Find the container and query in Insights > Throughput.'
+    severity: 3
+    enabled: true
+    scopes: [account.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'throttled'
+          metricName: 'TotalRequests'
+          metricNamespace: 'Microsoft.DocumentDB/databaseAccounts'
+          dimensions: [{ name: 'StatusCode', operator: 'Include', values: ['429'] }]
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 10
+        }
+      ]
+    }
+    actions: [{ actionGroupId: actionGroupId }]
   }
 }
 

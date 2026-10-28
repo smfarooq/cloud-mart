@@ -16,7 +16,11 @@
   },
   "extensions": {
     "durableTask": {
-      "hubName": "CloudMartSaga"
+      "hubName": "CloudMartSaga",
+      "tracing": {
+        "distributedTracingEnabled": true,
+        "version": "V2"
+      }
     },
     "serviceBus": {
       "autoCompleteMessages": true,
