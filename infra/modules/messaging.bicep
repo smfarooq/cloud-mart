@@ -6,6 +6,8 @@
 import { roleAssignment } from 'types.bicep'
 
 param serviceBusName string
+@minLength(6)
+@maxLength(46) // leaves room for the "-geo" alias, inside the 50-character namespace limit
 param eventHubsName string
 param eventGridTopicName string
 param location string
@@ -22,7 +24,13 @@ param actionGroupId string = ''
 param privateEndpointSubnetId string = ''
 param privateDnsZoneId string = ''
 
+@description('Phase 11: a region for a paired Event Hubs namespace (metadata geo-disaster recovery). Empty = none.')
+param eventHubsSecondaryLocation string = ''
+
 var usePrivateEndpoint = !empty(privateEndpointSubnetId)
+var useEventHubsGeoDr = !empty(eventHubsSecondaryLocation)
+var eventHubsSecondaryName = '${eventHubsName}-dr'
+var eventHubsAliasName = '${eventHubsName}-geo'
 
 // ---------------------------------------------------------------- Service Bus
 resource serviceBus 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
@@ -208,6 +216,8 @@ resource eventHubsDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
 // the namespace any more, just like Cosmos DB and SQL after the phase 4 hardening pass.
 module eventHubsPrivateEndpoint 'private-endpoint.bicep' = if (usePrivateEndpoint) {
   name: '${eventHubsName}-pe'
+  // With a geo-DR pairing in place, the primary's private endpoint can only be created after the secondary's.
+  dependsOn: [eventHubsSecondaryPrivateEndpoint]
   params: {
     name: 'pe-${eventHubsName}'
     location: location
@@ -216,6 +226,71 @@ module eventHubsPrivateEndpoint 'private-endpoint.bicep' = if (usePrivateEndpoin
     privateLinkServiceId: eventHubs.id
     groupId: 'namespace'
     privateDnsZoneId: privateDnsZoneId
+  }
+}
+
+// ---------------------------------------------------------------- Event Hubs geo-disaster recovery (phase 11)
+// Metadata only: the pairing copies event hubs and consumer groups to the secondary, never the events. The apps
+// connect to the alias (<alias>.servicebus.windows.net), which points at whichever namespace is primary. Failover is
+// one-way and breaks the pairing; events still in the old primary stay there. Standard namespaces in a region with
+// availability zones are already zone-redundant, at no extra cost.
+resource eventHubsSecondary 'Microsoft.EventHub/namespaces@2024-01-01' = if (useEventHubsGeoDr) {
+  name: eventHubsSecondaryName
+  location: useEventHubsGeoDr ? eventHubsSecondaryLocation : location
+  tags: tags
+  sku: { name: 'Standard', tier: 'Standard', capacity: 1 }
+  properties: {
+    disableLocalAuth: true
+    minimumTlsVersion: '1.2'
+    publicNetworkAccess: usePrivateEndpoint ? 'Disabled' : 'Enabled'
+  }
+  // No event hubs or consumer groups here: the secondary must be empty, and the pairing fills it.
+}
+
+// Role assignments are not part of the copied metadata: grant the same ones here, or a failover locks the apps out.
+resource eventHubsSecondaryRoles 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
+  for ra in eventHubsRoleAssignments: if (useEventHubsGeoDr) {
+    name: guid(resourceId('Microsoft.EventHub/namespaces', eventHubsSecondaryName), ra.principalId, ra.roleDefinitionId)
+    scope: eventHubsSecondary
+    properties: {
+      principalId: ra.principalId
+      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', ra.roleDefinitionId)
+      principalType: ra.?principalType ?? 'ServicePrincipal'
+    }
+  }
+]
+
+resource eventHubsSecondaryDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (useEventHubsGeoDr) {
+  name: 'to-log-analytics'
+  scope: eventHubsSecondary
+  properties: {
+    workspaceId: workspaceId
+    logs: [{ categoryGroup: 'allLogs', enabled: true }]
+    metrics: [{ category: 'AllMetrics', enabled: true }]
+  }
+}
+
+// Microsoft's guidance: private endpoints on both namespaces, in the VNet that hosts the apps. Pairing only checks
+// that the secondary has one, not that it works after a failover: the failover drill does that.
+module eventHubsSecondaryPrivateEndpoint 'private-endpoint.bicep' = if (useEventHubsGeoDr && usePrivateEndpoint) {
+  name: '${eventHubsSecondaryName}-pe'
+  params: {
+    name: 'pe-${eventHubsSecondaryName}'
+    location: location
+    tags: tags
+    subnetId: privateEndpointSubnetId
+    privateLinkServiceId: eventHubsSecondary.id
+    groupId: 'namespace'
+    privateDnsZoneId: privateDnsZoneId
+  }
+}
+
+resource eventHubsGeoDr 'Microsoft.EventHub/namespaces/disasterRecoveryConfigs@2024-01-01' = if (useEventHubsGeoDr) {
+  parent: eventHubs
+  name: eventHubsAliasName
+  dependsOn: [telemetryHub, functionsConsumerGroup, eventHubsSecondaryRoles, eventHubsPrivateEndpoint]
+  properties: {
+    partnerNamespace: eventHubsSecondary.id
   }
 }
 
@@ -236,5 +311,9 @@ resource storageEvents 'Microsoft.EventGrid/systemTopics@2025-02-15' = {
 func hostOf(endpoint string) string => split(replace(endpoint, 'https://', ''), ':')[0]
 
 output serviceBusFqdn string = hostOf(serviceBus.properties.serviceBusEndpoint)
-output eventHubsFqdn string = hostOf(eventHubs.properties.serviceBusEndpoint)
+@description('What the apps connect to: the geo-DR alias when there is one, the namespace otherwise.')
+output eventHubsFqdn string = useEventHubsGeoDr
+  ? '${eventHubsAliasName}.servicebus.windows.net'
+  : hostOf(eventHubs.properties.serviceBusEndpoint)
+output eventHubsAliasName string = useEventHubsGeoDr ? eventHubsAliasName : ''
 output eventGridTopicName string = storageEvents.name

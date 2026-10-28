@@ -21,6 +21,9 @@ param privateDnsZoneId string = ''
 @description('Phase 7: where the throttling alert goes. Empty = no alert.')
 param actionGroupId string = ''
 
+@description('Phase 11: replicas across availability zones in each region. Only takes effect when a region is added: set it before the first deployment.')
+param zoneRedundant bool = false
+
 var usePrivateEndpoint = !empty(privateEndpointSubnetId)
 var multiRegion = freeTier && !empty(secondaryLocation)
 
@@ -35,8 +38,8 @@ resource account 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
     capabilities: freeTier ? [] : [{ name: 'EnableServerless' }]
     consistencyPolicy: { defaultConsistencyLevel: 'Session' }
     locations: concat(
-      [{ locationName: location, failoverPriority: 0, isZoneRedundant: false }],
-      multiRegion ? [{ locationName: secondaryLocation, failoverPriority: 1, isZoneRedundant: false }] : []
+      [{ locationName: location, failoverPriority: 0, isZoneRedundant: zoneRedundant }],
+      multiRegion ? [{ locationName: secondaryLocation, failoverPriority: 1, isZoneRedundant: zoneRedundant }] : []
     )
     enableAutomaticFailover: multiRegion
     disableLocalAuth: true
