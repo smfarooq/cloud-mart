@@ -68,6 +68,21 @@ export function Orders({ isAdmin }: { isAdmin: boolean }) {
               ))}
             </ul>
             {order.statusReason && <p className="muted small">{order.statusReason}</p>}
+            {(order.paymentId || order.trackingNumber) && (
+              <p className="muted small">
+                {order.paymentId && (
+                  <>
+                    Payment <code>{order.paymentId}</code>
+                  </>
+                )}
+                {order.paymentId && order.trackingNumber && ' · '}
+                {order.trackingNumber && (
+                  <>
+                    Tracking <code>{order.trackingNumber}</code>
+                  </>
+                )}
+              </p>
+            )}
             {all && <p className="muted small">Customer: {order.customerName}</p>}
           </article>
         ))}

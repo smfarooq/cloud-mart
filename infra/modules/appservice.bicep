@@ -95,3 +95,4 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
 output name string = site.name
 output id string = site.id
 output hostName string = site.properties.defaultHostName
+output planId string = plan.id

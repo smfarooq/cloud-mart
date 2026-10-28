@@ -20,3 +20,15 @@ ALTER ROLE db_datawriter ADD MEMBER [id-cloudmart-dev-func];
 
 -- Check:
 SELECT name, type_desc, authentication_type_desc FROM sys.database_principals WHERE name LIKE 'id-%';
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- Phase 16: run this part against the "payments" database instead (switch database in the query editor, or
+--   sqlcmd ... -d payments). Database per service: the Payments identity is a user here and nowhere else, and the
+--   API and Functions identities are NOT users here: they reach payments only through the Payments API.
+-- ---------------------------------------------------------------------------------------------------------------
+-- CREATE USER [id-cloudmart-dev-pay] FROM EXTERNAL PROVIDER;
+-- ALTER ROLE db_datareader ADD MEMBER [id-cloudmart-dev-pay];
+-- ALTER ROLE db_datawriter ADD MEMBER [id-cloudmart-dev-pay];
+-- ALTER ROLE db_ddladmin ADD MEMBER [id-cloudmart-dev-pay];  -- creates the ledger table on first start
+-- -- Ledger tables are append-only for history: nobody can DELETE from dbo.Payments_Ledger, not even you.
+-- SELECT * FROM dbo.Payments_Ledger ORDER BY ledger_transaction_id, ledger_sequence_number;

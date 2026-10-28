@@ -4,9 +4,8 @@ using Azure.Monitor.OpenTelemetry.AspNetCore;
 using CloudMart.Api;
 using CloudMart.Api.Endpoints;
 using CloudMart.Core;
-using Microsoft.AspNetCore.Authentication;
+using CloudMart.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.FeatureManagement;
 using Microsoft.Identity.Web;
@@ -67,15 +66,11 @@ if (entraEnabled)
 }
 else
 {
-    if (!builder.Environment.IsDevelopment() && !config.GetValue<bool>("Auth:AllowAnonymousDevMode"))
-    {
-        throw new InvalidOperationException(
-            "AzureAd:ClientId is not configured. Configure Entra ID (phase 6), or set Auth:AllowAnonymousDevMode=true " +
-            "for a throwaway lab environment.");
-    }
-
+    ServiceDefaultsExtensions.ThrowUnlessDevModeAllowed(builder);
     builder.Services.AddAuthentication(DevAuthenticationHandler.SchemeName)
-        .AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, null);
+        .AddScheme<DevAuthenticationOptions, DevAuthenticationHandler>(
+            DevAuthenticationHandler.SchemeName,
+            options => options.Roles = [Roles.Admin]);
 }
 
 builder.Services.AddAuthorizationBuilder()
@@ -118,7 +113,7 @@ var corsOrigins = (config["Cors:AllowedOrigins"] ?? "http://localhost:5173")
     .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod()));
 
-builder.Services.AddHealthChecks().AddCheck<DependencyHealthCheck>("dependencies", tags: ["ready"]);
+builder.Services.AddCloudMartHealth();
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -154,12 +149,7 @@ if (!string.IsNullOrEmpty(appConfigEndpoint))
     app.UseAzureAppConfiguration();
 
 app.MapOpenApi();
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-app.MapHealthChecks("/health/ready", new HealthCheckOptions
-{
-    Predicate = check => check.Tags.Contains("ready"),
-    ResponseWriter = DependencyHealthCheck.WriteResponseAsync,
-});
+app.MapCloudMartHealth();
 
 app.MapCatalogEndpoints();
 app.MapImageEndpoints();

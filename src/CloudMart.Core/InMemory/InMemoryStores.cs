@@ -63,14 +63,17 @@ public sealed class InMemoryOrderRepository : IOrderRepository
 
     public Task<IReadOnlyList<Order>> ListRecentAsync(int take, CancellationToken ct = default) => List(_ => true, take);
 
-    public Task<bool> TryCompleteAsync(Guid id, OrderStatus status, string? reason, CancellationToken ct = default)
+    public Task<bool> TryCompleteAsync(Guid id, OrderOutcome outcome, CancellationToken ct = default)
     {
         lock (_gate)
         {
             if (!_orders.TryGetValue(id, out var order) || order.Status != OrderStatus.Pending)
                 return Task.FromResult(false);
-            order.Status = status;
-            order.StatusReason = reason;
+            order.Status = outcome.Status;
+            order.StatusReason = outcome.Reason;
+            order.PaymentId = outcome.PaymentId;
+            order.TrackingNumber = outcome.TrackingNumber;
+            order.ReviewRequired |= outcome.ReviewRequired;
             order.UpdatedUtc = DateTimeOffset.UtcNow;
             return Task.FromResult(true);
         }

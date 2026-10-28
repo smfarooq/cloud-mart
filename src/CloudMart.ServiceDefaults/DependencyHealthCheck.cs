@@ -1,8 +1,10 @@
 using System.Text.Json;
 using CloudMart.Core;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace CloudMart.Api;
+namespace CloudMart.ServiceDefaults;
 
 /// <summary>
 /// Readiness: can we reach every configured dependency? Used by App Service health check, Container Apps and AKS

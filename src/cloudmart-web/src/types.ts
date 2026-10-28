@@ -31,6 +31,8 @@ export interface Order {
   statusReason?: string | null;
   reviewRequired: boolean;
   total: number;
+  paymentId?: string | null;
+  trackingNumber?: string | null;
   createdUtc: string;
   updatedUtc: string;
   lines: OrderLine[];
@@ -56,7 +58,15 @@ export interface PlatformInfo {
   framework: string;
   hosting: { model: string; region?: string | null; instance: string; detail?: string | null };
   authMode: string;
-  providers: { catalog: string; orders: string; messaging: string; telemetry: string; images: string };
+  providers: {
+    catalog: string;
+    orders: string;
+    messaging: string;
+    telemetry: string;
+    images: string;
+    payments: string;
+    shipping: string;
+  };
   integrations: Record<string, boolean>;
   features: Record<string, boolean>;
   bannerMessage?: string | null;

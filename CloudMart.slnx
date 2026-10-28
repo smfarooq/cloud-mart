@@ -3,6 +3,9 @@
     <Project Path="src/CloudMart.Api/CloudMart.Api.csproj" />
     <Project Path="src/CloudMart.Core/CloudMart.Core.csproj" />
     <Project Path="src/CloudMart.Functions/CloudMart.Functions.csproj" />
+    <Project Path="src/CloudMart.Payments/CloudMart.Payments.csproj" />
+    <Project Path="src/CloudMart.ServiceDefaults/CloudMart.ServiceDefaults.csproj" />
+    <Project Path="src/CloudMart.Shipping/CloudMart.Shipping.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CloudMart.Core.Tests/CloudMart.Core.Tests.csproj" />

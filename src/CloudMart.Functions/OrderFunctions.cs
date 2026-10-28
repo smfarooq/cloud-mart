@@ -3,6 +3,8 @@ using CloudMart.Core;
 using CloudMart.Core.Domain;
 using CloudMart.Core.Services;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.DurableTask;
+using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 
 namespace CloudMart.Functions;
@@ -15,17 +17,30 @@ namespace CloudMart.Functions;
 public sealed class OrderFunctions(OrderFulfillmentService fulfillment, ILogger<OrderFunctions> logger)
 {
     /// <summary>
-    /// Exceptions abandon the message; Service Bus redelivers it until maxDeliveryCount (3) and then moves it
-    /// to the dead-letter queue. Tick "simulate failure" at checkout to watch that happen.
+    /// Starts the order saga (<see cref="OrderSagaFunctions"/>) and returns: the message is complete once the saga
+    /// is scheduled, and Durable Functions owns the rest. Exceptions abandon the message; Service Bus redelivers it
+    /// until maxDeliveryCount (3) and then dead-letters it. Tick "simulate failure" at checkout to watch that.
     /// </summary>
     [Function(nameof(FulfillOrder))]
     public async Task FulfillOrder(
         [ServiceBusTrigger("orders", "fulfillment", Connection = "ServiceBus")] ServiceBusReceivedMessage message,
+        [DurableClient] DurableTaskClient durable,
         CancellationToken ct)
     {
         var evt = Read(message);
-        logger.LogInformation("Fulfilling order {OrderId}, delivery attempt {DeliveryCount}", evt.OrderId, message.DeliveryCount);
-        await fulfillment.ProcessAsync(evt, ct);
+        logger.LogInformation("Order {OrderId} received, delivery attempt {DeliveryCount}", evt.OrderId, message.DeliveryCount);
+        OrderFulfillmentService.ThrowIfSimulatedFailure(evt);
+
+        // The order id is the instance id: a redelivered message finds the saga already running and does nothing.
+        var instanceId = evt.OrderId.ToString();
+        if (await durable.GetInstanceAsync(instanceId, getInputsAndOutputs: false, ct) is { } existing)
+        {
+            logger.LogInformation("Saga {InstanceId} already exists ({Status}); ignoring duplicate delivery", instanceId, existing.RuntimeStatus);
+            return;
+        }
+
+        await durable.ScheduleNewOrchestrationInstanceAsync(OrderSagaFunctions.Orchestrator, evt, new StartOrchestrationOptions(instanceId), ct);
+        logger.LogInformation("Started saga {InstanceId}", instanceId);
     }
 
     /// <summary>Only receives messages matching the subscription's SQL filter: total > 500.</summary>

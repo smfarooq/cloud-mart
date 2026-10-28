@@ -10,6 +10,8 @@ const providerRows: { key: keyof PlatformInfo['providers']; label: string; phase
   { key: 'images', label: 'Images', phase: '4 · Data', local: 'In-memory' },
   { key: 'messaging', label: 'Order events', phase: '5 · Messaging', local: 'In-process' },
   { key: 'telemetry', label: 'Click stream', phase: '5 · Messaging', local: 'In-process' },
+  { key: 'payments', label: 'Payments', phase: '16 · Microservices', local: 'In-process' },
+  { key: 'shipping', label: 'Shipping', phase: '16 · Microservices', local: 'In-process' },
 ];
 
 const integrationLabels: Record<string, string> = {

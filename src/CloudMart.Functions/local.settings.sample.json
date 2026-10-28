@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to local.settings.json (git-ignored) and fill in. Uses your `az login` identity, so grant YOURSELF the same data roles as the Functions managed identity (Service Bus Data Receiver, Event Hubs Data Receiver, Storage Blob Data Contributor, Cosmos DB Built-in Data Contributor).",
+  "_comment": "Copy to local.settings.json (git-ignored) and fill in. Uses your `az login` identity, so grant YOURSELF the same data roles as the Functions managed identity (Service Bus Data Receiver, Event Hubs Data Receiver, Storage Blob Data Contributor, Cosmos DB Built-in Data Contributor). Durable Functions keeps the saga's state in AzureWebJobsStorage: run Azurite for UseDevelopmentStorage=true.",
   "IsEncrypted": false,
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
@@ -11,6 +11,10 @@
     "Cosmos__Endpoint": "https://<your-account>.documents.azure.com:443/",
     "ConnectionStrings__OrdersSql": "Server=tcp:<your-server>.database.windows.net,1433;Database=cloudmart;Authentication=Active Directory Default;Encrypt=True;",
     "Storage__BlobEndpoint": "https://<your-account>.blob.core.windows.net/",
+
+    "_phase16": "Leave empty to run payments and shipping in-process. Point at local runs of the two APIs, or at Azure (then add the scopes).",
+    "Payments__BaseUrl": "http://localhost:5081",
+    "Shipping__BaseUrl": "http://localhost:5082",
 
     "AzureWebJobs.DailyOrderReport.Disabled": "true"
   }

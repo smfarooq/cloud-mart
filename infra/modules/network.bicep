@@ -27,6 +27,10 @@ var privateDnsZoneNames = {
   cosmos: 'privatelink.documents.azure.com'
   sql: 'privatelink${environment().suffixes.sqlServerHostname}'
   postgres: 'privatelink.postgres.database.azure.com'
+  webApps: 'privatelink.azurewebsites.net' // phase 16: the Payments and Shipping APIs' inbound private endpoints
+  // Event Hubs (any tier from Standard) and Service Bus Premium share this zone. A Service Bus Standard namespace has
+  // no private endpoint, so its name never points into the zone and keeps resolving to its public address.
+  serviceBus: 'privatelink.servicebus.windows.net'
 }
 
 resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
@@ -45,7 +49,8 @@ resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2024-05-01
           sourceAddressPrefix: 'VirtualNetwork'
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
-          destinationPortRanges: ['443', '1433', '5432']
+          // HTTPS, SQL, PostgreSQL, and AMQP over TLS: the Event Hubs SDK and trigger use 5671, not 443.
+          destinationPortRanges: ['443', '1433', '5432', '5671-5672']
         }
       }
       {

@@ -7,7 +7,7 @@ param tags object
 param subnetId string
 param privateLinkServiceId string
 
-@description('blob, queue, table, vault, Sql, sqlServer, postgresqlServer, ...')
+@description('blob, queue, table, vault, Sql, sqlServer, postgresqlServer, namespace (Event Hubs, Service Bus), ...')
 param groupId string
 param privateDnsZoneId string
 

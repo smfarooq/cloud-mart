@@ -65,3 +65,10 @@ param deployAppGateway = false
 param deployAppConfig = false
 param deployRedis = false
 param deployApim = false
+
+// Phase 16 · Microservices (Payments + Shipping APIs, Durable Functions saga)
+param deployPayments = false
+param deployShipping = false
+// From deploy/entra/setup-service-auth.sh. Empty = the services accept any caller (lab only, like phase 1's API).
+param entraPaymentsClientId = ''
+param entraShippingClientId = ''

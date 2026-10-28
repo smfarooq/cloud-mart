@@ -40,6 +40,8 @@ public sealed class Order
     public string? StatusReason { get; set; }
     public bool ReviewRequired { get; set; }
     public decimal Total { get; set; }
+    public string? PaymentId { get; set; }
+    public string? TrackingNumber { get; set; }
     public DateTimeOffset CreatedUtc { get; set; }
     public DateTimeOffset UpdatedUtc { get; set; }
     public List<OrderLine> Lines { get; set; } = [];
@@ -53,6 +55,8 @@ public sealed class Order
         StatusReason = StatusReason,
         ReviewRequired = ReviewRequired,
         Total = Total,
+        PaymentId = PaymentId,
+        TrackingNumber = TrackingNumber,
         CreatedUtc = CreatedUtc,
         UpdatedUtc = UpdatedUtc,
         Lines = Lines.Select(l => l.Clone()).ToList(),
@@ -70,6 +74,14 @@ public sealed class OrderLine
 
     public OrderLine Clone() => new() { ProductId = ProductId, ProductName = ProductName, UnitPrice = UnitPrice, Quantity = Quantity };
 }
+
+/// <summary>How the order saga ended. ReviewRequired is set when a compensation could not complete.</summary>
+public sealed record OrderOutcome(
+    OrderStatus Status,
+    string Reason,
+    string? PaymentId = null,
+    string? TrackingNumber = null,
+    bool ReviewRequired = false);
 
 public sealed record OrderSummary(int Total, int Pending, int Confirmed, int Rejected, decimal ConfirmedRevenue);
 

@@ -56,12 +56,13 @@ stages:
 
           - script: |
               set -euo pipefail
-              dotnet publish src/CloudMart.Api -c $(buildConfiguration) -o $(Agent.TempDirectory)/api --no-build
-              dotnet publish src/CloudMart.Functions -c $(buildConfiguration) -o $(Agent.TempDirectory)/functions --no-build
               mkdir -p $(Build.ArtifactStagingDirectory)
-              (cd $(Agent.TempDirectory)/api && zip -qr $(Build.ArtifactStagingDirectory)/api.zip .)
-              (cd $(Agent.TempDirectory)/functions && zip -qr $(Build.ArtifactStagingDirectory)/functions.zip .)
-            displayName: Package API and Functions
+              for app in Api Functions Payments Shipping; do
+                name=$(echo "$app" | tr '[:upper:]' '[:lower:]')
+                dotnet publish src/CloudMart.$app -c $(buildConfiguration) -o $(Agent.TempDirectory)/$name --no-build
+                (cd $(Agent.TempDirectory)/$name && zip -qr $(Build.ArtifactStagingDirectory)/$name.zip .)
+              done
+            displayName: Package API, Functions, Payments and Shipping
 
           - script: |
               set -euo pipefail
@@ -117,7 +118,7 @@ stages:
               steps:
                 - checkout: self # the container build needs the source
                 - task: AzureCLI@2
-                  displayName: Deploy API, Functions and SPA
+                  displayName: Deploy API, Functions, Payments, Shipping and SPA
                   inputs:
                     azureSubscription: $(azureServiceConnection)
                     scriptType: bash
@@ -135,6 +136,16 @@ stages:
 
                       if [ -n "$(get functionAppName)" ]; then
                         az functionapp deployment source config-zip -g "$rg" -n "$(get functionAppName)" --src "$drop/functions.zip"
+                      fi
+
+                      # Phase 16. Their public entrance is closed once private endpoints are on, but the deployment
+                      # (SCM) site stays reachable with Entra auth, so a Microsoft-hosted agent can still deploy.
+                      if [ -n "$(get paymentsAppName)" ]; then
+                        az webapp deploy -g "$rg" -n "$(get paymentsAppName)" --src-path "$drop/payments.zip" --type zip
+                      fi
+
+                      if [ -n "$(get shippingAppName)" ]; then
+                        az webapp deploy -g "$rg" -n "$(get shippingAppName)" --src-path "$drop/shipping.zip" --type zip
                       fi
 
                       if [ -n "$(get staticWebAppName)" ]; then
