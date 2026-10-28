@@ -1,11 +1,16 @@
 // Phase 2: a single spoke VNet with purpose-built subnets, NSGs and private DNS zones.
-// (Hub-and-spoke with Azure Firewall / VPN Gateway is covered as a design exercise in the learning path.)
+// Phase 13 (optional) adds the hub: firewall-hub.bicep, peered to this VNet, with the app subnets' egress routed to it.
 
 param location string
 param tags object
 param vnetName string
 param addressPrefix string = '10.20.0.0/16'
 
+@description('Phase 13: the hub firewall\'s private IP. Set = the app subnets send their internet-bound traffic to it.')
+param egressFirewallIp string = ''
+
+// Exported so the hub's firewall rules can name these subnets as sources.
+@export()
 var subnetPrefixes = {
   appService: '10.20.1.0/24' // App Service VNet integration (outbound)
   functions: '10.20.2.0/24' // Flex Consumption VNet integration (outbound)
@@ -149,6 +154,37 @@ resource nsgApps 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   tags: tags
 }
 
+// Phase 13: a user-defined route sends the app subnets' default route (0.0.0.0/0) to the hub firewall. App Service
+// (vnetRouteAllEnabled) and Flex Consumption already put all their outbound traffic into these subnets.
+//
+// The private endpoints' /32 system routes are more specific than 0.0.0.0/0, so traffic to the data stores still goes
+// straight to them and never reaches the firewall. To inspect it as well, add a route for 10.20.6.0/24 to the firewall
+// here: snet-private-endpoints already has privateEndpointNetworkPolicies 'Enabled', which lets a route that covers
+// the /32s override them. Allow that traffic with application rules, which SNAT it, so the replies come back through
+// the firewall too.
+var useEgressFirewall = !empty(egressFirewallIp)
+
+resource egressRoutes 'Microsoft.Network/routeTables@2024-05-01' = if (useEgressFirewall) {
+  name: '${vnetName}-egress-rt'
+  location: location
+  tags: tags
+  properties: {
+    disableBgpRoutePropagation: true // a gateway in the hub must not advertise a way around the firewall
+    routes: [
+      {
+        name: 'internet-via-firewall'
+        properties: {
+          addressPrefix: '0.0.0.0/0'
+          nextHopType: 'VirtualAppliance'
+          nextHopIpAddress: egressFirewallIp
+        }
+      }
+    ]
+  }
+}
+
+var appRouteTable = useEgressFirewall ? { id: egressRoutes.id } : null
+
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: vnetName
   location: location
@@ -161,6 +197,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         properties: {
           addressPrefix: subnetPrefixes.appService
           networkSecurityGroup: { id: nsgApps.id }
+          routeTable: appRouteTable
           delegations: [{ name: 'web', properties: { serviceName: 'Microsoft.Web/serverFarms' } }]
         }
       }
@@ -169,6 +206,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         properties: {
           addressPrefix: subnetPrefixes.functions
           networkSecurityGroup: { id: nsgApps.id }
+          routeTable: appRouteTable
           delegations: [{ name: 'flex', properties: { serviceName: 'Microsoft.App/environments' } }]
         }
       }
@@ -177,6 +215,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         properties: {
           addressPrefix: subnetPrefixes.containerApps
           networkSecurityGroup: { id: nsgApps.id }
+          routeTable: appRouteTable
           delegations: [{ name: 'aca', properties: { serviceName: 'Microsoft.App/environments' } }]
         }
       }

@@ -656,15 +656,162 @@ fixed, so deploy, test and remove the same day).
 
 ---
 
-## Phase 13 · Hybrid networking and identity (new: design-first)
+## Phase 13 · Hybrid networking and identity (new: hub-and-spoke lab, then design)
 
-Real VPN and ExpressRoute need an on-premises device or a provider circuit, so this phase is mostly design. The one
-hands-on taste: deploy a VPN Gateway (`VpnGw1`, ≈ $140/month, 30–45 minutes to create) for **one day** and connect
-the CloudMart VNet to `vnet-onprem-sim` VNet-to-VNet, or your laptop point-to-site with Entra ID authentication.
+**Switches:** `deployFirewall = true`. It needs `deployNetwork` and `enablePrivateEndpoints` (phases 2 and 4): the
+firewall allows only the few public services the apps use, so the data stores must already be private. Keep
+`deployMessaging` (phase 5) on for the break-it step.
 
-**Draw** hub-and-spoke for CloudMart: a hub VNet with Azure Firewall, VPN/ExpressRoute gateway and Bastion; CloudMart
-as a spoke; UDRs forcing spoke egress through the firewall; a **Private DNS Resolver** in the hub so on-premises can
-resolve private endpoint names. Then redraw it with **Virtual WAN**.
+**Cost:** Azure Firewall **Basic** is about $0.40/hour, or **≈ $290/month**, plus about $0.065 per GB it processes and
+two Standard public IPs (≈ $4/month each). It is billed every hour it exists, so deploy it, do the lab and remove it the
+same day (≈ $10). Setting the switch back to `false` doesn't delete it: see step 6.
+
+**What changes:**
+
+- **Hub:** a hub VNet `vnet-cloudmart-dev-hub` (10.0.0.0/16), peered both ways with the CloudMart VNet, which is now a
+  spoke. It holds `AzureFirewallSubnet` and `AzureFirewallManagementSubnet` (both /26). Basic always has a management
+  NIC with its own public IP, so Microsoft's management traffic never depends on your rules.
+- **Route table:** `vnet-cloudmart-dev-egress-rt` sends `0.0.0.0/0` to the firewall's private IP from
+  `snet-appservice`, `snet-functions` and `snet-containerapps`. App Service (`vnetRouteAllEnabled`) and Flex
+  Consumption already put all their outbound traffic into those subnets.
+- **Platform:** order events show **Service Bus (WebSockets)**. The API and the Functions trigger switch from AMQP
+  (port 5671) to AMQP over WebSockets (443). Why: Basic can match a name only in an *application* rule, which handles
+  HTTP(S) and SQL. A name in a *network* rule (any port) needs DNS proxy, which starts at Standard. On 5671 the only
+  option would be the `ServiceBus` service tag, which covers every customer's namespace.
+
+The firewall policy (`afwp-cloudmart-dev`, read it in [firewall-hub.bicep](../infra/modules/firewall-hub.bicep))
+allows only what the apps call on public endpoints. Everything else is denied and logged:
+
+| Rule | Type | Destination | Who needs it |
+|---|---|---|---|
+| `entra-id` | Network | `AzureActiveDirectory` tag, TCP 443 | Validating Entra tokens (API, Payments, Shipping); managed identity in Container Apps |
+| `azure-monitor` | Network | `AzureMonitor` tag, TCP 443 | Application Insights from every app and the Functions host |
+| `service-bus` | Application | `sbns-cloudmart-dev-xxxxxx.servicebus.windows.net`, HTTPS 443 | The API sends order events; the Functions triggers receive them |
+| `app-configuration` | Application | `appcs-cloudmart-dev-xxxxxx.azconfig.io` | The API at startup (only with `deployAppConfig`) |
+| `container-apps-platform` | Application | `mcr.microsoft.com`, `*.data.mcr.microsoft.com`, `packages.aks.azure.com`, `acs-mirror.azureedge.net` | The Container Apps environment (only with `deployContainerApps`) |
+| `container-registry` | Network | `AzureContainerRegistry` tag | Your image from ACR (only with Container Apps and `containerImage`) |
+
+Some traffic never reaches the firewall:
+
+- **Private endpoints.** Each private endpoint adds a `/32` route, which is more specific than `0.0.0.0/0`. So SQL,
+  Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs are reached directly, and so is the
+  Durable Functions task hub, which lives in Storage.
+- **Platform endpoints.** Azure DNS (168.63.129.16) and the managed identity endpoints are answered by the platform
+  and aren't routed.
+- **Inbound traffic.** Front Door → App Service and Event Grid → Functions never enter the VNet, so the firewall
+  doesn't see them and can't route them asymmetrically.
+- **Azure Managed Redis (phase 12).** Its port 10000 is TLS but not HTTPS, so Basic can't allow it by name. Give it
+  a private endpoint, or use Standard with DNS proxy.
+
+### Lab
+
+1. **Deploy.** Run `what-if` first. It lists the hub VNet, two public IPs, the policy and its rule collection group,
+   the firewall, the route table, the two peerings, a `routeTable` on three subnets, and `ServiceBus__TransportType`
+   on the apps. The firewall takes about 10 minutes to create.
+2. **Follow the packet.**
+
+   ```bash
+   az network vnet peering list -g rg-cloudmart-dev --vnet-name vnet-cloudmart-dev -o table      # Connected
+   az network route-table route list -g rg-cloudmart-dev --route-table-name vnet-cloudmart-dev-egress-rt -o table
+   az network firewall show -g rg-cloudmart-dev -n afw-cloudmart-dev --query "ipConfigurations[0].privateIPAddress"
+   ```
+
+   (The first `az network firewall` command installs the CLI's `azure-firewall` extension.) The route's next hop is
+   the firewall's private IP. Azure picks it, and stopping and starting the firewall can change it, which is why the
+   Bicep reads it from the firewall instead of hard-coding `10.0.0.4`.
+3. **Use the shop, then read the logs.** Place an order, open a few products and upload an image: everything works.
+   Then in Log Analytics:
+
+   ```kusto
+   AZFWApplicationRule
+   | where TimeGenerated > ago(30m)
+   | summarize count() by SourceIp, Fqdn, Action, Rule
+   ```
+
+   ```kusto
+   AZFWNetworkRule
+   | where TimeGenerated > ago(30m)
+   | summarize count() by SourceIp, DestinationIp, DestinationPort, Action, Rule
+   ```
+
+   `10.20.1.x` is the App Service plan (API, Payments, Shipping) and `10.20.2.x` the Functions app. Look for what
+   is *missing*: no database, Key Vault or Storage traffic, because the private endpoints' routes win. The
+   `firewallPublicIp` deployment output is now the one address all of it leaves from: the address a partner would
+   allow-list.
+4. **Watch a denied flow.** Open the API's **SSH** console (App Service → Development Tools) and run
+   `curl -sv https://www.bing.com -o /dev/null`. The TLS handshake is cut off. Find it:
+
+   ```kusto
+   AZFWApplicationRule
+   | where Action == "Deny"
+   | project TimeGenerated, SourceIp, Fqdn, DestinationPort, ActionReason
+   ```
+
+   Then try `timeout 5 bash -c '</dev/tcp/www.bing.com/443' && echo open`. It prints *open*. The firewall answers the
+   TCP handshake on 80 and 443 itself and decides only when it sees the HTTP request or TLS hello. A TCP connect test
+   proves nothing through Azure Firewall.
+5. **Stretch: inspect the private endpoints too.** In [network.bicep](../infra/modules/network.bicep), add a route for
+   `10.20.6.0/24` to the firewall. `snet-private-endpoints` already has `privateEndpointNetworkPolicies` enabled, which
+   lets that route override the `/32`s. Then add application rules (HTTPS for Key Vault, Storage and Cosmos DB, MSSQL
+   for SQL). Application rules SNAT the traffic, so the replies come back through the firewall instead of around it.
+6. **Clean up.** Set `deployFirewall = false` and redeploy. That removes the route first, so the apps don't lose
+   their way out. Then delete the billed parts:
+
+   ```bash
+   az network firewall delete -g rg-cloudmart-dev -n afw-cloudmart-dev
+   az network public-ip delete -g rg-cloudmart-dev -n pip-afw-cloudmart-dev
+   az network public-ip delete -g rg-cloudmart-dev -n pip-afw-cloudmart-dev-mgmt
+   ```
+
+### Break it
+
+- **Remove the Service Bus rule.** In the portal, open the firewall policy → *Application rules* → `app-dependencies`
+  and delete `service-bus`, or run:
+
+  ```bash
+  az network firewall policy rule-collection-group collection rule remove -g rg-cloudmart-dev \
+    --policy-name afwp-cloudmart-dev --rcg-name cloudmart-egress --collection-name app-dependencies --name service-bus
+  ```
+
+  Wait a minute, then place an order. The API saves it before it publishes, so the checkout call fails after the
+  Service Bus client's retries, and the order stays **Pending**. It's the lost event from phase 5's outbox exercise,
+  caused this time by the network. `AZFWApplicationRule | where Fqdn endswith "servicebus.windows.net"` shows `Deny`
+  from `10.20.1.x` (the API sending) and from `10.20.2.x` (the Functions triggers, which can't receive either).
+  **Fix it:** redeploy, and Bicep puts the rule back. New orders confirm; the stuck one stays Pending, because
+  nothing ever published its event.
+- **Go back to AMQP.** With the rule back, set the API's app setting `ServiceBus__TransportType` to `AmqpTcp`. New
+  orders get stuck again. The rule allows the namespace on 443 only, and Basic can't allow 5671 by name. Redeploy to
+  restore it.
+
+### Architect's questions
+
+**Draw** the rest of the hub: a VPN or ExpressRoute gateway (`allowGatewayTransit` on the hub's peering,
+`useRemoteGateways` on the spoke's), Bastion, and a **Private DNS Resolver** so on-premises can resolve private
+endpoint names. Then redraw it with **Virtual WAN** and a secured virtual hub.
+
+Real VPN and ExpressRoute need an on-premises device or a provider circuit. For a hands-on taste, deploy a VPN Gateway
+(`VpnGw1`, ≈ $140/month, 30–45 minutes to create) for **one day** and connect the CloudMart VNet to
+`vnet-onprem-sim` VNet-to-VNet, or your laptop point-to-site with Entra ID authentication.
+
+| Requirement | Recommendation |
+|---|---|
+| Central allow-list and logs for outbound traffic from many spokes | **Azure Firewall** in a hub, plus a **UDR** `0.0.0.0/0` → firewall on each spoke subnet |
+| Which Azure Firewall SKU? | **Basic**: up to 250 Mbps, names only in application rules (HTTP(S), SQL), threat intelligence alerts only. **Standard**: DNS proxy (so FQDNs in network rules, any port), web categories, threat intelligence deny. **Premium**: TLS inspection, IDPS, URL filtering |
+| Stop data exfiltration to *other customers'* PaaS resources | Allow your own **FQDNs**, or use private endpoints. Service tags such as `ServiceBus` or `Storage` cover every customer's resources |
+| Inspect traffic to private endpoints too | A UDR covering the private endpoint subnet, `privateEndpointNetworkPolicies` enabled, and application rules (they SNAT, so replies return through the firewall) |
+| Same rules for many firewalls and regions | **Firewall Manager** with parent and child **firewall policies**; **Virtual Network Manager** for peerings and UDRs at scale |
+| Spoke-to-spoke traffic | Through the hub firewall, with a UDR for the other spoke's prefix. Peering isn't transitive |
+| Lots of outbound connections, SNAT port exhaustion | **NAT Gateway** on the firewall subnet, or more public IPs on the firewall |
+
+| | NSG with service tags | Azure Firewall | NAT Gateway |
+|---|---|---|---|
+| Does | Allow or deny by IP, port, service tag | Allow or deny by FQDN, service tag or IP; SNAT, DNAT, threat intelligence | SNAT only: a fixed outbound IP, no filtering |
+| Layer | L3–L4 | L3–L7 | L3–L4 |
+| Filters by name | No | Yes: application rules; network rules with DNS proxy (Standard and up) | No |
+| Where | On every subnet or NIC, distributed | Central, in the hub, shared by spokes | Per subnet |
+| Logs | VNet flow logs | Allow and deny per rule (`AZFW*` tables) | Metrics only |
+| Cost | Free | Basic ≈ $290/month, Standard ≈ $900/month, plus per GB | ≈ $33/month plus per GB |
+| Use it for | Separating tiers, coarse egress limits | Central egress control, exfiltration protection | A predictable outbound IP and SNAT scale, often next to a firewall |
 
 | Requirement | Recommendation |
 |---|---|

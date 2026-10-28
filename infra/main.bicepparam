@@ -66,6 +66,12 @@ param deployAppConfig = false
 param deployRedis = false
 param deployApim = false
 
+// Phase 13 · Hub-and-spoke: a hub VNet with Azure Firewall Basic, and the app subnets' egress routed through it.
+// Needs deployNetwork and enablePrivateEndpoints (and deployMessaging for the lab's "break it").
+// COST: about $290/month plus per-GB processing, billed every hour it exists. Deploy, do the lab, delete it the same
+// day (setting it back to false does not delete the firewall: use a deployment stack or delete it).
+param deployFirewall = false
+
 // Phase 16 · Microservices (Payments + Shipping APIs, Durable Functions saga)
 param deployPayments = false
 param deployShipping = false

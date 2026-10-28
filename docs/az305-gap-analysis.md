@@ -93,7 +93,7 @@ between" decisions the exam actually tests.
 | Connect to the internet | ✅ | Public IPs, NAT Gateway, Front Door, Application Gateway | Phases 2, 10 |
 | Connect to **on-premises** | ➕ | **VPN Gateway** (S2S/P2S), **ExpressRoute** (+ Global Reach, FastPath), **Virtual WAN** | Phase 13 |
 | Optimise network performance | ➕ | Accelerated networking, proximity placement groups, ExpressRoute vs VPN, Front Door | Phases 10, 13 |
-| Optimise network security | ⚠️ | **Azure Firewall**, **DDoS Protection**, ASGs, **service endpoints vs private endpoints**, Bastion | Phases 2, 13 |
+| Optimise network security | ⚠️ | **Azure Firewall** (hands-on in phase 13: hub, UDRs, an allow-list policy), **DDoS Protection**, ASGs, **service endpoints vs private endpoints**, Bastion | Phases 2, 13 |
 | Load balancing and routing | ✅ | **Traffic Manager** (DNS) vs Front Door vs Application Gateway vs Load Balancer | Phases 2, 10 |
 
 ---
@@ -118,6 +118,7 @@ between" decisions the exam actually tests.
 | **14** | **Data integration + analytics** | (new) | **Data Factory**, **Fabric** / Synapse, Databricks, Stream Analytics, Purview |
 | **15** | **Migration** | (new) | **CAF Migrate**, **Azure Migrate**, **DMS**, **Data Box**, Storage Mover |
 
-Phases 11–12 are built into CloudMart (Bicep switches + code). Phases 13–15 involve on-premises systems or large
-data platforms that are impractical or expensive to build for real, so they are design labs: diagrams and decision
-tables, plus a cheap hands-on taste where one exists.
+Phases 11–12 are built into CloudMart (Bicep switches + code), and so is phase 13's hub firewall (`deployFirewall`).
+The rest of phase 13 and phases 14–15 involve on-premises systems or large data platforms that are impractical or
+expensive to build for real, so they are design labs: diagrams and decision tables, plus a cheap hands-on taste where
+one exists.
