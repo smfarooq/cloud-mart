@@ -1,7 +1,10 @@
 using CloudMart.Core;
 using CloudMart.Core.Domain;
 using CloudMart.Core.InMemory;
+using CloudMart.Core.InProcess;
+using CloudMart.Core.Payments;
 using CloudMart.Core.Services;
+using CloudMart.Core.Shipping;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -11,8 +14,13 @@ public class OrderFlowTests
 {
     private readonly InMemoryProductRepository _products = new();
     private readonly InMemoryOrderRepository _orders = new();
+    private readonly InMemoryPaymentStore _payments = new();
+    private readonly InMemoryShipmentStore _shipments = new();
     private readonly RecordingPublisher _publisher = new();
     private readonly Customer _customer = new("user-1", "Test User", IsAdmin: false);
+
+    private static readonly IConfiguration NoDelay =
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Fulfillment:SimulatedDelayMs"] = "0" }).Build();
 
     public OrderFlowTests()
     {
@@ -43,6 +51,7 @@ public class OrderFlowTests
     [InlineData("woodgrove-desk-lamp", 1, OrderStatus.Confirmed)]
     [InlineData("fabrikam-studio-mic", 4, OrderStatus.Rejected)]     // only 3 in stock
     [InlineData("contoso-workstation-16", 3, OrderStatus.Rejected)]  // over the payment limit
+    [InlineData("woodgrove-desk-lamp", 11, OrderStatus.Rejected)]    // too many items for one parcel: refunded
     public async Task Fulfillment_applies_business_rules(string productId, int quantity, OrderStatus expected)
     {
         var order = await NewOrderService().PlaceOrderAsync(_customer, new PlaceOrderRequest([new(productId, quantity)]));
@@ -50,6 +59,34 @@ public class OrderFlowTests
         await NewFulfillment().ProcessAsync(_publisher.Published.Single());
 
         Assert.Equal(expected, (await _orders.GetAsync(order.Id))!.Status);
+    }
+
+    [Fact]
+    public async Task Confirmed_order_records_payment_and_tracking_number()
+    {
+        var order = await NewOrderService().PlaceOrderAsync(_customer, new PlaceOrderRequest([new("woodgrove-desk-lamp", 2)]));
+
+        await NewFulfillment().ProcessAsync(_publisher.Published.Single());
+
+        var stored = (await _orders.GetAsync(order.Id))!;
+        var payment = await _payments.GetByOrderAsync(order.Id);
+        Assert.Equal(PaymentStatus.Captured, payment!.Status);
+        Assert.Equal(payment.Id, stored.PaymentId);
+        Assert.Equal(ShippingRules.TrackingNumber(order.Id), stored.TrackingNumber);
+    }
+
+    [Fact]
+    public async Task Shipping_rejection_refunds_the_payment()
+    {
+        var order = await NewOrderService().PlaceOrderAsync(_customer, new PlaceOrderRequest([new("woodgrove-desk-lamp", 11)]));
+
+        await NewFulfillment().ProcessAsync(_publisher.Published.Single());
+
+        var stored = (await _orders.GetAsync(order.Id))!;
+        var payment = await _payments.GetByOrderAsync(order.Id);
+        Assert.Equal(PaymentStatus.Refunded, payment!.Status);
+        Assert.Contains("refunded", stored.StatusReason);
+        Assert.Null(await _shipments.GetAsync(order.Id));
     }
 
     [Fact]
@@ -94,9 +131,14 @@ public class OrderFlowTests
     private OrderService NewOrderService() => new(_products, _orders, _publisher, NullLogger<OrderService>.Instance);
 
     private OrderFulfillmentService NewFulfillment() => new(
+        new OrderSagaActivities(
+            _orders,
+            _products,
+            new InProcessPaymentGateway(new PaymentProcessor(_payments, NoDelay)),
+            new InProcessShippingGateway(new ShippingProcessor(_shipments)),
+            NoDelay,
+            NullLogger<OrderSagaActivities>.Instance),
         _orders,
-        _products,
-        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Fulfillment:SimulatedDelayMs"] = "0" }).Build(),
         NullLogger<OrderFulfillmentService>.Instance);
 
     private sealed class RecordingPublisher : IOrderEventPublisher

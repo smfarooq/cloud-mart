@@ -99,6 +99,6 @@ public static class CatalogSeed
         new() { Id = "northwind-mech-keyboard", Category = "accessories", Name = "Northwind Mechanical Keyboard", Description = "Hot-swappable switches.", Price = 119m, Stock = 80 },
         new() { Id = "northwind-4k-monitor", Category = "accessories", Name = "Northwind 27\" 4K Monitor", Description = "USB-C power delivery. One of these makes a high-value order.", Price = 549m, Stock = 15 },
         new() { Id = "tailspin-smart-speaker", Category = "home", Name = "Tailspin Smart Speaker", Description = "Room-filling sound, voice assistant built in.", Price = 89m, Stock = 120 },
-        new() { Id = "woodgrove-desk-lamp", Category = "home", Name = "Woodgrove Desk Lamp", Description = "Dimmable LED with wireless charging base.", Price = 59m, Stock = 200 },
+        new() { Id = "woodgrove-desk-lamp", Category = "home", Name = "Woodgrove Desk Lamp", Description = "Dimmable LED with wireless charging base. Order 11 to see shipping fail and the saga refund you.", Price = 59m, Stock = 200 },
     ];
 }

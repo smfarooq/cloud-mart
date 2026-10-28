@@ -1,6 +1,7 @@
 # CloudMart learning path: hands-on prep for AZ-305
 
-Fifteen phases: your ten, plus five the exam needs (see [az305-gap-analysis.md](az305-gap-analysis.md)).
+Sixteen phases: your ten, five more the exam needs (see [az305-gap-analysis.md](az305-gap-analysis.md)), and a
+microservices phase that splits checkout into a Payments API, a Shipping API and a Durable Functions saga.
 Each phase follows the same loop:
 
 1. **Switch it on.** Flip the phase's switch in [`infra/main.bicepparam`](../infra/main.bicepparam) and redeploy.
@@ -316,7 +317,8 @@ blocked, and readiness fails. Fix it by redeploying: Bicep puts back what drifte
 Event Grid checks that the target function exists.
 
 **Cost:** Service Bus Standard ≈ $10/month base; Event Hubs Standard (1 throughput unit) ≈ $22/month;
-Event Grid is effectively free at this volume.
+Event Grid is effectively free at this volume. With `enablePrivateEndpoints` on from phase 4, Event Hubs also gets a
+private endpoint (≈ $7/month) and loses its public access. Service Bus Standard can't have one, so it stays public.
 
 ### Lab
 
@@ -335,7 +337,15 @@ Event Grid is effectively free at this volume.
 6. **Event Grid.** Upload an image in Admin. A few seconds later it appears on the product:
    `BlobCreated` → Event Grid system topic → `ProcessProductImage` → validate → copy to `product-images` → update
    Cosmos. Try a file over 5 MB: the function deletes it. Check the event subscription's delivery metrics.
-7. **Design exercise: transactional outbox.** `OrderService` saves the order and *then* publishes. If the publish
+7. **What's private and what isn't** (with `enablePrivateEndpoints` on). From the jumpbox,
+   `nslookup <event-hubs-namespace>.servicebus.windows.net` returns a **10.20.6.x** address from the
+   `privatelink.servicebus.windows.net` zone. The same lookup for the Service Bus namespace returns a public IP:
+   Standard has no private endpoints. Both still accept only Entra ID, and the apps reach both through VNet
+   integration. Event Grid is the third case: Storage hands it events inside Azure, but it *pushes* them to the
+   Function App's public endpoint, because push delivery can't reach a private endpoint. Discuss what "no public
+   endpoints anywhere" would cost: Service Bus Premium (≈ $680/month per messaging unit) with a private endpoint, and
+   Event Grid delivering to a Storage queue or Service Bus that the function reads through a private endpoint.
+8. **Design exercise: transactional outbox.** `OrderService` saves the order and *then* publishes. If the publish
    fails, the order is stuck Pending. Design the fix: write an `Outbox` row in the same SQL transaction as the
    order, and let a relay (a timer Function, or change data capture) publish and mark it sent. Stretch goal:
    implement it.
@@ -350,6 +360,8 @@ Event Grid is effectively free at this volume.
 | Telemetry or click-streams, millions of events/s, replay, many readers | **Event Hubs** (Kafka-compatible) |
 | Ordered processing per customer in Service Bus | **Sessions** |
 | Private endpoints, isolation, zones, geo-replication for Service Bus | **Premium** tier |
+| Event Hubs reachable only from your VNet | **Standard** (or higher) + private endpoint, public network access disabled |
+| Event Grid delivery with no public endpoint on the handler | Deliver to a **Storage queue** or **Service Bus** (managed identity), then pull |
 | Archive the raw stream to a data lake | **Event Hubs Capture** |
 | IoT / MQTT clients | **Event Grid namespaces** (MQTT broker) or IoT Hub |
 
@@ -709,6 +721,140 @@ which tier would you **rehost** first to hit a datacentre-exit deadline?
 | Ongoing file-server sync | **Azure File Sync** |
 | Large online copies, NAS shares | **AzCopy**, **Storage Mover** |
 | Lots of legacy .NET web apps | App Service migration assistant / Azure Migrate web app assessment |
+
+---
+
+## Phase 16 · Microservices: Payments, Shipping and a saga
+
+**Switches:** `deployPayments = true`, `deployShipping = true`. Both services run on the API's App Service plan, so
+there is no extra compute cost. The payments database is one more serverless SQL database that auto-pauses.
+The phase builds on earlier ones:
+
+- `deployMessaging` (phase 5) for the Durable Functions saga.
+- `deploySql` (phase 4) for the ledger table.
+- `deployNetwork` + `enablePrivateEndpoints` (phase 2) to make the services private.
+
+**What changes:**
+
+- **Platform:** *Payments* and *Shipping* switch from *In-process* to *Payments API* / *Shipping API*, and readiness
+  lists `payments-api` and `shipping-api`.
+- **Orders:** show a payment id and a tracking number.
+
+**The design.** Checkout used to be one in-process step. Now it is a **saga** across two services that each own their
+data:
+
+1. Charge the payment: the **Payments API**, with an Azure SQL **ledger** table.
+2. Book the parcel: the **Shipping API**, with **Table Storage**.
+3. If shipping fails after the charge, **refund** it. That is the *compensating transaction*.
+
+There is no distributed transaction. Each step commits on its own, and correctness comes from:
+
+- **Idempotent steps.** Payments uses POST + `Idempotency-Key`; Shipping uses PUT `/shipments/{orderId}`.
+- **Durable orchestration.** [OrderSaga.cs](../src/CloudMart.Core/Services/OrderSaga.cs) is the orchestrator. It runs
+  in-process on a laptop, and as a Durable Functions orchestration in Azure
+  ([OrderSagaFunctions.cs](../src/CloudMart.Functions/OrderSagaFunctions.cs)).
+
+### Lab
+
+1. **Run the three services locally.** No Azure needed. Start each one in its own terminal:
+
+   ```bash
+   dotnet run --project src/CloudMart.Payments     # http://localhost:5081
+   ```
+
+   ```bash
+   dotnet run --project src/CloudMart.Shipping     # http://localhost:5082
+   ```
+
+   Then start the API pointed at them. In PowerShell:
+
+   ```powershell
+   $env:Payments__BaseUrl = "http://localhost:5081"; $env:Shipping__BaseUrl = "http://localhost:5082"
+   dotnet run --project src/CloudMart.Api
+   ```
+
+   Place three orders and read each result on the Orders page:
+
+   | Order | Result |
+   |---|---|
+   | 1 desk lamp | *Confirmed*, with a payment id and a tracking number |
+   | 3 workstations | *Payment declined* (over the 10,000 limit); nothing to undo |
+   | 11 desk lamps | *Shipping rejected* (more than 10 items per parcel), **refunded** |
+
+   Confirm the refund in the Payments API itself: `curl "http://localhost:5081/payments?orderId=<id>"`.
+2. **Idempotency, two ways.**
+   - **POST with an idempotency key.** Send the same request twice. The first answers 201 and the second 200, with
+     the same payment id. Then reuse the key for another order and get 409.
+
+     ```bash
+     curl -i -X POST localhost:5081/payments -H "Idempotency-Key: demo-1" -H "Content-Type: application/json" \
+       -d '{"orderId":"8f3c2c1e-0000-4000-8000-000000000001","customerId":"me","amount":42}'
+     ```
+
+   - **PUT to a client-chosen URL.** `PUT localhost:5082/shipments/<guid>` is idempotent by definition, so a retry needs
+     no extra header.
+
+   Why does the saga need both? Because every retry layer re-sends the same request: the HTTP client, the Durable
+   activity retry and Service Bus redelivery.
+3. **Deploy.** Flip the switches and redeploy.
+   1. Run the second half of
+      [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql) against the `payments` database.
+   2. Run [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh). It creates the two app registrations with
+      their **application** app roles, and assigns those roles to the Functions and API managed identities. The
+      portal can't assign app roles to a managed identity; this is a Microsoft Graph call.
+   3. Put the printed client ids in `main.bicepparam` and redeploy.
+   4. Check the secret moved. The API's *Secret PaymentGateway--ApiKey loaded* goes off on the Platform page, and
+      confirmed orders say *charged via gateway key ****xxxx*. Only the Payments identity can read Key Vault now.
+4. **Watch the saga in Durable Functions.** In the portal, open the storage account's Storage browser and go to Tables.
+   - `CloudMartSagaInstances` has one row per order: the instance id is the order id.
+   - `CloudMartSagaHistory` holds every step for that order: `TaskScheduled ChargePayment`, `TaskCompleted`, and so on.
+   - For the 11-lamp order, find `RefundPayment` in the history.
+
+   Restart the Functions app in the middle of a saga. It resumes, and does not charge again.
+5. **Resilience.** Set the app setting `Chaos__FailureRate = 0.5` on the Shipping app, then place five orders. In
+   Application Insights:
+   - Transaction search shows 503s, each followed by a retry, and every order still confirms.
+   - Set the rate to `1` and the circuit breaker opens. After the Durable retries (3 attempts) the saga **refunds**.
+   - Set it back to `0` when you're done.
+6. **Private endpoints.**
+   - With `enablePrivateEndpoints`, `curl https://<payments-app>.azurewebsites.net/health/live` from your laptop gets
+     **403**: the public entrance is closed.
+   - From the jumpbox it works. `nslookup` there shows the `privatelink.azurewebsites.net` CNAME and a `10.20.6.x`
+     address.
+7. **Ledger.** In the query editor, against the `payments` database:
+
+   ```sql
+   SELECT * FROM dbo.Payments_Ledger ORDER BY ledger_transaction_id, ledger_sequence_number;
+   UPDATE dbo.Payments SET Amount = 1 WHERE Id = '<some payment>';   -- as the admin, "fixing" the books
+   SELECT * FROM dbo.Payments_Ledger WHERE Id = '<some payment>';    -- the old amount is still there
+   ```
+
+   The history is append-only and hash-chained. To make it tamper-*evident* outside the database too, turn on
+   automatic digest storage (Azure SQL > Ledger), then run `sys.sp_verify_database_ledger_from_digest_storage`.
+
+### Break it
+
+- **Remove an app role.** Remove the Functions identity's `Payments.Process` assignment and restart the Functions app.
+  Payments answers **403**, the Durable retries run out, and the order ends *Payment service unavailable* with a
+  review flag. Then put the assignment back.
+- **Unlink a DNS zone.** Remove `privatelink.azurewebsites.net`'s VNet link. The Functions app resolves the public IP
+  and gets **403 Ip Forbidden**. It's the same failure as phase 4's "it times out", but for an app instead of a
+  database.
+
+### Architect's questions
+
+| Requirement | Recommendation |
+|---|---|
+| A business transaction across services, without distributed transactions | **Saga**: local commits plus compensating actions |
+| Orchestration or choreography? | **Orchestration** (Durable Functions, Logic Apps): one place to read and change the flow, easier to trace. **Choreography** (services reacting to events on Service Bus): looser coupling, harder to follow |
+| Long-running stateful workflow in code that survives restarts | **Durable Functions**. The Azure Storage backend is the default; **Durable Task Scheduler** is the managed, higher-throughput backend |
+| Service-to-service calls with no secrets | **Managed identity** + an **app role** on the target's app registration (client-credentials flow, `roles` claim) |
+| Retry a non-idempotent call safely | An **idempotency key** (POST), or **PUT** to a client-chosen id |
+| Ride out transient faults between services | **Retries with backoff and jitter, timeouts, circuit breaker** (`Microsoft.Extensions.Http.Resilience`) |
+| Tamper-evident records for auditors | **Azure SQL ledger** tables (updatable or append-only) + automatic digest storage |
+| Cheap key-value storage, lookups by key only | **Table Storage**; **Cosmos DB for Table** for global distribution, SLAs and automatic indexing |
+| A backend API reachable only from the VNet | **App Service private endpoint** + closing the public entrance (access restrictions or `publicNetworkAccess`) |
+| Each service owns its data | **Database per service**: other services go through its API, never its tables |
 
 ---
 

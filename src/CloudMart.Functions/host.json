@@ -15,6 +15,9 @@
     }
   },
   "extensions": {
+    "durableTask": {
+      "hubName": "CloudMartSaga"
+    },
     "serviceBus": {
       "autoCompleteMessages": true,
       "maxConcurrentCalls": 8

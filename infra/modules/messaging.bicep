@@ -15,12 +15,22 @@ param storageAccountId string
 param serviceBusRoleAssignments roleAssignment[] = []
 param eventHubsRoleAssignments roleAssignment[] = []
 
+@description('Set (with privateDnsZoneId) to put Event Hubs behind a private endpoint and turn its public access off.')
+param privateEndpointSubnetId string = ''
+param privateDnsZoneId string = ''
+
+var usePrivateEndpoint = !empty(privateEndpointSubnetId)
+
 // ---------------------------------------------------------------- Service Bus
 resource serviceBus 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
   name: serviceBusName
   location: location
   tags: tags
   // Standard is the cheapest tier with topics. Premium adds private endpoints, isolation, zones and geo-replication.
+  // So Service Bus stays public even with enablePrivateEndpoints: Entra-only, TLS 1.2, reached from the VNet-integrated
+  // apps over Microsoft's backbone. For "no public endpoints" in production, use Premium (≈ $680/month per messaging
+  // unit): sku { name: 'Premium', tier: 'Premium', capacity: 1 }, publicNetworkAccess 'Disabled', and a private
+  // endpoint like the Event Hubs one below (same groupId and DNS zone).
   sku: { name: 'Standard', tier: 'Standard' }
   properties: {
     disableLocalAuth: true // no SAS keys: Entra ID only
@@ -94,11 +104,12 @@ resource eventHubs 'Microsoft.EventHub/namespaces@2024-01-01' = {
   name: eventHubsName
   location: location
   tags: tags
-  // Basic has one consumer group and no Capture; Standard is the realistic minimum.
+  // Basic has one consumer group and no Capture; Standard is the realistic minimum, and supports private endpoints.
   sku: { name: 'Standard', tier: 'Standard', capacity: 1 }
   properties: {
     disableLocalAuth: true
     minimumTlsVersion: '1.2'
+    publicNetworkAccess: usePrivateEndpoint ? 'Disabled' : 'Enabled'
   }
 }
 
@@ -135,6 +146,21 @@ resource eventHubsDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-
     workspaceId: workspaceId
     logs: [{ categoryGroup: 'allLogs', enabled: true }]
     metrics: [{ category: 'AllMetrics', enabled: true }]
+  }
+}
+
+// The API sends clicks and the Functions trigger reads them, both through VNet integration. Your laptop can't reach
+// the namespace any more, just like Cosmos DB and SQL after the phase 4 hardening pass.
+module eventHubsPrivateEndpoint 'private-endpoint.bicep' = if (usePrivateEndpoint) {
+  name: '${eventHubsName}-pe'
+  params: {
+    name: 'pe-${eventHubsName}'
+    location: location
+    tags: tags
+    subnetId: privateEndpointSubnetId
+    privateLinkServiceId: eventHubs.id
+    groupId: 'namespace'
+    privateDnsZoneId: privateDnsZoneId
   }
 }
 

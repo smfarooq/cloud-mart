@@ -30,6 +30,15 @@ public sealed record CloudMartSettings
     public string UploadContainer { get; init; } = "product-uploads";
     public string ImageContainer { get; init; } = "product-images";
 
+    /// <summary>Phase 16. Empty = the payments module runs in-process.</summary>
+    public string? PaymentsBaseUrl { get; init; }
+
+    /// <summary>"api://&lt;Payments API client id&gt;/.default". Empty = call without a token (local runs).</summary>
+    public string? PaymentsScope { get; init; }
+
+    public string? ShippingBaseUrl { get; init; }
+    public string? ShippingScope { get; init; }
+
     public static CloudMartSettings From(IConfiguration config)
     {
         var sql = Blank(config.GetConnectionString("OrdersSql"));
@@ -52,6 +61,10 @@ public sealed record CloudMartSettings
             ServiceBusNamespace = Blank(config["ServiceBus:FullyQualifiedNamespace"]),
             EventHubsNamespace = Blank(config["EventHubs:FullyQualifiedNamespace"]),
             BlobEndpoint = Blank(config["Storage:BlobEndpoint"]),
+            PaymentsBaseUrl = Blank(config["Payments:BaseUrl"]),
+            PaymentsScope = Blank(config["Payments:Scope"]),
+            ShippingBaseUrl = Blank(config["Shipping:BaseUrl"]),
+            ShippingScope = Blank(config["Shipping:Scope"]),
         };
     }
 

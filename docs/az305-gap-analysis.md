@@ -80,11 +80,12 @@ between" decisions the exam actually tests.
 | Compute components for a workload | ✅ | The compute decision tree; SKU families | Phase 3 |
 | VM-based solution | ⚠️ | **VM Scale Sets**, Spot, Dedicated Host, **Azure Virtual Desktop**, Azure VMware Solution | Phase 3 |
 | Container-based solution | ✅ | **ACI** vs Container Apps vs AKS; AKS networking and identity | Phase 3 |
-| Serverless solution | ✅ | Functions hosting plans (Flex Consumption, Premium, Dedicated), Durable Functions, **Logic Apps** | Phases 3, 12 |
+| Serverless solution | ✅ | Functions hosting plans (Flex Consumption, Premium, Dedicated), **Durable Functions** (built as the order saga), **Logic Apps** | Phases 3, 12, 16 |
 | **Batch processing** | ➕ | **Azure Batch**, Container Apps jobs, Functions vs Batch vs Databricks | Phase 3 |
 | Messaging architecture | ✅ | Service Bus vs **Storage queues**; sessions, transactions, DLQ | Phase 5 |
 | Event-driven architecture | ✅ | Event Grid vs Event Hubs vs Service Bus; Event Grid namespaces (MQTT/pull) | Phase 5 |
 | **API integration** | ➕ | **API Management**: tiers, policies, products, self-hosted gateway | Phase 12 |
+| Service-to-service integration | ➕ | **Saga** with compensation, idempotent APIs, managed identity + **app roles**, private endpoints for App Service, resilience | Phase 16 |
 | **Caching** | ➕ | **Azure Managed Redis**, cache-aside, Front Door/CDN edge caching | Phase 12 |
 | **Application configuration management** | ➕ | **App Configuration**, feature flags, Key Vault references | Phase 12 |
 | Automated deployment | ✅ | Bicep, deployment stacks, template specs, GitHub Actions vs Azure Pipelines | Phase 8 |

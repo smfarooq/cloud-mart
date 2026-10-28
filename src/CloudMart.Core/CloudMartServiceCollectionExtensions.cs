@@ -6,7 +6,9 @@ using Azure.Storage.Blobs;
 using CloudMart.Core.Azure;
 using CloudMart.Core.InMemory;
 using CloudMart.Core.InProcess;
+using CloudMart.Core.Payments;
 using CloudMart.Core.Services;
+using CloudMart.Core.Shipping;
 using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -44,10 +46,11 @@ public static class CloudMartServiceCollectionExtensions
 
         services.AddScoped<OrderService>();
         services.AddScoped<OrderFulfillmentService>();
+        services.AddScoped<OrderSagaActivities>();
         services.AddScoped<ProductViewAggregator>();
         services.AddScoped<ProductImageProcessor>();
 
-        string catalog, orders, messaging, telemetry, images;
+        string catalog, orders, messaging, telemetry, images, payments, shipping;
 
         // Catalog + view counters: Cosmos DB (phase 4)
         if (settings.CosmosEndpoint is { } cosmosEndpoint)
@@ -148,8 +151,51 @@ public static class CloudMartServiceCollectionExtensions
             telemetry = "In-process";
         }
 
-        services.AddSingleton(new CloudMartProviders(catalog, orders, messaging, telemetry, images));
+        // Payments and shipping: separate services (phase 16), otherwise modules in this process.
+        if (settings.PaymentsBaseUrl is { } paymentsUrl)
+        {
+            AddServiceClient<PaymentsApiClient>(services, paymentsUrl, settings.PaymentsScope, credential);
+            services.AddTransient<IPaymentGateway>(sp => sp.GetRequiredService<PaymentsApiClient>());
+            services.AddTransient<IHealthProbe>(sp => sp.GetRequiredService<PaymentsApiClient>());
+            payments = "Payments API";
+        }
+        else
+        {
+            services.AddSingleton<IPaymentStore, InMemoryPaymentStore>();
+            services.AddSingleton<PaymentProcessor>();
+            services.AddSingleton<IPaymentGateway, InProcessPaymentGateway>();
+            payments = "In-process";
+        }
+
+        if (settings.ShippingBaseUrl is { } shippingUrl)
+        {
+            AddServiceClient<ShippingApiClient>(services, shippingUrl, settings.ShippingScope, credential);
+            services.AddTransient<IShippingGateway>(sp => sp.GetRequiredService<ShippingApiClient>());
+            services.AddTransient<IHealthProbe>(sp => sp.GetRequiredService<ShippingApiClient>());
+            shipping = "Shipping API";
+        }
+        else
+        {
+            services.AddSingleton<IShipmentStore, InMemoryShipmentStore>();
+            services.AddSingleton<ShippingProcessor>();
+            services.AddSingleton<IShippingGateway, InProcessShippingGateway>();
+            shipping = "In-process";
+        }
+
+        services.AddSingleton(new CloudMartProviders(catalog, orders, messaging, telemetry, images, payments, shipping));
         return services;
+    }
+
+    private static void AddServiceClient<TClient>(IServiceCollection services, string baseUrl, string? scope, TokenCredential credential)
+        where TClient : class
+    {
+        var client = services.AddHttpClient<TClient>(http => http.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/"));
+        if (scope is not null)
+            client.AddHttpMessageHandler(() => new EntraTokenHandler(credential, scope));
+
+        // Timeout per attempt, retries with exponential backoff and jitter (5xx, 408, 429, network errors), and a
+        // circuit breaker that fails fast while the service is down instead of piling up waiting requests.
+        client.AddStandardResilienceHandler();
     }
 
     /// <summary>Creates the orders schema (if enabled) and seeds the catalog when it is empty. Never throws.</summary>

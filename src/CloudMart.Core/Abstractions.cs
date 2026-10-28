@@ -1,4 +1,6 @@
 using CloudMart.Core.Domain;
+using CloudMart.Core.Payments;
+using CloudMart.Core.Shipping;
 
 namespace CloudMart.Core;
 
@@ -30,7 +32,7 @@ public interface IOrderRepository
     /// Moves a Pending order to its final status. Returns false if the order was not Pending any more, which is
     /// how consumers stay idempotent under at-least-once delivery.
     /// </summary>
-    Task<bool> TryCompleteAsync(Guid id, OrderStatus status, string? reason, CancellationToken ct = default);
+    Task<bool> TryCompleteAsync(Guid id, OrderOutcome outcome, CancellationToken ct = default);
 
     Task MarkForReviewAsync(Guid id, CancellationToken ct = default);
     Task<OrderSummary> SummarizeAsync(DateTimeOffset since, CancellationToken ct = default);
@@ -55,6 +57,21 @@ public interface IImageStore
     Task<string?> PromoteUploadAsync(string uploadName, CancellationToken ct = default);
 }
 
+/// <summary>Takes payment for an order: the payments module in-process, or the Payments API (phase 16).</summary>
+public interface IPaymentGateway
+{
+    /// <summary>A declined payment is returned with Status = Declined. Exceptions mean "unknown, try again".</summary>
+    Task<Payment> ChargeAsync(ChargeRequest request, CancellationToken ct = default);
+    Task<Payment> RefundAsync(string paymentId, string reason, CancellationToken ct = default);
+}
+
+/// <summary>Books a parcel for an order: the shipping module in-process, or the Shipping API (phase 16).</summary>
+public interface IShippingGateway
+{
+    Task<ShipmentResult> ScheduleAsync(Guid orderId, ShipmentRequest request, CancellationToken ct = default);
+    Task CancelAsync(Guid orderId, string reason, CancellationToken ct = default);
+}
+
 /// <summary>A dependency the readiness probe (/health/ready) should check.</summary>
 public interface IHealthProbe
 {
@@ -63,4 +80,11 @@ public interface IHealthProbe
 }
 
 /// <summary>Which implementation is active for each boundary. Shown on the Platform page.</summary>
-public sealed record CloudMartProviders(string Catalog, string Orders, string Messaging, string Telemetry, string Images);
+public sealed record CloudMartProviders(
+    string Catalog,
+    string Orders,
+    string Messaging,
+    string Telemetry,
+    string Images,
+    string Payments,
+    string Shipping);

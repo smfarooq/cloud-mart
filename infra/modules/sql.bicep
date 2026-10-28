@@ -3,6 +3,9 @@
 
 param serverName string
 param databaseName string = 'cloudmart'
+
+@description('Phase 16: a second database for the Payments API (database per service). Empty = not created.')
+param paymentsDatabaseName string = ''
 param location string
 param tags object
 param workspaceId string
@@ -63,6 +66,32 @@ resource shortTermRetention 'Microsoft.Sql/servers/databases/backupShortTermRete
   properties: { retentionDays: 7 }
 }
 
+// Same server, separate database: its own users, backups, scale and blast radius. The Payments identity is a user
+// here and nowhere else, so even a compromised Payments API can't read orders (and the API can't read payments).
+resource paymentsDatabase 'Microsoft.Sql/servers/databases@2023-08-01' = if (!empty(paymentsDatabaseName)) {
+  parent: server
+  name: empty(paymentsDatabaseName) ? 'unused' : paymentsDatabaseName
+  location: location
+  tags: tags
+  sku: { name: 'GP_S_Gen5', tier: 'GeneralPurpose', family: 'Gen5', capacity: 1 }
+  properties: {
+    autoPauseDelay: 60
+    minCapacity: json('0.5')
+    requestedBackupStorageRedundancy: backupStorageRedundancy
+    zoneRedundant: false
+  }
+}
+
+resource paymentsDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (!empty(paymentsDatabaseName)) {
+  name: 'to-log-analytics'
+  scope: paymentsDatabase
+  properties: {
+    workspaceId: workspaceId
+    logs: [{ categoryGroup: 'allLogs', enabled: true }]
+    metrics: [{ category: 'Basic', enabled: true }]
+  }
+}
+
 resource allowAzure 'Microsoft.Sql/servers/firewallRules@2023-08-01' = if (allowAzureServices && !usePrivateEndpoint) {
   parent: server
   name: 'AllowAllWindowsAzureIps'
@@ -95,3 +124,4 @@ module privateEndpoint 'private-endpoint.bicep' = if (usePrivateEndpoint) {
 output serverName string = server.name
 output fqdn string = server.properties.fullyQualifiedDomainName
 output databaseName string = database.name
+output paymentsDatabaseName string = paymentsDatabaseName

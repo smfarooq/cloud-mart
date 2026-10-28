@@ -76,6 +76,17 @@ resource containers 'Microsoft.Storage/storageAccounts/blobServices/containers@2
   }
 ]
 
+// Phase 16: the Shipping API's key-value store. Same account, different service endpoint (*.table.core.windows.net).
+resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2024-01-01' = {
+  parent: account
+  name: 'default'
+}
+
+resource shipmentsTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2024-01-01' = {
+  parent: tableService
+  name: 'shipments'
+}
+
 // Lifecycle management: the cost lever for unstructured data.
 resource lifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2024-01-01' = {
   parent: account
@@ -155,4 +166,5 @@ module endpoints 'private-endpoint.bicep' = [
 output name string = account.name
 output id string = account.id
 output blobEndpoint string = account.properties.primaryEndpoints.blob
+output tableEndpoint string = account.properties.primaryEndpoints.table
 output deploymentContainerUrl string = '${account.properties.primaryEndpoints.blob}function-deployments'

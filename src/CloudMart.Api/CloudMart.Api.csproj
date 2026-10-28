@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CloudMart.Core\CloudMart.Core.csproj" />
+    <ProjectReference Include="..\CloudMart.ServiceDefaults\CloudMart.ServiceDefaults.csproj" />
   </ItemGroup>
 
 </Project>

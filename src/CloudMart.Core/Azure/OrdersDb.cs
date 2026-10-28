@@ -19,6 +19,8 @@ public sealed class OrdersDbContext(DbContextOptions<OrdersDbContext> options) :
             order.Property(o => o.Status).HasConversion<string>().HasMaxLength(20);
             order.Property(o => o.StatusReason).HasMaxLength(500);
             order.Property(o => o.Total).HasPrecision(18, 2);
+            order.Property(o => o.PaymentId).HasMaxLength(40);
+            order.Property(o => o.TrackingNumber).HasMaxLength(40);
             order.HasIndex(o => new { o.CustomerId, o.CreatedUtc });
 
             order.OwnsMany(o => o.Lines, line =>
@@ -58,15 +60,18 @@ public sealed class EfOrderRepository(OrdersDbContext db) : IOrderRepository, IH
     public async Task<IReadOnlyList<Order>> ListRecentAsync(int take, CancellationToken ct = default) =>
         await db.Orders.AsNoTracking().OrderByDescending(o => o.CreatedUtc).Take(take).ToListAsync(ct);
 
-    public async Task<bool> TryCompleteAsync(Guid id, OrderStatus status, string? reason, CancellationToken ct = default)
+    public async Task<bool> TryCompleteAsync(Guid id, OrderOutcome outcome, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
         // A conditional UPDATE ... WHERE Status = 'Pending' makes the state change atomic and idempotent.
         var rows = await db.Orders
             .Where(o => o.Id == id && o.Status == OrderStatus.Pending)
             .ExecuteUpdateAsync(s => s
-                .SetProperty(o => o.Status, status)
-                .SetProperty(o => o.StatusReason, reason)
+                .SetProperty(o => o.Status, outcome.Status)
+                .SetProperty(o => o.StatusReason, outcome.Reason)
+                .SetProperty(o => o.PaymentId, outcome.PaymentId)
+                .SetProperty(o => o.TrackingNumber, outcome.TrackingNumber)
+                .SetProperty(o => o.ReviewRequired, o => o.ReviewRequired || outcome.ReviewRequired)
                 .SetProperty(o => o.UpdatedUtc, now), ct);
         return rows == 1;
     }
