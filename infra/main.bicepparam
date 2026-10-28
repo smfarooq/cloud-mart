@@ -60,6 +60,8 @@ param frontDoorSku = 'Standard_AzureFrontDoor'
 param secondaryApiHostName = ''
 param cosmosSecondaryLocation = ''
 param deployAppGateway = false
+// Needs deployFrontDoor. Static Web Apps Standard (about $9/month): the SPA's own host then refuses direct requests.
+param lockStaticWebAppToFrontDoor = false
 
 // Phase 11 · Business continuity (docs/continuity.svg). Geo-redundant SQL backups are on from day one.
 param sqlBackupRedundancy = 'Geo'
@@ -81,6 +83,9 @@ param deployApim = false
 // COST: about $290/month plus per-GB processing, billed every hour it exists. Deploy, do the lab, delete it the same
 // day (setting it back to false does not delete the firewall: use a deployment stack or delete it).
 param deployFirewall = false
+// With the firewall, Service Bus accepts only its egress IP and these: add yours (curl ifconfig.me) for the portal's
+// Service Bus Explorer and local runs.
+param adminIpAddresses = []
 
 // Phase 16 · Microservices (Payments + Shipping APIs, Durable Functions saga)
 param deployPayments = false

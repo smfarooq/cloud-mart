@@ -175,10 +175,10 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 | 7 Observability | `deployGrafana` | Alerts fire on chaos; Grafana dashboards |
 | 8 DevOps | `deployAcr` (+ pipeline) | Version = pipeline build id |
 | 9 Governance | `deployGovernance` (on by default) | Policies + budget on the resource group |
-| 10 Architecture | `deployFrontDoor`, `deployAppGateway`, `secondaryApiHostName` | Front Door lock ✓; region flips on failover |
+| 10 Architecture | `deployFrontDoor`, `deployAppGateway`, `secondaryApiHostName`, `lockStaticWebAppToFrontDoor` | Front Door lock ✓; region flips on failover |
 | 11 Continuity | `storageSku`, `cosmosSecondaryLocation`, `sqlBackupRedundancy`, `sqlSecondaryLocation`, `eventHubsSecondaryLocation`, `zoneRedundant` | Multi-region data; orders survive a SQL failover |
 | 12 Integration | `deployAppConfig`, `deployRedis`, `deployApim` | Feature flags, Redis L2 cache |
-| 13 Hub-and-spoke | `deployFirewall` (needs `enablePrivateEndpoints`; **≈ $290/month**) | Order events **Service Bus (WebSockets)**; egress through Azure Firewall |
+| 13 Hub-and-spoke | `deployFirewall` (needs `enablePrivateEndpoints`; **≈ $290/month**), `adminIpAddresses` | Order events **Service Bus (WebSockets)**; egress through Azure Firewall |
 | 16 Microservices | `deployPayments`, `deployShipping` (+ app registrations) | Payments **Payments API**, Shipping **Shipping API** |
 
 ## Cost guard rails

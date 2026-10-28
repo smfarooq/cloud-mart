@@ -190,7 +190,7 @@ error, remove the rule.
 |---|---|
 | Service endpoint or private endpoint? | **Service endpoint**: free, the service keeps its public IP, traffic stays on the backbone, only from that VNet. **Private endpoint**: a private IP in your VNet, reachable from peered VNets and on-premises, blocks data exfiltration to other accounts; costs per endpoint and needs private DNS. |
 | NSG or Azure Firewall? | **NSG**: L3/L4 allow/deny on subnets or NICs, free. **Azure Firewall**: central, stateful, FQDN/application rules, threat intelligence, TLS inspection (Premium), shared by many spokes. |
-| Rules by role, not IP | **Application security groups** |
+| Rules by role, not IP | **Application security groups** (CloudMart puts Cosmos DB's private endpoint in one, so a single rule can open direct mode's ports to it alone) |
 | Predictable outbound IPs, no SNAT exhaustion | **NAT Gateway** |
 | Admin access without public IPs on VMs | **Azure Bastion** (or Just-in-time VM access in Defender for Cloud) |
 | Distribute TCP/UDP within a region | **Azure Load Balancer** (Standard; Basic is retired). Internal or public. |
@@ -281,13 +281,24 @@ PostgreSQL B1ms is ≈ $15/month. Private endpoints are ≈ $7/month each (this 
    - From the jumpbox, `nslookup <cosmos-account>.documents.azure.com` returns a **10.20.6.x** address.
    - From your laptop, Cosmos Data Explorer and the SQL query editor are blocked (public access is off). Use the jumpbox.
    - The app keeps working, through VNet integration → private endpoint → private DNS.
+   - `pe-nsg` lets in only the app subnets (443, 1433, 5432, 5671-5672) and the jumpbox (admin ports), and denies the
+     rest. Two services needed more thought ([network.bicep](../infra/modules/network.bicep)):
+     - **SQL** uses the **Proxy** connection policy, so every connection stays on 1433. Redirect would be faster, but it
+       needs 1433-65535 open to the endpoint.
+     - **Cosmos DB's** SDK defaults to *direct* mode, which reaches replicas on ports anywhere in 0-65535 through a
+       private endpoint. Its endpoint sits in an **application security group**, and one rule opens every port to that
+       group only.
    - Storage keeps public access **on**, because the browser uploads to it directly. Discuss: is a short-lived,
      write-only, single-blob SAS acceptable, or should uploads go through the API (or Front Door Premium + Private Link)?
 
 ### Break it
 
-Delete the `privatelink.documents.azure.com` zone's VNet link. The API now resolves Cosmos to its public IP, which is
-blocked, and readiness fails. Fix it by redeploying: Bicep puts back what drifted.
+- **Unlink a DNS zone.** Delete the `privatelink.documents.azure.com` zone's VNet link. The API now resolves Cosmos DB
+  to its public IP, which is blocked, and readiness fails. Fix it by redeploying: Bicep puts back what drifted.
+- **Close Cosmos DB's ports.** Delete `pe-nsg`'s `AllowAppsToCosmosDirectMode` rule. Within a minute the catalog fails
+  with **503**s, because direct mode can't reach the replicas, while SQL and Key Vault keep working. Redeploy to put
+  the rule back. The alternative is *gateway* mode (`ConnectionMode.Gateway`): 443 only, at the cost of an extra hop
+  on every request.
 
 ### Architect's questions
 
@@ -395,6 +406,11 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
 3. **Key Vault, two ways.** The API reads `PaymentGateway--ApiKey` through the configuration provider; the Functions
    app reads the same secret through a **Key Vault reference** in an app setting. Confirmed orders show its last four
    characters. Rotate it with `az keyvault secret set`, and compare when each consumer picks up the new value.
+   The secret also has an **expiry date**: 90 days from each deployment (`secretValidityDays` in
+   [keyvault.bicep](../infra/modules/keyvault.bicep)). Expiry doesn't block reads; it's a promise to rotate.
+   - Key Vault publishes `Microsoft.KeyVault.SecretNearExpiry` to Event Grid 30 days before the date. Subscribe a
+     Function or a Logic App that rotates the secret.
+   - Assign the built-in policy *Key Vault secrets should have an expiration date* to catch secrets that never expire.
 4. **Defender for Cloud.** Open *Recommendations* for the resource group (foundational CSPM is free) and fix two of them.
    Optionally enable a paid plan, such as Defender for Storage, for one day:
    `az security pricing create -n StorageAccounts --tier Standard`, then set it back to `Free`.
@@ -570,6 +586,11 @@ fixed, so deploy, test and remove the same day).
    is no CORS. Product images are cached at the edge: check the `x-cache` response header (`TCP_HIT`).
 2. **Origin lock.** Open the App Service host name directly: **403**. Only traffic that carries *your* profile's
    `X-Azure-FDID` header from the `AzureFrontDoor.Backend` service tag gets in.
+
+   The SPA's own host, `*.azurestaticapps.net`, still answers directly and skips the WAF. Set
+   `lockStaticWebAppToFrontDoor = true`. That moves Static Web Apps to Standard (about $9/month), and the pipeline
+   writes a `forwardingGateway` block into `staticwebapp.config.json` with your Front Door ID and host. The SPA's
+   host now answers **403** too. Free can't do this.
 3. **WAF.** Hammer the API: `for i in $(seq 400); do curl -s -o /dev/null -w "%{http_code}\n" https://<fd>/api/products; done | sort | uniq -c`.
    The rate-limit rule starts blocking. With `Premium_AzureFrontDoor`, the managed Default Rule Set also blocks
    `?q=1' OR '1'='1`. Standard has custom rules only.
@@ -592,6 +613,7 @@ fixed, so deploy, test and remove the same day).
 | HTTP(S), regional, L7 routing, WAF, private backends in a VNet | Regional | **Application Gateway** |
 | TCP/UDP, regional, ultra-low latency | Regional | **Load Balancer** |
 | Global HTTP edge **and** private regional backends | Both | Front Door Premium (Private Link origins), or Front Door → Application Gateway |
+| Network-layer (L3/L4) DDoS against public IPs in a VNet | Regional | **DDoS Network Protection**: about $2,900/month per plan, covering up to 100 public IPs, with cost protection and rapid response. **DDoS IP Protection**: billed per IP. Front Door and Static Web Apps already absorb these attacks at their edge; WAF covers L7, not L3/L4 |
 
 ---
 
@@ -819,6 +841,11 @@ Some traffic never reaches the firewall:
 1. **Deploy.** Run `what-if` first. It lists the hub VNet, two public IPs, the policy and its rule collection group,
    the firewall, the route table, the two peerings, a `routeTable` on three subnets, and `ServiceBus__TransportType`
    on the apps. The firewall takes about 10 minutes to create.
+
+   It also locks Service Bus to the firewall. Every app request now leaves from the firewall's public IP, so the
+   namespace's IP firewall accepts that one address and denies the rest. Standard has no private endpoints, but it
+   does have IP rules. Put your own public IP (`curl ifconfig.me`) in `adminIpAddresses`, or the portal's Service Bus
+   Explorer and your local runs are refused too.
 2. **Follow the packet.**
 
    ```bash
@@ -893,6 +920,8 @@ Some traffic never reaches the firewall:
 - **Go back to AMQP.** With the rule back, set the API's app setting `ServiceBus__TransportType` to `AmqpTcp`. New
   orders get stuck again. The rule allows the namespace on 443 only, and Basic can't allow 5671 by name. Redeploy to
   restore it.
+- **Leave your IP out.** Deploy with `adminIpAddresses = []` and open Service Bus Explorer in the portal: the
+  namespace rejects your IP. Orders still confirm, because the apps' traffic comes from the firewall's IP.
 
 ### Architect's questions
 
@@ -908,6 +937,7 @@ Real VPN and ExpressRoute need an on-premises device or a provider circuit. For 
 |---|---|
 | Central allow-list and logs for outbound traffic from many spokes | **Azure Firewall** in a hub, plus a **UDR** `0.0.0.0/0` → firewall on each spoke subnet |
 | Which Azure Firewall SKU? | **Basic**: up to 250 Mbps, names only in application rules (HTTP(S), SQL), threat intelligence alerts only. **Standard**: DNS proxy (so FQDNs in network rules, any port), web categories, threat intelligence deny. **Premium**: TLS inspection, IDPS, URL filtering |
+| Restrict a PaaS endpoint that has no private endpoint (Service Bus Standard) | Its **IP firewall**, allowing only a fixed egress IP: Azure Firewall or NAT Gateway. App Service's own outbound IPs are shared and change |
 | Stop data exfiltration to *other customers'* PaaS resources | Allow your own **FQDNs**, or use private endpoints. Service tags such as `ServiceBus` or `Storage` cover every customer's resources |
 | Inspect traffic to private endpoints too | A UDR covering the private endpoint subnet, `privateEndpointNetworkPolicies` enabled, and application rules (they SNAT, so replies return through the firewall) |
 | Same rules for many firewalls and regions | **Firewall Manager** with parent and child **firewall policies**; **Virtual Network Manager** for peerings and UDRs at scale |

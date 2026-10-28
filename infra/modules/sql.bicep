@@ -124,6 +124,14 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
   }
 }
 
+// Through a private endpoint, Proxy keeps every connection on 1433, so pe-nsg can stay narrow. Redirect is faster
+// (after the login, the client talks to the database node directly) but needs 1433-65535 open to the endpoint.
+resource connectionPolicy 'Microsoft.Sql/servers/connectionPolicies@2023-08-01' = if (usePrivateEndpoint) {
+  parent: server
+  name: 'default'
+  properties: { connectionType: 'Proxy' }
+}
+
 module privateEndpoint 'private-endpoint.bicep' = if (usePrivateEndpoint) {
   name: '${serverName}-pe'
   params: {
@@ -150,6 +158,12 @@ resource secondaryServer 'Microsoft.Sql/servers@2023-08-01' = if (useFailoverGro
     publicNetworkAccess: usePrivateEndpoint ? 'Disabled' : 'Enabled'
     administrators: entraOnlyAdmin
   }
+}
+
+resource secondaryConnectionPolicy 'Microsoft.Sql/servers/connectionPolicies@2023-08-01' = if (useFailoverGroup && usePrivateEndpoint) {
+  parent: secondaryServer
+  name: 'default'
+  properties: { connectionType: 'Proxy' }
 }
 
 resource secondaryAllowAzure 'Microsoft.Sql/servers/firewallRules@2023-08-01' = if (useFailoverGroup && allowAzureServices && !usePrivateEndpoint) {

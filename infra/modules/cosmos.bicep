@@ -17,6 +17,8 @@ param dataContributorPrincipalIds array = []
 
 param privateEndpointSubnetId string = ''
 param privateDnsZoneId string = ''
+@description('The VNet\'s Cosmos DB application security group: pe-nsg opens direct mode\'s port range to it alone.')
+param privateEndpointAsgId string = ''
 
 @description('Phase 7: where the throttling alert goes. Empty = no alert.')
 param actionGroupId string = ''
@@ -143,6 +145,7 @@ module privateEndpoint 'private-endpoint.bicep' = if (usePrivateEndpoint) {
     privateLinkServiceId: account.id
     groupId: 'Sql'
     privateDnsZoneId: privateDnsZoneId
+    applicationSecurityGroupIds: empty(privateEndpointAsgId) ? [] : [privateEndpointAsgId]
   }
 }
 

@@ -151,6 +151,12 @@ stages:
                       if [ -n "$(get staticWebAppName)" ]; then
                         # Build once, configure per environment: only config.json differs between environments.
                         echo "$out" | jq '.spaConfig.value' > "$drop/web/config.json"
+                        # Phase 10: refuse requests that bypass Front Door (Standard plan; empty object = no lock).
+                        gateway=$(echo "$out" | jq -c '.staticWebAppForwardingGateway.value // {}')
+                        if [ "$gateway" != "{}" ]; then
+                          jq --argjson gw "$gateway" '.forwardingGateway = $gw' "$drop/web/staticwebapp.config.json" > "$drop/web/swa.json"
+                          mv "$drop/web/swa.json" "$drop/web/staticwebapp.config.json"
+                        fi
                         token=$(az staticwebapp secrets list -g "$rg" -n "$(get staticWebAppName)" --query properties.apiKey -o tsv)
                         npx --yes @azure/static-web-apps-cli deploy "$drop/web" --deployment-token "$token" --env production
                       fi
