@@ -168,6 +168,11 @@ public sealed class OrderSagaActivities(
 
         CloudMartTelemetry.OrdersCompleted.Add(1, new KeyValuePair<string, object?>("status", outcome.Status.ToString()));
         logger.LogInformation("Order {OrderId} {Status}: {Reason}", orderId, outcome.Status, outcome.Reason);
+
+        // The "orders need review" alert (monitoring.bicep) matches this message. An activity runs once per order,
+        // so the error is logged once, not on every orchestrator replay.
+        if (outcome.ReviewRequired)
+            logger.LogError("Order {OrderId} needs manual review: {Reason}", orderId, outcome.Reason);
         return true;
     }
 }

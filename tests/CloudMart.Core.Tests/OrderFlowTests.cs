@@ -47,6 +47,69 @@ public class OrderFlowTests
         Assert.Empty(_publisher.Published);
     }
 
+    [Fact]
+    public async Task PlaceOrder_with_the_same_idempotency_key_returns_the_same_order()
+    {
+        var service = NewOrderService();
+        var request = new PlaceOrderRequest([new("woodgrove-desk-lamp", 2)]);
+
+        var first = await service.PlaceOrderAsync(_customer, request, "checkout-1");
+        var retry = await service.PlaceOrderAsync(_customer, request, "checkout-1");
+
+        Assert.Equal(first.Id, retry.Id);
+        Assert.Single(await _orders.ListByCustomerAsync(_customer.Id, 10));
+        // Still Pending, so the retry publishes again (same order id): duplicate detection and the saga absorb it.
+        Assert.All(_publisher.Published, evt => Assert.Equal(first.Id, evt.OrderId));
+    }
+
+    [Fact]
+    public async Task PlaceOrder_retry_after_fulfillment_returns_the_result_without_publishing()
+    {
+        var service = NewOrderService();
+        var request = new PlaceOrderRequest([new("woodgrove-desk-lamp", 1)]);
+        await service.PlaceOrderAsync(_customer, request, "checkout-2");
+        await NewFulfillment().ProcessAsync(_publisher.Published.Single());
+
+        var retry = await service.PlaceOrderAsync(_customer, request, "checkout-2");
+
+        Assert.Equal(OrderStatus.Confirmed, retry.Status);
+        Assert.Single(_publisher.Published);
+    }
+
+    [Fact]
+    public async Task PlaceOrder_rejects_a_key_reused_for_a_different_order()
+    {
+        var service = NewOrderService();
+        await service.PlaceOrderAsync(_customer, new PlaceOrderRequest([new("woodgrove-desk-lamp", 1)]), "checkout-3");
+
+        await Assert.ThrowsAsync<IdempotencyConflictException>(() =>
+            service.PlaceOrderAsync(_customer, new PlaceOrderRequest([new("woodgrove-desk-lamp", 2)]), "checkout-3"));
+        Assert.Single(_publisher.Published);
+    }
+
+    [Fact]
+    public async Task PlaceOrder_keys_belong_to_one_customer()
+    {
+        var service = NewOrderService();
+        var request = new PlaceOrderRequest([new("woodgrove-desk-lamp", 1)]);
+
+        var mine = await service.PlaceOrderAsync(_customer, request, "same-key");
+        var theirs = await service.PlaceOrderAsync(new Customer("user-2", "Someone Else", IsAdmin: false), request, "same-key");
+
+        Assert.NotEqual(mine.Id, theirs.Id);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("has a space")]
+    [InlineData("ключ")]
+    public async Task PlaceOrder_rejects_a_malformed_idempotency_key(string key)
+    {
+        await Assert.ThrowsAsync<OrderValidationException>(() =>
+            NewOrderService().PlaceOrderAsync(_customer, new PlaceOrderRequest([new("woodgrove-desk-lamp", 1)]), key));
+        Assert.Empty(_publisher.Published);
+    }
+
     [Theory]
     [InlineData("woodgrove-desk-lamp", 1, OrderStatus.Confirmed)]
     [InlineData("fabrikam-studio-mic", 4, OrderStatus.Rejected)]     // only 3 in stock

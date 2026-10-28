@@ -17,6 +17,9 @@ export function Shop({ canOrder, showTrending, onOrdered }: ShopProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [simulateFailure, setSimulateFailure] = useState(false);
+  // One key per checkout attempt. Retrying after an error reuses it, so a request that reached the API but lost its
+  // response can't create a second order. A changed cart or a successful order starts a new one.
+  const [checkoutKey, setCheckoutKey] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,8 +57,10 @@ export function Shop({ canOrder, showTrending, onOrdered }: ShopProps) {
     setSelected(selected === product.id ? null : product.id);
   };
 
-  const changeQuantity = (id: string, delta: number) =>
+  const changeQuantity = (id: string, delta: number) => {
     setCart((current) => ({ ...current, [id]: Math.max(0, (current[id] ?? 0) + delta) }));
+    setCheckoutKey(crypto.randomUUID());
+  };
 
   const checkout = async () => {
     setBusy(true);
@@ -63,9 +68,11 @@ export function Shop({ canOrder, showTrending, onOrdered }: ShopProps) {
       const order = await api.placeOrder(
         lines.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
         simulateFailure,
+        checkoutKey,
       );
       setCart({});
       setSimulateFailure(false);
+      setCheckoutKey(crypto.randomUUID());
       onOrdered(order);
     } catch (e) {
       setError(errorMessage(e));

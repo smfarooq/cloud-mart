@@ -22,7 +22,8 @@ param queueDnsZoneId string = ''
 param tableDnsZoneId string = ''
 
 var usePrivateEndpoint = !empty(privateEndpointSubnetId)
-var containerNames = ['product-uploads', 'product-images', 'function-deployments']
+// eventgrid-deadletter: upload events Event Grid gave up on (eventgrid-subscription.bicep), kept for a replay.
+var containerNames = ['product-uploads', 'product-images', 'function-deployments', 'eventgrid-deadletter']
 
 resource account 'Microsoft.Storage/storageAccounts@2024-01-01' = {
   name: name
@@ -113,6 +114,15 @@ resource lifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2024-01
               baseBlob: { tierToCool: { daysAfterModificationGreaterThan: 90 } }
               version: { delete: { daysAfterCreationGreaterThan: 30 } }
             }
+          }
+        }
+        {
+          name: 'expire-dead-letters'
+          enabled: true
+          type: 'Lifecycle'
+          definition: {
+            filters: { blobTypes: ['blockBlob'], prefixMatch: ['eventgrid-deadletter/'] }
+            actions: { baseBlob: { delete: { daysAfterModificationGreaterThan: 30 } } }
           }
         }
       ]

@@ -382,6 +382,7 @@ module cosmos 'modules/cosmos.bicep' = if (deployCosmos) {
     secondaryLocation: cosmosSecondaryLocation
     privateEndpointSubnetId: peSubnetId
     privateDnsZoneId: dnsZones.?cosmos ?? ''
+    actionGroupId: monitoring.outputs.actionGroupId
     dataContributorPrincipalIds: [identity.outputs.apiPrincipalId, identity.outputs.functionsPrincipalId, deployerPrincipalId]
   }
 }
@@ -430,6 +431,7 @@ module messaging 'modules/messaging.bicep' = if (deployMessaging) {
     storageAccountId: storage.outputs.id
     privateEndpointSubnetId: peSubnetId
     privateDnsZoneId: dnsZones.?serviceBus ?? ''
+    actionGroupId: monitoring.outputs.actionGroupId
     // Least privilege: the API only sends, the Functions app only receives.
     serviceBusRoleAssignments: [
       { principalId: identity.outputs.apiPrincipalId, roleDefinitionId: roles.serviceBusDataSender }
@@ -740,6 +742,8 @@ module eventGridSubscription 'modules/eventgrid-subscription.bicep' = if (deploy
   params: {
     systemTopicName: messaging!.outputs.eventGridTopicName
     functionAppId: functionApp!.outputs.id
+    storageAccountName: storage.outputs.name
+    actionGroupId: monitoring.outputs.actionGroupId
   }
 }
 

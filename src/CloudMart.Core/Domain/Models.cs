@@ -97,4 +97,7 @@ public sealed record ImageUploadRequest(string FileName, string ContentType);
 
 public sealed class OrderValidationException(string message) : Exception(message);
 
+/// <summary>An Idempotency-Key that was already used for a different request (HTTP 422).</summary>
+public sealed class IdempotencyConflictException(string message) : Exception(message);
+
 public sealed class SimulatedFailureException(string message) : Exception(message);

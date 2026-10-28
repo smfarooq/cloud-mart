@@ -48,7 +48,9 @@ public sealed class InMemoryOrderRepository : IOrderRepository
     // Orders are cloned on the way in and out so callers never share mutable state, just like a real database.
     public Task AddAsync(Order order, CancellationToken ct = default)
     {
-        _orders[order.Id] = order.Clone();
+        // Insert-only, like a primary key: a second order with the same id fails instead of overwriting the first.
+        if (!_orders.TryAdd(order.Id, order.Clone()))
+            throw new InvalidOperationException($"Order {order.Id} already exists.");
         return Task.CompletedTask;
     }
 

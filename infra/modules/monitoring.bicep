@@ -74,6 +74,35 @@ resource exceptionAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {
   }
 }
 
+// The order saga's "call a person" signal: a refund failed, or a charge timed out and may have gone through.
+// The saga logs one error per such order (OrderSagaActivities.CompleteAsync), whichever process runs it.
+resource reviewAlert 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {
+  name: '${appInsightsName}-orders-need-review'
+  location: location
+  tags: tags
+  properties: {
+    displayName: 'CloudMart: order needs manual review'
+    severity: 1
+    enabled: true
+    scopes: [appInsights.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      allOf: [
+        {
+          query: 'traces | where severityLevel >= 3 and message has "needs manual review"'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [actionGroup.id] }
+  }
+}
+
 output workspaceId string = workspace.id
+output actionGroupId string = actionGroup.id
 output appInsightsId string = appInsights.id
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
