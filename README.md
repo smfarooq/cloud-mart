@@ -11,6 +11,9 @@ It runs fully in memory on a laptop on day one. Each phase turns on a real Azure
 - **[docs/portal-guide.pdf](docs/portal-guide.pdf)**: new to Azure? A beginner's guide that builds phase 1 by clicking
   in the Azure Portal, then maps every click to the CLI and the Bicep. Its source is
   [docs/portal-guide.html](docs/portal-guide.html).
+- **[docs/AZURE_DEVELOPMENT_GUIDE.md](docs/AZURE_DEVELOPMENT_GUIDE.md)**: how the code works with Azure, for
+  beginners. Every Azure class, setting and permission, how the services connect, request flows with diagrams, and
+  troubleshooting.
 
 ## Why an online shop
 
