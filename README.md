@@ -127,6 +127,7 @@ Solid arrows are data flows; dotted ones are identity and telemetry.
 ## Repository
 
 ```
+CloudMart.slnx                 the solution: every .NET project in src/ and tests/
 src/CloudMart.Core/            domain, services, the order saga, and each boundary twice: in-memory + Azure
 src/CloudMart.Api/             ASP.NET Core minimal API, Entra ID auth, OpenTelemetry, health checks, Dockerfile
 src/CloudMart.Functions/       Service Bus, Event Grid, Event Hubs, timer triggers + Durable Functions saga
@@ -141,6 +142,9 @@ pipelines/                     Azure Pipelines: build â†’ what-if/deploy infra â
 deploy/                        SQL/PostgreSQL identity grants, Entra app roles, Kubernetes manifest, LB lab script
 docs/                          learning path, portal guide, gap analysis, KQL queries
 ```
+
+The solution file is in the repository root, not in `src/`. It ends in `.slnx`, the XML solution format, rather than
+`.sln`. Open it in Visual Studio 2026 or Rider, or build it with `dotnet build CloudMart.slnx`.
 
 ## Run it locally (no Azure needed)
 
