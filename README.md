@@ -8,6 +8,9 @@ It runs fully in memory on a laptop on day one. Each phase turns on a real Azure
   architect's decision tables the exam tests.
 - **[docs/az305-gap-analysis.md](docs/az305-gap-analysis.md)**: your 10 phases against the official AZ-305 outline
   (April 2026), and what was added.
+- **[docs/portal-guide.pdf](docs/portal-guide.pdf)**: new to Azure? A beginner's guide that builds phase 1 by clicking
+  in the Azure Portal, then maps every click to the CLI and the Bicep. Its source is
+  [docs/portal-guide.html](docs/portal-guide.html).
 
 ## Why an online shop
 
@@ -133,7 +136,7 @@ infra/main.bicep               subscription-scoped entry point; one switch per p
 infra/modules/                 27 modules + shared types: network, hub firewall, data, messaging, compute, edge...
 pipelines/                     Azure Pipelines: build → what-if/deploy infra → deploy apps
 deploy/                        SQL/PostgreSQL identity grants, Entra app roles, Kubernetes manifest, LB lab script
-docs/                          learning path, gap analysis, KQL queries
+docs/                          learning path, portal guide, gap analysis, KQL queries
 ```
 
 ## Run it locally (no Azure needed)
@@ -160,6 +163,9 @@ To run locally **against Azure** (after phase 4), copy the `localDevelopmentSett
 roles as the app.
 
 ## Deploy to Azure
+
+New to Azure? Try [docs/portal-guide.pdf](docs/portal-guide.pdf) first. It builds the same phase 1 resources by
+clicking in the portal, in a separate `rg-cloudmart-lab` resource group, so it never fights this deployment.
 
 ```bash
 az login

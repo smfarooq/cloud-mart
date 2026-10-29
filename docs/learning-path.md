@@ -54,6 +54,10 @@ az ad signed-in-user show --query "{id:id, upn:userPrincipalName}" -o json
 **Exam objectives:** management groups / subscriptions / resource groups structure and tagging strategy;
 authorising access to Azure resources (RBAC).
 
+> **New to Azure?** Work through [portal-guide.pdf](portal-guide.pdf) first. It builds this phase's resources by
+> clicking in the portal, in a separate `rg-cloudmart-lab` resource group, and maps each step to its CLI command and
+> Bicep module. Its Part 5 deletes that group again, so you don't pay for two copies once you start step 3.
+
 ### Lab
 
 1. **CLI orientation.**
