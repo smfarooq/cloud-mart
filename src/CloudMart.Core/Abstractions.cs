@@ -1,4 +1,5 @@
 using CloudMart.Core.Domain;
+using CloudMart.Core.Outbox;
 using CloudMart.Core.Payments;
 using CloudMart.Core.Shipping;
 
@@ -23,7 +24,11 @@ public interface IProductStatsRepository
 
 public interface IOrderRepository
 {
-    Task AddAsync(Order order, CancellationToken ct = default);
+    /// <summary>
+    /// Saves a new order and the outbox message that announces it, in one transaction: the transactional outbox
+    /// (phase 5). Fails if an order with the same id exists.
+    /// </summary>
+    Task AddAsync(Order order, OutboxMessage placed, CancellationToken ct = default);
     Task<Order?> GetAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<Order>> ListByCustomerAsync(string customerId, int take, CancellationToken ct = default);
     Task<IReadOnlyList<Order>> ListRecentAsync(int take, CancellationToken ct = default);

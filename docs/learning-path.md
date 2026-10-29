@@ -362,11 +362,56 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
    Function App's public endpoint, because push delivery can't reach a private endpoint. Discuss what "no public
    endpoints anywhere" would cost: Service Bus Premium (≈ $680/month per messaging unit) with a private endpoint, and
    Event Grid delivering to a Storage queue or Service Bus that the function reads through a private endpoint.
-8. **Design exercise: transactional outbox.** `OrderService` saves the order and *then* publishes. If the publish
-   fails, the order stays Pending. A client retry with the same `Idempotency-Key` (phase 16) publishes again, but a
-   client that gives up leaves it stuck. Design the fix: write an `Outbox` row in the same SQL transaction as the
-   order, and let a relay (a timer Function, or change data capture) publish and mark it sent. Stretch goal:
-   implement it.
+8. **Design exercise: transactional outbox.** A database transaction can't include a Service Bus send. Save the order
+   and *then* publish (a "dual write"), and a failed publish leaves the order Pending. A client retry with the same
+   `Idempotency-Key` (phase 16) could publish again, but a client that gives up leaves it stuck. Design the fix before
+   you read CloudMart's: write an `Outbox` row in the same transaction as the order, and let a relay publish it and
+   mark it sent. Decide:
+   - where the relay runs: a timer Function, a background service in the API, or change data capture;
+   - how two relays avoid taking the same row;
+   - what happens when a relay dies between publishing and marking the row sent;
+   - what a client retry of a Pending order should do now.
+
+   **Then compare** with the reference implementation:
+   - [OrderService.cs](../src/CloudMart.Core/Services/OrderService.cs) writes the order and its `OrderPlaced` row
+     in one `SaveChanges`, then wakes the relay. The checkout never waits for Service Bus. A retry of a Pending order
+     only makes sure the row exists.
+   - [OutboxRelay.cs](../src/CloudMart.Core/Outbox/OutboxRelay.cs) is a `BackgroundService` in the API, not a timer
+     Function, for two reasons:
+     - Until this phase the event goes to the in-process worker, which only the API process can reach.
+     - It runs only when there is work: at startup, when an order is placed, and when a retry is due. A timer polling
+       every few seconds would keep a serverless SQL database from ever auto-pausing.
+   - [OrdersDb.cs](../src/CloudMart.Core/Azure/OrdersDb.cs) has the `OutboxMessages` DDL and the claim. One statement
+     takes a batch of due rows and leases them: `UPDATE ... OUTPUT` with `READPAST` on SQL Server, `FOR UPDATE SKIP
+     LOCKED` on PostgreSQL. The lease pushes the row's `NextAttemptUtc` forward, like a queue's visibility timeout.
+     Failed publishes back off: 5 s, 10 s, 20 s, 40 s, then every minute.
+   - Delivery is at least once. A relay that dies after publishing leaves the row unsent, so the row goes out again
+     with the same `MessageId` once its lease ends. Duplicate detection drops the copy, and the saga ignores orders
+     that aren't Pending.
+   - The row carries the checkout's trace context, so step 1's end-to-end trace still runs through the relay.
+9. **Watch the outbox catch up** (needs the orders database from phase 4). Stop the `orders` topic from accepting
+   messages:
+
+   ```bash
+   az servicebus topic update -g rg-cloudmart-dev --namespace-name <service-bus-namespace> -n orders --status SendDisabled
+   ```
+
+   Place an order. You still get **202** and *Pending*, with no error: the checkout never talks to Service Bus. Run
+   this in the query editor a few times (on PostgreSQL, put the names in double quotes):
+
+   ```sql
+   SELECT Id, Attempts, NextAttemptUtc, LastError FROM OutboxMessages WHERE SentUtc IS NULL;
+   ```
+
+   `Attempts` climbs as the relay backs off, and `LastError` says the topic is disabled. The API logs a warning for
+   each attempt (*Could not publish outbox message*). Re-enable the topic:
+
+   ```bash
+   az servicebus topic update -g rg-cloudmart-dev --namespace-name <service-bus-namespace> -n orders --status Active
+   ```
+
+   Within a minute the relay's next attempt gets through, `SentUtc` fills in, and the order confirms. In the order's
+   trace, the gap between the request and the `OutboxRelay` span that finally sent it is the outage.
 
 ### Architect's questions
 
@@ -382,6 +427,7 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
 | Event Grid delivery with no public endpoint on the handler | Deliver to a **Storage queue** or **Service Bus** (managed identity), then pull |
 | Archive the raw stream to a data lake | **Event Hubs Capture** |
 | IoT / MQTT clients | **Event Grid namespaces** (MQTT broker) or IoT Hub |
+| Save state and publish an event without losing either, with no distributed transaction | **Transactional outbox**: the event is a row in the same database transaction, and a relay publishes it at least once. Consumers de-duplicate: Service Bus **duplicate detection** and idempotent handlers. To skip writing a relay, use **change data capture** on the table, or the Cosmos DB **change feed** |
 
 ---
 
@@ -708,8 +754,16 @@ reach an app that can't write.
 - **SQL:** nothing in a planned failover. With `--allow-data-loss`, the last few seconds of replication lag. With
   geo-restore alone, up to an hour.
 - **Service Bus Standard:** messages still queued in the primary namespace. They're delivered when the region comes
-  back, or never. Their orders stay Pending, so publish them again after the outage. A client retry with the same
-  `Idempotency-Key` does that for you (phase 16).
+  back, or never. Their orders stay Pending, but their outbox rows (phase 5) say *sent*, so nothing tries again.
+  After the outage, mark them unsent and restart the API, because its relay checks the outbox when it starts:
+
+  ```sql
+  UPDATE OutboxMessages SET SentUtc = NULL, NextAttemptUtc = SYSDATETIMEOFFSET()
+  WHERE Id IN (SELECT Id FROM Orders WHERE Status = 'Pending');
+  ```
+
+  Some of those messages did arrive. Duplicate detection drops their copies, and the saga ignores orders that
+  aren't Pending.
 - **Sagas in flight:** their Durable Functions state is in the primary storage account. They resume after the
   storage account fails over, or when the primary region returns.
 - **Event Hubs:** events nobody had read yet in the primary namespace. The click stream is best effort, so that's
@@ -1082,8 +1136,8 @@ There is no distributed transaction. Each step commits on its own, and correctne
      The order id is a hash of your user id and the key
      ([OrderService.cs](../src/CloudMart.Core/Services/OrderService.cs)). That way the primary key does the
      de-duplication, with no new column and no schema change. A retry that arrives while the order is still Pending
-     publishes `OrderPlaced` again. Service Bus duplicate detection drops the copy, and the retry also repairs a first
-     attempt whose publish failed.
+     doesn't publish anything. It makes sure the order's `OrderPlaced` message is in the outbox (phase 5) and leaves
+     the sending to the relay. That repairs an order saved before the outbox existed.
    - **POST to Payments with an idempotency key.** Send the same request twice. The first answers 201 and the second 200, with
      the same payment id. Then reuse the key for another order and get 409.
 

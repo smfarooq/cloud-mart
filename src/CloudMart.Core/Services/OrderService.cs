@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CloudMart.Core.Domain;
+using CloudMart.Core.Outbox;
 using Microsoft.Extensions.Logging;
 
 namespace CloudMart.Core.Services;
@@ -8,7 +9,8 @@ namespace CloudMart.Core.Services;
 public sealed class OrderService(
     IProductRepository products,
     IOrderRepository orders,
-    IOrderEventPublisher publisher,
+    IOutboxStore outbox,
+    OutboxSignal relay,
     ILogger<OrderService> logger)
 {
     public const int MaxLines = 20;
@@ -61,7 +63,9 @@ public sealed class OrderService(
 
         try
         {
-            await orders.AddAsync(order, ct);
+            // The order and its OrderPlaced message are committed together or not at all, so there is no moment
+            // when one exists without the other.
+            await orders.AddAsync(order, OutboxMessage.For(Placed(order, request.SimulateFailure), now), ct);
         }
         catch (Exception ex) when (idempotencyKey is not null && ex is not OperationCanceledException)
         {
@@ -72,10 +76,10 @@ public sealed class OrderService(
             throw;
         }
 
-        // Dual write: the order row is committed before the event is published, so a publish failure leaves the
-        // order Pending until the client retries with the same key. The full answer is the transactional outbox
-        // pattern (learning path, phase 5).
-        await PublishAsync(order, request.SimulateFailure, ct);
+        // Publishing is the relay's job (OutboxRelay). Wake it rather than wait for it: the order still confirms in
+        // seconds, but the checkout no longer waits for Service Bus, and a Service Bus outage delays the
+        // confirmation instead of failing the checkout.
+        relay.Wake();
 
         CloudMartTelemetry.OrdersPlaced.Add(1);
         logger.LogInformation("Order {OrderId} placed by {CustomerId} for {Total}", order.Id, order.CustomerId, order.Total);
@@ -99,19 +103,20 @@ public sealed class OrderService(
         if (!SameLines(existing.Lines, lines))
             throw new IdempotencyConflictException("This Idempotency-Key was already used for a different order.");
 
-        // Still Pending: publish again. Service Bus duplicate detection (MessageId = order id) and the saga's own
-        // checks absorb the repeat, and it repairs a first attempt that saved the order but failed to publish.
-        if (existing.Status == OrderStatus.Pending)
-            await PublishAsync(existing, simulateFailure, ct);
+        // Still Pending: make sure its message is in the outbox, and leave publishing to the relay. Normally it is
+        // there already, sent or still retrying; this adds it for an order saved before the outbox existed.
+        if (existing.Status == OrderStatus.Pending &&
+            await outbox.EnsureAsync(OutboxMessage.For(Placed(existing, simulateFailure), DateTimeOffset.UtcNow), ct))
+        {
+            relay.Wake();
+        }
 
         logger.LogInformation("Order {OrderId} returned again for a retried Idempotency-Key ({Status})", existing.Id, existing.Status);
         return existing;
     }
 
-    private Task PublishAsync(Order order, bool simulateFailure, CancellationToken ct) =>
-        publisher.PublishAsync(
-            new OrderPlaced(order.Id, order.CustomerId, order.CustomerName, order.Total, order.Lines.Sum(l => l.Quantity), simulateFailure, order.CreatedUtc),
-            ct);
+    private static OrderPlaced Placed(Order order, bool simulateFailure) =>
+        new(order.Id, order.CustomerId, order.CustomerName, order.Total, order.Lines.Sum(l => l.Quantity), simulateFailure, order.CreatedUtc);
 
     private static bool SameLines(List<OrderLine> stored, List<OrderLine> requested) =>
         stored.Count == requested.Count &&
