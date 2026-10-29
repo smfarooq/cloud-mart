@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using CloudMart.Core.Domain;
+using CloudMart.Core.Outbox;
 using CloudMart.Core.Services;
 
 namespace CloudMart.Core.InMemory;
@@ -40,18 +41,20 @@ public sealed class InMemoryProductStatsRepository : IProductStatsRepository
             .ToList());
 }
 
-public sealed class InMemoryOrderRepository : IOrderRepository
+public sealed class InMemoryOrderRepository(InMemoryOutboxStore outbox) : IOrderRepository
 {
     private readonly ConcurrentDictionary<Guid, Order> _orders = new();
     private readonly Lock _gate = new();
 
     // Orders are cloned on the way in and out so callers never share mutable state, just like a real database.
-    public Task AddAsync(Order order, CancellationToken ct = default)
+    public async Task AddAsync(Order order, OutboxMessage placed, CancellationToken ct = default)
     {
         // Insert-only, like a primary key: a second order with the same id fails instead of overwriting the first.
         if (!_orders.TryAdd(order.Id, order.Clone()))
             throw new InvalidOperationException($"Order {order.Id} already exists.");
-        return Task.CompletedTask;
+
+        // Nothing can fail between the two writes, which is all the "transaction" memory needs.
+        await outbox.EnsureAsync(placed, ct);
     }
 
     public Task<Order?> GetAsync(Guid id, CancellationToken ct = default)

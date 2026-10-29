@@ -6,6 +6,7 @@ using Azure.Storage.Blobs;
 using CloudMart.Core.Azure;
 using CloudMart.Core.InMemory;
 using CloudMart.Core.InProcess;
+using CloudMart.Core.Outbox;
 using CloudMart.Core.Payments;
 using CloudMart.Core.Services;
 using CloudMart.Core.Shipping;
@@ -13,6 +14,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
@@ -45,6 +47,9 @@ public static class CloudMartServiceCollectionExtensions
         services.AddSingleton(credential);
 
         services.AddScoped<OrderService>();
+        services.AddScoped<OutboxRelay>();
+        services.AddSingleton<OutboxSignal>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<OrderFulfillmentService>();
         services.AddScoped<OrderSagaActivities>();
         services.AddScoped<ProductViewAggregator>();
@@ -101,10 +106,17 @@ public static class CloudMartServiceCollectionExtensions
                 break;
 
             default:
+                services.AddSingleton<InMemoryOutboxStore>();
+                services.AddSingleton<IOutboxStore>(sp => sp.GetRequiredService<InMemoryOutboxStore>());
                 services.AddSingleton<IOrderRepository, InMemoryOrderRepository>();
                 orders = "In-memory";
                 break;
         }
+
+        // The outbox relay publishes OrderPlaced in the API, which is the only place orders are placed. It has to:
+        // until phase 5, the event goes to the in-process worker, which only the API process can reach.
+        if (host == CloudMartHost.Api)
+            services.AddHostedService<OutboxRelayWorker>();
 
         // Product images: Blob Storage (phase 4) + Event Grid (phase 5)
         if (settings.BlobEndpoint is { } blobEndpoint)
@@ -213,6 +225,8 @@ public static class CloudMartServiceCollectionExtensions
                 // so the app's identity needs only data rights, not db_ddladmin.
                 var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
                 await db.Database.EnsureCreatedAsync(ct);
+                // After EnsureCreated, never before: it creates the schema only in a database with no tables at all.
+                await db.Database.ExecuteSqlRawAsync(db.CreateOutboxTableSql, ct);
                 logger.LogInformation("Orders schema is ready on {Provider}", settings.OrdersProvider);
             }
             catch (Exception ex)
@@ -239,6 +253,7 @@ public static class CloudMartServiceCollectionExtensions
 
     private static void AddEfOrders(IServiceCollection services)
     {
+        services.AddScoped<IOutboxStore, EfOutboxStore>();
         services.AddScoped<EfOrderRepository>();
         services.AddScoped<IOrderRepository>(sp => sp.GetRequiredService<EfOrderRepository>());
         services.AddScoped<IHealthProbe>(sp => sp.GetRequiredService<EfOrderRepository>());
