@@ -498,6 +498,9 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
 
 **Switch:** `deployAcr = true` for the container path.
 
+**The picture:** [operations.svg](operations.svg) ([PNG](operations.png)) shows the pipeline's stages, its identity and
+approval, where deployment outputs go, schema delivery, and how to roll back each service.
+
 ### Lab
 
 1. **Azure DevOps.** Create an organisation and a project, push this repository, and create the service connection

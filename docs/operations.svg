@@ -1,0 +1,547 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1880 2050" width="1880" height="2050" role="img" aria-labelledby="title desc">
+  <title id="title">CloudMart deployment and operations diagram</title>
+  <desc id="desc">How CloudMart is built, deployed and run. An Azure Pipelines run builds once (tests, four app packages, the SPA, Bicep lint), then deploys infrastructure (what-if, then a subscription deployment) and the applications (zip deploys to App Service and Functions, the Payments and Shipping APIs, the SPA through the Static Web Apps CLI with a per-environment config.json, and a container image through ACR Tasks), through a workload identity federation service connection and an optional approval check. Also: parameter files and environments, how deployment outputs become app settings and config.json, deployment stacks, policy and budget, managed identities and Key Vault, schema delivery with EnsureCreated versus an EF migration bundle, rollback per service, and the alerts and health checks used after a deploy.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#404040"/>
+    </marker>
+    <marker id="arrow-log" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ED7D31"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2E75B6"/>
+    </marker>
+
+    <style>
+      text { font-family: 'Segoe UI', Calibri, Arial, sans-serif; }
+      .svc { fill: #ffffff; stroke: #00B050; stroke-width: 3; }
+      .opt { fill: #ffffff; stroke: #BFBFBF; stroke-width: 3; }
+      .note { fill: #ffffff; stroke: #70AD47; stroke-width: 1.5; }
+      .zone { fill: none; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .band { fill: #FAFAFA; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .group { fill: #F4FAF0; stroke: #70AD47; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .vnet { fill: #F7FAFE; stroke: #2E75B6; stroke-width: 2; }
+      .subnet { fill: #EEF5FC; stroke: #5B9BD5; stroke-width: 1.5; stroke-dasharray: 5 3; }
+      .optsub { fill: #F7F7F7; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 5 3; }
+      .pechip { fill: #ffffff; stroke: #00A2AD; stroke-width: 1.5; }
+      .rtchip { fill: #ffffff; stroke: #2E75B6; stroke-width: 1.5; }
+      .name { font-size: 14px; font-weight: 600; fill: #262626; text-anchor: middle; }
+      .role { font-size: 15px; font-weight: 700; fill: #000000; text-anchor: middle; }
+      .sub { font-size: 12px; fill: #595959; text-anchor: middle; }
+      .notetext { font-size: 13px; fill: #262626; }
+      .smallnote { font-size: 12px; fill: #262626; }
+      .zonetitle { font-size: 14px; font-weight: 700; fill: #404040; }
+      .tiletitle { font-size: 12.5px; font-weight: 700; fill: #1F3864; }
+      .tiletext { font-size: 12px; fill: #404040; }
+      .mono { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 11.5px; fill: #404040; }
+      .flow { stroke: #404040; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 6 4; }
+      .vint { stroke: #2E75B6; stroke-width: 1.8; stroke-dasharray: 4 3; fill: none; marker-end: url(#arrow-blue); }
+      .peer { stroke: #2E75B6; stroke-width: 2.4; fill: none; marker-start: url(#arrow-blue); marker-end: url(#arrow-blue); }
+      .log { stroke: #ED7D31; stroke-width: 2; stroke-dasharray: 2 4; stroke-linecap: round; fill: none; marker-end: url(#arrow-log); }
+      .flowlabel { font-size: 12px; font-style: italic; fill: #404040; }
+      .loglabel { font-size: 12px; font-style: italic; fill: #C55A11; }
+      .paneltitle { font-size: 15px; font-weight: 700; fill: #000000; }
+      .itemname { font-size: 13px; font-weight: 600; fill: #262626; }
+      .itemdesc { font-size: 12px; fill: #595959; }
+      .repl { stroke: #2E75B6; stroke-width: 1.8; stroke-dasharray: 6 4; fill: none; marker-end: url(#arrow-blue); }
+      .warn { font-size: 12px; font-style: italic; fill: #C00000; }
+      .rowlabel { font-size: 14px; font-weight: 700; fill: #1F3864; }
+      .optnote { fill: #ffffff; stroke: #BFBFBF; stroke-width: 1.5; }
+      .manual { fill: #ffffff; stroke: #7F7F7F; stroke-width: 1.5; stroke-dasharray: 6 4; }
+      .line { stroke: #404040; stroke-width: 1.6; fill: none; }
+      .rule { stroke: #D9D9D9; stroke-width: 1; }
+      .optcell { fill: #F7F7F7; stroke: none; }
+    </style>
+
+    <!-- Simplified Azure-style glyphs, 48x48 (from architecture.svg, plus Git, template, approval, pipelines) -->
+    <symbol id="i-approval" viewBox="0 0 48 48">
+      <circle cx="19" cy="14" r="8" fill="#0078D4"/>
+      <path d="M4 40 c0 -9 7 -14 15 -14 s15 5 15 14 z" fill="#0078D4"/>
+      <circle cx="36" cy="34" r="10" fill="#00B050"/>
+      <path d="M31 34 l4 4 6 -7" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-git" viewBox="0 0 48 48">
+      <rect x="10" y="10" width="28" height="28" rx="4" fill="#F05032" transform="rotate(45 24 24)"/>
+      <path d="M17 15 L24 22 V33 M24 22 L31 29" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="24" cy="22" r="3.4" fill="#ffffff"/>
+      <circle cx="24" cy="33" r="3.4" fill="#ffffff"/>
+      <circle cx="31" cy="29" r="3.4" fill="#ffffff"/>
+    </symbol>
+    <symbol id="i-appservice" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="18" fill="#0078D4"/>
+      <ellipse cx="24" cy="24" rx="8" ry="18" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <path d="M6 24 h36 M9 15 h30 M9 33 h30" stroke="#ffffff" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-functions" viewBox="0 0 48 48">
+      <path d="M9 10 L3 24 L9 38 M39 10 L45 24 L39 38" stroke="#0078D4" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M27 6 L14 27 h9 l-3 15 L34 20 h-9 l4 -14 z" fill="#FCD116" stroke="#E8A800" stroke-width="1"/>
+    </symbol>
+    <symbol id="i-swa" viewBox="0 0 48 48">
+      <rect x="6" y="8" width="36" height="32" rx="4" fill="#5C2D91"/>
+      <path d="M19 18 l-6 6 6 6 M29 18 l6 6 -6 6" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-acr" viewBox="0 0 48 48">
+      <rect x="16" y="6" width="16" height="12" fill="#50A0E8"/>
+      <rect x="6" y="20" width="16" height="12" fill="#0078D4"/>
+      <rect x="26" y="20" width="16" height="12" fill="#0078D4"/>
+      <rect x="6" y="34" width="36" height="8" fill="#50A0E8"/>
+    </symbol>
+    <symbol id="i-identity" viewBox="0 0 48 48">
+      <circle cx="24" cy="16" r="8" fill="#0078D4"/>
+      <path d="M9 40 c0 -9 7 -14 15 -14 s15 5 15 14 z" fill="#0078D4"/>
+      <circle cx="37" cy="34" r="6" fill="#FFB900"/>
+    </symbol>
+    <symbol id="i-template" viewBox="0 0 48 48">
+      <path d="M9 4 H30 L40 14 V44 H9 Z" fill="#0078D4"/>
+      <path d="M30 4 V14 H40 Z" fill="#50A0E8"/>
+      <path d="M21 20 c-3 0 -3 2 -3 4 s0 4 -3 4 c3 0 3 2 3 4 s0 4 3 4 M28 20 c3 0 3 2 3 4 s0 4 3 4 c-3 0 -3 2 -3 4 s0 4 -3 4" stroke="#ffffff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-policy" viewBox="0 0 48 48">
+      <path d="M24 4 L40 10 V24 C40 34 32 41 24 44 C16 41 8 34 8 24 V10 Z" fill="#0078D4"/>
+      <path d="M17 24 l5 5 9 -10" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-budget" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="19" fill="#5EA830"/>
+      <text x="24" y="32" font-size="22" font-weight="700" fill="#ffffff" text-anchor="middle">$</text>
+    </symbol>
+    <symbol id="i-keyvault" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="19" fill="#FFB900"/>
+      <circle cx="19" cy="21" r="6" fill="none" stroke="#ffffff" stroke-width="3"/>
+      <path d="M23 25 l12 12 m-4 -4 l3 -3 m-6 0 l3 -3" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none"/>
+    </symbol>
+    <symbol id="i-entra" viewBox="0 0 48 48">
+      <polygon points="24,4 44,30 24,44 4,30" fill="#0078D4"/>
+      <polygon points="24,4 24,44 4,30" fill="#50A0E8"/>
+      <polygon points="24,18 33,30 24,36 15,30" fill="#ffffff" opacity="0.85"/>
+    </symbol>
+    <symbol id="i-sql" viewBox="0 0 48 48">
+      <path d="M8 10 v28 c0 2.8 7.2 5 16 5 s16 -2.2 16 -5 V10 c0 2.8 -7.2 5 -16 5 S8 12.8 8 10 z" fill="#0072C6"/>
+      <ellipse cx="24" cy="10" rx="16" ry="5" fill="#50A0E8"/>
+      <text x="24" y="33" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">SQL</text>
+    </symbol>
+    <symbol id="i-appinsights" viewBox="0 0 48 48">
+      <path d="M24 5 a13 13 0 0 0 -7 24 v6 h14 v-6 A13 13 0 0 0 24 5 z" fill="#773ADC"/>
+      <rect x="18" y="37" width="12" height="5" rx="1" fill="#773ADC"/>
+    </symbol>
+    <symbol id="i-alert" viewBox="0 0 48 48">
+      <path d="M24 5 L45 41 H3 Z" fill="#FFB900" stroke="#E8A800" stroke-width="1"/>
+      <rect x="22" y="17" width="4" height="13" rx="1" fill="#262626"/>
+      <circle cx="24" cy="35" r="2.3" fill="#262626"/>
+    </symbol>
+    <symbol id="i-pipelines" viewBox="0 0 48 48">
+      <rect x="4" y="4" width="40" height="40" rx="8" fill="#0078D4"/>
+      <path d="M12 15 H24 L32 24 L24 33 H12 L20 24 Z" fill="#ffffff"/>
+      <path d="M27 15 H31 L39 24 L31 33 H27 L35 24 Z" fill="#ffffff" opacity="0.6"/>
+    </symbol>
+  </defs>
+
+  <rect width="1880" height="2050" fill="#ffffff"/>
+  <!-- Title -->
+  <rect x="30" y="24" width="430" height="66" fill="#4472C4"/>
+  <text x="245" y="69" font-size="34" fill="#ffffff" text-anchor="middle">Deployment &amp; Operations</text>
+  <text x="30" y="132" font-size="15" fill="#404040">How CloudMart is built, deployed and run (learning path, phases 8 and 9). The runtime is in architecture.svg, disaster recovery in continuity.svg. Grey = a lab step or a recommendation.</text>
+  <!-- Legend -->
+  <rect x="500" y="24" width="1350" height="82" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="514" y="70" font-size="14" font-weight="700" fill="#000000">Legend</text>
+  <rect x="590" y="41" width="26" height="18" class="svc"/>
+  <text x="626" y="55" class="notetext">In the repo: pipeline or Bicep</text>
+  <rect x="905" y="41" width="26" height="18" class="opt"/>
+  <text x="941" y="55" class="notetext">Optional: a lab step or recommendation</text>
+  <rect x="1220" y="41" width="26" height="18" class="note"/>
+  <text x="1256" y="55" class="notetext">Pipeline step</text>
+  <rect x="1535" y="41" width="26" height="18" class="manual"/>
+  <text x="1571" y="55" class="notetext">Done by hand</text>
+  <path d="M590 84 H616" class="flow"/>
+  <text x="626" y="88" class="notetext">Runs next / deploys to</text>
+  <path d="M905 84 H931" class="repl"/>
+  <text x="941" y="88" class="notetext">Deployment output becomes a setting</text>
+  <path d="M1220 84 H1246" class="flow dash"/>
+  <text x="1256" y="88" class="notetext">Copied by hand</text>
+  <text x="1535" y="88" class="warn">Red: a gap today</text>
+  <!-- ============ Azure Pipelines ============ -->
+  <rect x="30" y="150" width="1820" height="640" class="band" rx="6"/>
+  <text x="46" y="174" class="zonetitle">Azure Pipelines · pipelines/azure-pipelines.yml (phase 8)</text>
+  <text x="46" y="196" class="itemdesc">Microsoft-hosted ubuntu-latest agents with .NET 10 and Node 24: nothing to patch,</text>
+  <text x="46" y="212" class="itemdesc">but no line of sight into a VNet.</text>
+  <rect x="640" y="180" width="780" height="50" class="opt"/>
+  <use href="#i-approval" x="652" y="187" width="36" height="36"/>
+  <text x="700" y="199" class="itemname">Environment cloudmart-dev · Approvals check (added in Azure DevOps, setup step 2)</text>
+  <text x="700" y="217" class="itemdesc">Both deploy stages use this environment, so each waits for an approver; without the check, they just run.</text>
+  <!-- Source and triggers -->
+  <rect x="50" y="262" width="195" height="70" class="svc"/>
+  <use href="#i-git" x="60" y="279" width="36" height="36"/>
+  <text x="106" y="288" class="itemname">Git repository</text>
+  <text x="106" y="306" class="itemdesc">this repo,</text>
+  <text x="106" y="322" class="itemdesc">branch main</text>
+  <path d="M245 297 H268" class="flow"/>
+  <text x="50" y="360" class="tiletitle">Triggers</text>
+  <text x="50" y="380" class="tiletext">Push to main: all three stages.</text>
+  <text x="50" y="396" class="tiletext">Changes only under docs/* or</text>
+  <text x="50" y="412" class="tiletext">to *.md files don't start a run.</text>
+  <text x="50" y="444" class="tiletext">Pull request to main: Build only</text>
+  <text x="50" y="460" class="tiletext">(tests and lint). The deploy</text>
+  <text x="50" y="476" class="tiletext">stages have a main-only condition.</text>
+  <rect x="50" y="512" width="195" height="142" class="manual"/>
+  <text x="62" y="532" class="tiletitle">Set up once, by hand</text>
+  <text x="62" y="550" class="tiletext">1 · Service connection</text>
+  <text x="80" y="566" class="tiletext">azure-cloudmart-dev</text>
+  <text x="62" y="582" class="tiletext">2 · Environment cloudmart-dev</text>
+  <text x="80" y="598" class="tiletext">and its Approvals check</text>
+  <text x="62" y="614" class="tiletext">3 · Your object id, UPN and</text>
+  <text x="80" y="630" class="tiletext">email in main.bicepparam</text>
+  <text x="62" y="646" class="tiletext">(azure-pipelines.yml header)</text>
+  <!-- Stage 1: Build -->
+  <rect x="270" y="262" width="340" height="442" class="group" rx="6"/>
+  <text x="284" y="284" class="zonetitle">1 · Build</text>
+  <text x="596" y="284" class="itemdesc" text-anchor="end">push and pull request</text>
+  <path d="M610 284 H638" class="flow"/>
+  <rect x="284" y="298" width="312" height="60" class="note"/>
+  <text x="296" y="317" class="itemname">.NET 10 build</text>
+  <text x="296" y="333" class="mono">dotnet build CloudMart.slnx</text>
+  <text x="296" y="349" class="itemdesc">stamps version 1.0.&lt;BuildId&gt; (Platform page)</text>
+  <rect x="284" y="368" width="312" height="60" class="note"/>
+  <text x="296" y="387" class="itemname">Unit tests</text>
+  <text x="296" y="403" class="mono">dotnet test tests/CloudMart.Core.Tests</text>
+  <text x="296" y="419" class="itemdesc">results published to the run</text>
+  <rect x="284" y="438" width="312" height="44" class="note"/>
+  <text x="296" y="457" class="itemname">Package four apps</text>
+  <text x="296" y="473" class="mono">api, functions, payments, shipping .zip</text>
+  <rect x="284" y="492" width="312" height="44" class="note"/>
+  <text x="296" y="511" class="itemname">Build the SPA once</text>
+  <text x="296" y="527" class="itemdesc">npm ci, npm run build: no settings baked in</text>
+  <rect x="284" y="546" width="312" height="44" class="note"/>
+  <text x="296" y="565" class="itemname">Lint the templates</text>
+  <text x="296" y="581" class="mono">az bicep build (no Azure login)</text>
+  <rect x="284" y="600" width="312" height="44" class="note"/>
+  <text x="296" y="619" class="itemname">Publish the artifact "drop"</text>
+  <text x="296" y="635" class="itemdesc">stage 3 downloads it: built once, deployed as is</text>
+  <!-- Stage 2: Infrastructure -->
+  <rect x="640" y="262" width="330" height="442" class="group" rx="6"/>
+  <text x="654" y="284" class="zonetitle">2 · Infrastructure</text>
+  <text x="956" y="284" class="itemdesc" text-anchor="end">main only</text>
+  <path d="M970 284 H998" class="flow"/>
+  <rect x="654" y="298" width="302" height="76" class="note"/>
+  <text x="666" y="317" class="itemname">What-if</text>
+  <text x="666" y="333" class="mono">az deployment sub what-if</text>
+  <text x="666" y="349" class="itemdesc">lists what will be created, changed, deleted</text>
+  <text x="666" y="365" class="warn">the same step then deploys: no one reviews it</text>
+  <rect x="654" y="384" width="302" height="60" class="note"/>
+  <text x="666" y="403" class="itemname">Deploy at subscription scope</text>
+  <text x="666" y="419" class="mono">az deployment sub create -n cloudmart-&lt;id&gt;</text>
+  <text x="666" y="435" class="itemdesc">infra/main.bicep with infra/main.bicepparam</text>
+  <rect x="654" y="454" width="302" height="44" class="note"/>
+  <text x="666" y="473" class="itemname">Outputs kept with the deployment</text>
+  <text x="666" y="489" class="itemdesc">stage 3 reads them back by that name</text>
+  <rect x="654" y="508" width="302" height="60" class="optnote"/>
+  <text x="666" y="527" class="itemname">Deployment stack instead (lab 8.3)</text>
+  <text x="666" y="543" class="mono">az stack sub create --action-on-unmanage</text>
+  <text x="666" y="559" class="itemdesc">deleteAll: switch off = resources deleted</text>
+  <rect x="654" y="578" width="302" height="44" class="optnote"/>
+  <text x="666" y="597" class="itemname">What-if in its own stage</text>
+  <text x="666" y="613" class="itemdesc">before the approval, so the approver reads it</text>
+  <path d="M900 262 V246 H1640 V260" class="flow"/>
+  <!-- Stage 3: Applications -->
+  <rect x="1000" y="262" width="420" height="442" class="group" rx="6"/>
+  <text x="1014" y="284" class="zonetitle">3 · Applications</text>
+  <text x="1406" y="284" class="itemdesc" text-anchor="end">main only, after stage 2</text>
+  <rect x="1014" y="298" width="392" height="60" class="note"/>
+  <text x="1026" y="317" class="itemname">Read the deployment outputs</text>
+  <text x="1026" y="333" class="mono">az deployment sub show -n cloudmart-&lt;id&gt;</text>
+  <text x="1026" y="349" class="itemdesc">each step below runs only if its app exists</text>
+  <rect x="1014" y="366" width="392" height="44" class="note"/>
+  <text x="1026" y="385" class="itemname">API · zip deploy</text>
+  <text x="1026" y="401" class="mono">az webapp deploy --type zip (api.zip)</text>
+  <rect x="1014" y="418" width="392" height="44" class="note"/>
+  <text x="1026" y="437" class="itemname">Functions · zip deploy</text>
+  <text x="1026" y="453" class="mono">az functionapp deployment source config-zip</text>
+  <rect x="1014" y="470" width="392" height="60" class="note"/>
+  <text x="1026" y="489" class="itemname">Payments + Shipping APIs (phase 16)</text>
+  <text x="1026" y="505" class="mono">az webapp deploy (payments.zip, shipping.zip)</text>
+  <text x="1026" y="521" class="itemdesc">via the SCM site with Entra auth, even behind private endpoints</text>
+  <rect x="1014" y="538" width="392" height="92" class="note"/>
+  <text x="1026" y="557" class="itemname">SPA · Static Web Apps CLI</text>
+  <text x="1026" y="573" class="mono">jq .spaConfig.value &gt; web/config.json</text>
+  <text x="1026" y="589" class="mono">npx @azure/static-web-apps-cli deploy --env production</text>
+  <text x="1026" y="605" class="itemdesc">phase 10: adds the Front Door lock (forwardingGateway)</text>
+  <text x="1026" y="621" class="itemdesc">deployment token read at run time, never stored</text>
+  <rect x="1014" y="638" width="392" height="60" class="note"/>
+  <text x="1026" y="657" class="itemname">Container image (phase 8)</text>
+  <text x="1026" y="673" class="mono">az acr build -t cloudmart-api:&lt;BuildId&gt;</text>
+  <text x="1026" y="689" class="itemdesc">ACR Tasks builds it in Azure: no Docker on the agent</text>
+  <path d="M956 476 H985 V328 H1012" class="repl"/>
+  <!-- What the apps land on -->
+  <rect x="1450" y="262" width="380" height="442" class="zone" rx="6"/>
+  <text x="1466" y="286" class="zonetitle">rg-cloudmart-&lt;env&gt;</text>
+  <text x="1466" y="302" class="itemdesc">created and updated by stage 2</text>
+  <rect x="1466" y="314" width="348" height="66" class="svc"/>
+  <use href="#i-appservice" x="1476" y="329" width="36" height="36"/>
+  <text x="1522" y="336" class="itemname">App Service · the API</text>
+  <text x="1522" y="353" class="itemdesc">plan asp-cloudmart-&lt;env&gt;: B1, Linux</text>
+  <text x="1522" y="369" class="itemdesc">health check on /health/live</text>
+  <path d="M1406 388 H1436 V347 H1464" class="flow"/>
+  <rect x="1466" y="388" width="348" height="66" class="svc"/>
+  <use href="#i-functions" x="1476" y="403" width="36" height="36"/>
+  <text x="1522" y="410" class="itemname">Function App</text>
+  <text x="1522" y="427" class="itemdesc">Flex Consumption (FC1); the package goes</text>
+  <text x="1522" y="443" class="itemdesc">to a blob container, read by identity</text>
+  <path d="M1406 440 H1436 V421 H1464" class="flow"/>
+  <rect x="1466" y="462" width="348" height="66" class="opt"/>
+  <use href="#i-appservice" x="1476" y="477" width="36" height="36"/>
+  <text x="1522" y="484" class="itemname">Payments + Shipping APIs (phase 16)</text>
+  <text x="1522" y="501" class="itemdesc">same B1 plan, private endpoints;</text>
+  <text x="1522" y="517" class="itemdesc">deployPayments, deployShipping</text>
+  <path d="M1406 500 H1436 V495 H1464" class="flow"/>
+  <rect x="1466" y="536" width="348" height="66" class="svc"/>
+  <use href="#i-swa" x="1476" y="551" width="36" height="36"/>
+  <text x="1522" y="558" class="itemname">Static Web App</text>
+  <text x="1522" y="575" class="itemdesc">Free; Standard when locked to Front Door</text>
+  <text x="1522" y="591" class="itemdesc">(phase 10). Preview environments on.</text>
+  <path d="M1406 584 H1436 V569 H1464" class="flow"/>
+  <rect x="1466" y="610" width="348" height="66" class="opt"/>
+  <use href="#i-acr" x="1476" y="625" width="36" height="36"/>
+  <text x="1522" y="632" class="itemname">Container Registry (phase 8, Basic)</text>
+  <text x="1522" y="649" class="itemdesc">Container Apps pulls it with AcrPull,</text>
+  <text x="1522" y="665" class="itemdesc">image set in containerImage; AKS: deploy/k8s</text>
+  <path d="M1406 668 H1436 V643 H1464" class="flow"/>
+  <rect x="640" y="716" width="780" height="56" class="svc"/>
+  <use href="#i-identity" x="652" y="726" width="36" height="36"/>
+  <text x="700" y="737" class="itemname">Service connection azure-cloudmart-dev · AzureCLI@2 in both deploy stages</text>
+  <text x="700" y="756" class="itemdesc">Workload identity federation: short-lived tokens, no secret. Owner, or Contributor + RBAC Administrator.</text>
+  <!-- ============ Environments and outputs ============ -->
+  <rect x="30" y="810" width="970" height="390" class="zone" rx="6"/>
+  <text x="46" y="834" class="zonetitle">Environments and where deployment outputs go</text>
+  <rect x="50" y="852" width="290" height="90" class="svc"/>
+  <use href="#i-template" x="61" y="879" width="36" height="36"/>
+  <text x="108" y="874" class="itemname">infra/main.bicepparam</text>
+  <text x="108" y="892" class="itemdesc">environmentName = 'dev', eastus2;</text>
+  <text x="108" y="908" class="itemdesc">one switch per learning phase. The</text>
+  <text x="108" y="924" class="itemdesc">only file the pipeline deploys.</text>
+  <rect x="50" y="952" width="290" height="90" class="opt"/>
+  <use href="#i-template" x="61" y="979" width="36" height="36"/>
+  <text x="108" y="974" class="itemname">Test and prod parameter files</text>
+  <text x="108" y="992" class="itemdesc">environmentName = 'test' / 'prod'.</text>
+  <text x="108" y="1008" class="itemdesc">A deploy stage each: the same drop,</text>
+  <text x="108" y="1024" class="itemdesc">its own approval and connection.</text>
+  <rect x="50" y="1052" width="290" height="90" class="opt"/>
+  <use href="#i-template" x="61" y="1079" width="36" height="36"/>
+  <text x="108" y="1074" class="itemname">Phase 10 second copy</text>
+  <text x="108" y="1092" class="itemdesc">environmentName = 'dr', centralus;</text>
+  <text x="108" y="1108" class="itemdesc">deployFrontDoor and deploySql false.</text>
+  <text x="108" y="1124" class="itemdesc">Deployed by hand with the az CLI.</text>
+  <path d="M340 897 H355" class="line"/>
+  <path d="M340 997 H355" class="line"/>
+  <path d="M340 1097 H355" class="line"/>
+  <path d="M355 897 V1097" class="line"/>
+  <path d="M355 929 H368" class="flow"/>
+  <rect x="370" y="852" width="270" height="154" class="svc"/>
+  <use href="#i-template" x="381" y="911" width="36" height="36"/>
+  <text x="428" y="874" class="itemname">infra/main.bicep</text>
+  <text x="428" y="892" class="itemdesc">subscription scope. Names come</text>
+  <text x="428" y="908" class="itemdesc">from environmentName:</text>
+  <text x="428" y="924" class="mono">rg-cloudmart-&lt;env&gt;</text>
+  <text x="428" y="940" class="mono">app-cloudmart-&lt;env&gt;-api-&lt;sfx&gt;</text>
+  <text x="428" y="956" class="itemdesc">sfx = uniqueString(subscription,</text>
+  <text x="428" y="972" class="itemdesc">appName, environmentName); each</text>
+  <text x="428" y="988" class="itemdesc">resource gets an environment tag.</text>
+  <text x="370" y="1036" class="tiletext">Not to be confused: in the pipeline,</text>
+  <text x="370" y="1052" class="tiletext">environmentName is the Azure DevOps</text>
+  <text x="370" y="1068" class="tiletext">environment cloudmart-dev, which</text>
+  <text x="370" y="1084" class="tiletext">holds the approval.</text>
+  <rect x="670" y="852" width="310" height="94" class="note"/>
+  <text x="682" y="872" class="tiletitle">App settings, set by the template</text>
+  <text x="682" y="890" class="tiletext">Module outputs feed each app's settings at</text>
+  <text x="682" y="906" class="tiletext">deploy time: endpoints, AZURE_CLIENT_ID, the</text>
+  <text x="682" y="922" class="tiletext">Key Vault reference, App Insights. No step in</text>
+  <text x="682" y="938" class="tiletext">the pipeline copies settings.</text>
+  <rect x="670" y="958" width="310" height="94" class="note"/>
+  <text x="682" y="978" class="tiletitle">spaConfig → the SPA's config.json</text>
+  <text x="682" y="996" class="tiletext">Stage 3 writes it next to the built SPA:</text>
+  <text x="682" y="1012" class="tiletext">apiBaseUrl, Entra ids, App Insights. The SPA</text>
+  <text x="682" y="1028" class="tiletext">fetches /config.json at start-up, so one</text>
+  <text x="682" y="1044" class="tiletext">build serves every environment.</text>
+  <rect x="670" y="1064" width="310" height="78" class="manual"/>
+  <text x="682" y="1084" class="tiletitle">acrLoginServer → containerImage</text>
+  <text x="682" y="1102" class="tiletext">Stage 3 prints the image tag; copy it into</text>
+  <text x="682" y="1118" class="tiletext">main.bicepparam so Bicep and the pipeline</text>
+  <text x="682" y="1134" class="tiletext">agree on the image.</text>
+  <path d="M640 900 H668" class="repl"/>
+  <path d="M640 962 H660 V1006 H668" class="repl"/>
+  <path d="M640 990 H650 V1104 H668" class="flow dash"/>
+  <!-- ============ Guard rails: phases 8 and 9 ============ -->
+  <rect x="1030" y="810" width="820" height="390" class="zone" rx="6"/>
+  <text x="1046" y="834" class="zonetitle">Guard rails · phases 8 and 9</text>
+  <rect x="1046" y="852" width="392" height="90" class="svc"/>
+  <use href="#i-template" x="1057" y="879" width="36" height="36"/>
+  <text x="1104" y="874" class="itemname">What-if before every deploy (stage 2)</text>
+  <text x="1104" y="892" class="itemdesc">Predicts creates, modifications and deletes and</text>
+  <text x="1104" y="908" class="itemdesc">changes nothing. Read it in the run log, or run it</text>
+  <text x="1104" y="924" class="mono">az deployment sub what-if -p main.bicepparam</text>
+  <rect x="1448" y="852" width="386" height="106" class="opt"/>
+  <use href="#i-template" x="1459" y="887" width="36" height="36"/>
+  <text x="1506" y="874" class="itemname">Deployment stack (phase 8 lab)</text>
+  <text x="1506" y="892" class="itemdesc">A switch set to false deletes its resources on</text>
+  <text x="1506" y="908" class="itemdesc">the next run; today they stay and keep billing.</text>
+  <text x="1506" y="924" class="itemdesc">Deny settings can block portal edits. Stage 3</text>
+  <text x="1506" y="940" class="itemdesc">then reads the outputs from the stack.</text>
+  <rect x="1046" y="968" width="392" height="106" class="svc"/>
+  <use href="#i-policy" x="1057" y="1003" width="36" height="36"/>
+  <text x="1104" y="990" class="itemname">Azure Policy (deployGovernance = true)</text>
+  <text x="1104" y="1008" class="itemdesc">Allowed locations, Deny: a deployment to another</text>
+  <text x="1104" y="1024" class="itemdesc">region fails, even from the pipeline. Inherit the</text>
+  <text x="1104" y="1040" class="itemdesc">environment tag, Modify, with a remediation</text>
+  <text x="1104" y="1056" class="itemdesc">identity for resources that already exist.</text>
+  <rect x="1448" y="968" width="386" height="90" class="svc"/>
+  <use href="#i-budget" x="1459" y="995" width="36" height="36"/>
+  <text x="1506" y="990" class="itemname">Budget on the resource group</text>
+  <text x="1506" y="1008" class="itemdesc">monthlyBudget = 50. Emails ownerEmail at 50%</text>
+  <text x="1506" y="1024" class="itemdesc">and 80% of actual cost and at 100% forecast.</text>
+  <text x="1506" y="1040" class="itemdesc">It alerts; it never stops anything.</text>
+  <rect x="1046" y="1084" width="392" height="90" class="opt"/>
+  <use href="#i-template" x="1057" y="1111" width="36" height="36"/>
+  <text x="1104" y="1106" class="itemname">Template spec (phase 8 lab)</text>
+  <text x="1104" y="1124" class="mono">az ts create -n cloudmart -v 1.0</text>
+  <text x="1104" y="1140" class="itemdesc">a versioned template other teams can deploy</text>
+  <text x="1104" y="1156" class="itemdesc">with RBAC, without access to the repo.</text>
+  <rect x="1448" y="1084" width="386" height="90" class="opt"/>
+  <use href="#i-policy" x="1459" y="1111" width="36" height="36"/>
+  <text x="1506" y="1106" class="itemname">Phase 9 labs (portal and CLI)</text>
+  <text x="1506" y="1124" class="itemdesc">Security benchmark initiative (Audit),</text>
+  <text x="1506" y="1140" class="itemdesc">management groups, Resource Graph queries,</text>
+  <text x="1506" y="1156" class="itemdesc">Cost Management exports and Advisor.</text>
+  <!-- ============ Secrets and identity ============ -->
+  <rect x="30" y="1220" width="900" height="400" class="zone" rx="6"/>
+  <text x="46" y="1244" class="zonetitle">Secrets and identity: no keys to rotate</text>
+  <rect x="50" y="1262" width="860" height="58" class="svc"/>
+  <use href="#i-identity" x="61" y="1273" width="36" height="36"/>
+  <text x="108" y="1284" class="itemname">Pipeline: workload identity federation</text>
+  <text x="108" y="1302" class="itemdesc">The service connection trades an Azure DevOps token for a short-lived Entra token on each job: no client secret.</text>
+  <rect x="50" y="1328" width="860" height="58" class="svc"/>
+  <use href="#i-identity" x="61" y="1339" width="36" height="36"/>
+  <text x="108" y="1350" class="itemname">Apps: four user-assigned managed identities, least privilege</text>
+  <text x="108" y="1368" class="itemdesc">id-cloudmart-&lt;env&gt;-api, -func, -pay, -ship, picked by AZURE_CLIENT_ID. Data roles grant only what each uses.</text>
+  <rect x="50" y="1394" width="860" height="58" class="svc"/>
+  <use href="#i-keyvault" x="61" y="1405" width="36" height="36"/>
+  <text x="108" y="1416" class="itemname">Key Vault (RBAC mode): the one application secret</text>
+  <text x="108" y="1434" class="itemdesc">PaymentGateway--ApiKey, seeded by Bicep from a @secure() parameter; read as a Key Vault reference setting.</text>
+  <rect x="50" y="1460" width="860" height="58" class="svc"/>
+  <use href="#i-entra" x="61" y="1471" width="36" height="36"/>
+  <text x="108" y="1482" class="itemname">Keys and passwords switched off</text>
+  <text x="108" y="1500" class="itemdesc">Storage shared keys off, SQL Entra-only, Functions host storage by identity, FTP and SCM basic auth off.</text>
+  <rect x="50" y="1526" width="860" height="58" class="manual"/>
+  <use href="#i-sql" x="61" y="1537" width="36" height="36"/>
+  <text x="108" y="1548" class="itemname">By hand after the first deploy: what Bicep can't do</text>
+  <text x="108" y="1566" class="itemdesc">deploy/sql/grant-managed-identities.sql (database users, T-SQL); deploy/entra/setup-service-auth.sh (phase 16 app roles).</text>
+  <text x="50" y="1608" class="tiletext">The one token left is the Static Web Apps deployment token: stage 3 reads it at run time and never stores it.</text>
+  <!-- ============ Schema delivery ============ -->
+  <rect x="950" y="1220" width="900" height="400" class="zone" rx="6"/>
+  <text x="966" y="1244" class="zonetitle">Schema delivery: the orders and payments databases</text>
+  <rect x="966" y="1262" width="410" height="170" class="svc"/>
+  <use href="#i-sql" x="977" y="1329" width="36" height="36"/>
+  <text x="1024" y="1284" class="itemname">Today: each app creates its own schema</text>
+  <text x="1024" y="1302" class="itemdesc">The API calls EnsureCreatedAsync at start-up</text>
+  <text x="1024" y="1318" class="itemdesc">(Orders:EnsureCreated = true). Payments runs</text>
+  <text x="1024" y="1334" class="itemdesc">IF OBJECT_ID(...) IS NULL CREATE TABLE.</text>
+  <text x="1024" y="1350" class="itemdesc">EnsureCreated builds the schema only in an</text>
+  <text x="1024" y="1366" class="itemdesc">empty database and never updates it: a model</text>
+  <text x="1024" y="1382" class="itemdesc">change needs a hand-written script.</text>
+  <text x="1024" y="1398" class="itemdesc">So the API and Payments identities hold</text>
+  <text x="1024" y="1414" class="itemdesc">db_ddladmin (grant-managed-identities.sql).</text>
+  <rect x="1424" y="1262" width="410" height="170" class="opt"/>
+  <use href="#i-sql" x="1435" y="1329" width="36" height="36"/>
+  <text x="1482" y="1284" class="itemname">Production: an EF migration bundle</text>
+  <text x="1482" y="1302" class="itemdesc">Build: dotnet ef migrations bundle, so the drop</text>
+  <text x="1482" y="1318" class="itemdesc">carries an efbundle executable. A step between</text>
+  <text x="1482" y="1334" class="itemdesc">stages 2 and 3 runs it as a deployment identity.</text>
+  <text x="1482" y="1350" class="itemdesc">Then Orders:EnsureCreated = false and drop</text>
+  <text x="1482" y="1366" class="itemdesc">db_ddladmin: the apps keep data rights only.</text>
+  <text x="1482" y="1382" class="warn">With private endpoints on, Microsoft-hosted</text>
+  <text x="1482" y="1398" class="warn">agents can't reach SQL: run it from a self-</text>
+  <text x="1482" y="1414" class="warn">hosted agent inside the VNet.</text>
+  <path d="M1376 1347 H1422" class="flow"/>
+  <text x="1399" y="1340" class="flowlabel" text-anchor="middle">later</text>
+  <rect x="966" y="1462" width="270" height="44" class="note"/>
+  <text x="978" y="1481" class="itemname">Stage 2: infrastructure</text>
+  <text x="978" y="1497" class="itemdesc">the database exists, still empty</text>
+  <path d="M1236 1484 H1262" class="flow"/>
+  <rect x="1264" y="1462" width="300" height="44" class="optnote"/>
+  <text x="1276" y="1481" class="itemname">Migrate: ./efbundle --connection …</text>
+  <text x="1276" y="1497" class="itemdesc">schema first, backward compatible</text>
+  <path d="M1564 1484 H1590" class="flow"/>
+  <rect x="1592" y="1462" width="242" height="44" class="note"/>
+  <text x="1604" y="1481" class="itemname">Stage 3: applications</text>
+  <text x="1604" y="1497" class="itemdesc">new code on the new schema</text>
+  <text x="966" y="1540" class="tiletext">Additive changes first (expand, then contract), so the previous build still runs while the new one deploys,</text>
+  <text x="966" y="1556" class="tiletext">and rolling the code back doesn't need a schema rollback.</text>
+  <!-- ============ Rollback ============ -->
+  <rect x="30" y="1640" width="1240" height="380" class="zone" rx="6"/>
+  <text x="46" y="1664" class="zonetitle">Rollback: what the current SKUs allow, and what needs more</text>
+  <rect x="750" y="1676" width="504" height="330" class="optcell"/>
+  <text x="250" y="1696" class="tiletitle">Today, with the SKUs in the template</text>
+  <text x="760" y="1696" class="tiletitle">Needs more (a bigger SKU or a lab step)</text>
+  <path d="M50 1706 H1254" class="rule"/>
+  <text x="50" y="1726" class="rowlabel">API, Payments, Shipping</text>
+  <text x="50" y="1743" class="itemdesc">App Service B1</text>
+  <text x="250" y="1726" class="tiletext">Basic has no deployment slots: redeploy the previous run's zip.</text>
+  <text x="250" y="1742" class="tiletext">The site restarts on deploy: expect a few seconds of errors.</text>
+  <text x="760" y="1726" class="tiletext">S1, or Premium v3 (zoneRedundant already sets P1v3): deploy to a</text>
+  <text x="760" y="1742" class="tiletext">staging slot, warm it up, swap. Swapping back is the rollback.</text>
+  <path d="M50 1756 H1254" class="rule"/>
+  <text x="50" y="1776" class="rowlabel">Functions</text>
+  <text x="50" y="1793" class="itemdesc">Flex Consumption FC1</text>
+  <text x="250" y="1776" class="tiletext">No deployment slots on Flex Consumption: redeploy the previous</text>
+  <text x="250" y="1792" class="tiletext">functions.zip.</text>
+  <text x="760" y="1776" class="tiletext">Version orchestrator changes: sagas in flight replay their history</text>
+  <text x="760" y="1792" class="tiletext">on the new code, so a breaking change fails them.</text>
+  <path d="M50 1806 H1254" class="rule"/>
+  <text x="50" y="1826" class="rowlabel">SPA</text>
+  <text x="50" y="1843" class="itemdesc">Static Web Apps Free</text>
+  <text x="250" y="1826" class="tiletext">Redeploy the previous drop; stage 3 writes config.json again.</text>
+  <text x="250" y="1842" class="tiletext">Preview environments are already enabled on the site.</text>
+  <text x="760" y="1826" class="tiletext">Deploy with --env &lt;name&gt; to a preview URL first, test it, then</text>
+  <text x="760" y="1842" class="tiletext">deploy to production. Free allows 3 preview environments, Standard 10.</text>
+  <path d="M50 1856 H1254" class="rule"/>
+  <text x="50" y="1876" class="rowlabel">Containers</text>
+  <text x="50" y="1893" class="itemdesc">Container Apps, AKS</text>
+  <text x="250" y="1876" class="tiletext">Single revision mode. Images are tagged with the BuildId: set</text>
+  <text x="250" y="1892" class="tiletext">containerImage to the earlier tag and redeploy.</text>
+  <text x="760" y="1876" class="tiletext">Multiple revision mode: send 10% to the new revision, then 100%.</text>
+  <text x="760" y="1892" class="tiletext">Rolling back is moving the traffic back (phase 8 lab).</text>
+  <path d="M50 1906 H1254" class="rule"/>
+  <text x="50" y="1926" class="rowlabel">Infrastructure</text>
+  <text x="50" y="1943" class="itemdesc">Bicep</text>
+  <text x="250" y="1926" class="tiletext">Revert the commit; the pipeline applies the earlier template. Resources</text>
+  <text x="250" y="1942" class="tiletext">a switch added stay, and no deployment rolls data back.</text>
+  <text x="760" y="1926" class="tiletext">Deployment stack: resources removed from the template are deleted.</text>
+  <text x="760" y="1942" class="tiletext">Data comes back from backups and point-in-time restore (phase 11).</text>
+  <path d="M50 1956 H1254" class="rule"/>
+  <text x="50" y="1976" class="rowlabel">Database schema</text>
+  <text x="50" y="1993" class="itemdesc">Azure SQL</text>
+  <text x="250" y="1976" class="tiletext">EnsureCreated has no undo and no update: a model change needs a</text>
+  <text x="250" y="1992" class="tiletext">hand-written script.</text>
+  <text x="760" y="1976" class="tiletext">Migration bundle with additive changes: the previous build still</text>
+  <text x="760" y="1992" class="tiletext">works. ./efbundle &lt;earlier migration&gt; runs the Down steps.</text>
+  <!-- ============ Day-2 signals ============ -->
+  <rect x="1290" y="1640" width="560" height="380" class="zone" rx="6"/>
+  <text x="1306" y="1664" class="zonetitle">Running it: signals after a deploy (phase 7)</text>
+  <rect x="1306" y="1682" width="528" height="74" class="svc"/>
+  <use href="#i-appinsights" x="1317" y="1701" width="36" height="36"/>
+  <text x="1364" y="1704" class="itemname">Application Insights + Log Analytics</text>
+  <text x="1364" y="1722" class="itemdesc">Every service logs to one workspace; queries in docs/kql/cloudmart.kql.</text>
+  <text x="1364" y="1738" class="itemdesc">Version 1.0.&lt;BuildId&gt; ties what is running to a pipeline run.</text>
+  <rect x="1306" y="1764" width="528" height="74" class="svc"/>
+  <use href="#i-alert" x="1317" y="1783" width="36" height="36"/>
+  <text x="1364" y="1786" class="itemname">Alerts → action group → ownerEmail</text>
+  <text x="1364" y="1804" class="itemdesc">Exception spike and order needs review; from phase 5, Service Bus</text>
+  <text x="1364" y="1820" class="itemdesc">dead letters and a growing backlog.</text>
+  <rect x="1306" y="1846" width="528" height="74" class="svc"/>
+  <use href="#i-appservice" x="1317" y="1865" width="36" height="36"/>
+  <text x="1364" y="1868" class="itemname">Health endpoints</text>
+  <text x="1364" y="1886" class="itemdesc">/health/live is App Service's health check; /health/ready checks</text>
+  <text x="1364" y="1902" class="itemdesc">each dependency the app is configured to use.</text>
+  <rect x="1306" y="1928" width="528" height="74" class="opt"/>
+  <use href="#i-pipelines" x="1317" y="1947" width="36" height="36"/>
+  <text x="1364" y="1950" class="itemname">Smoke test after stage 3 (not in the pipeline yet)</text>
+  <text x="1364" y="1968" class="itemdesc">Call /health/ready and fail the run, so the pipeline catches a bad</text>
+  <text x="1364" y="1984" class="itemdesc">deploy before users do.</text>
+</svg>
