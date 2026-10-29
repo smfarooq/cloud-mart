@@ -1,0 +1,1674 @@
+<!doctype html>
+<!--
+  Source of docs/portal-guide.pdf, a beginner's visual guide to CloudMart's phase 1 foundation in the Azure Portal.
+  To rebuild the PDF, print this file with Chrome or Edge (headless):
+    chrome --headless --no-pdf-header-footer --generate-pdf-document-outline --print-to-pdf=docs/portal-guide.pdf docs/portal-guide.html
+  The page numbers in the contents are filled in by hand (or by a two-pass script) after a first print.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CloudMart: your first steps in the Azure Portal</title>
+<style>
+:root {
+  --ink: #1d2733;
+  --muted: #5d6876;
+  --line: #d8dee6;
+  --accent: #0b5cad;
+  --accent-dark: #0a2f5c;
+  --accent-soft: #e9f1fb;
+  --ok: #0f7b3f;
+  --ok-soft: #e8f5ed;
+  --warn: #9a4d00;
+  --warn-soft: #fdf2e2;
+  --bad: #c42b1c;
+  --note: #5b4a9e;
+  --note-soft: #f1eefb;
+  --code-bg: #f3f5f8;
+  --step: #0b5cad;
+}
+@page {
+  size: A4;
+  margin: 17mm 16mm 17mm 16mm;
+  @top-left { content: "CloudMart · Your first steps in the Azure Portal"; font: 7.5pt "Segoe UI", sans-serif; color: #8b95a3; }
+  @top-right { content: "Beginner guide · October 2026"; font: 7.5pt "Segoe UI", sans-serif; color: #8b95a3; }
+  @bottom-right { content: counter(page); font: 600 8.5pt "Segoe UI", sans-serif; color: #0b5cad; }
+  @bottom-left { content: "Screens are simplified illustrations. The live portal changes often and may look a little different."; font: 7pt "Segoe UI", sans-serif; color: #a2abb7; }
+}
+@page cover { margin: 0; @top-left { content: none } @top-right { content: none } @bottom-right { content: none } @bottom-left { content: none } }
+
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; font-size: 9.6pt; line-height: 1.5; color: var(--ink); background: #fff; }
+p { margin: 0 0 7px; }
+a { color: var(--accent); text-decoration: none; }
+b, strong { font-weight: 600; }
+code, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.6pt; }
+code { background: var(--code-bg); padding: 0 3px; border-radius: 3px; color: #233; }
+pre { font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.2pt; line-height: 1.45; background: #1e2a38; color: #e7edf5; padding: 9px 12px; border-radius: 6px; margin: 6px 0 9px; white-space: pre-wrap; break-inside: avoid; }
+pre .c { color: #8fa3ba; }
+ul, ol { margin: 0 0 8px; padding-left: 18px; }
+li { margin: 2px 0; }
+h1, h2, h3 { line-height: 1.2; break-after: avoid; }
+h2 { font-size: 15pt; margin: 0 0 8px; color: var(--accent-dark); }
+h3 { font-size: 11pt; margin: 14px 0 5px; color: var(--accent-dark); }
+h3 .sub { font-weight: 400; color: var(--muted); font-size: 9pt; }
+.page { break-before: page; }
+.avoid { break-inside: avoid; }
+.lead { font-size: 10.6pt; color: #33404f; }
+.muted { color: var(--muted); }
+.small { font-size: 8.4pt; }
+.center { text-align: center; }
+
+/* ---------- cover ---------- */
+.cover { page: cover; height: 297mm; position: relative; overflow: hidden; }
+.cover .band { background: linear-gradient(160deg, #0a2f5c 0%, #0b5cad 70%, #1a7fd6 100%); color: #fff; padding: 26mm 20mm 0; height: 168mm; }
+.cover .kicker { font-size: 9.5pt; letter-spacing: .14em; text-transform: uppercase; opacity: .85; }
+.cover h1 { font-size: 34pt; font-weight: 700; margin: 6mm 0 4mm; line-height: 1.08; }
+.cover .subtitle { font-size: 13pt; max-width: 150mm; opacity: .95; line-height: 1.4; }
+.cover .art { position: absolute; left: 20mm; right: 20mm; top: 98mm; }
+.cover .inside { position: absolute; left: 20mm; right: 20mm; top: 198mm; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5mm; }
+.cover .inside div { border-top: 3px solid var(--accent); padding-top: 3mm; font-size: 8.8pt; color: #33404f; }
+.cover .inside b { display: block; font-size: 10pt; color: var(--accent-dark); margin-bottom: 1mm; }
+.cover .foot { position: absolute; left: 20mm; right: 20mm; bottom: 14mm; font-size: 8pt; color: #7a8594; border-top: 1px solid var(--line); padding-top: 3mm; display: flex; justify-content: space-between; }
+
+/* ---------- part banner ---------- */
+.part { background: linear-gradient(120deg, #0a2f5c, #0b5cad); color: #fff; border-radius: 10px; padding: 14px 18px 13px; margin-bottom: 14px; }
+.part .k { font-size: 8.5pt; letter-spacing: .16em; text-transform: uppercase; opacity: .8; }
+.part h1 { margin: 3px 0 4px; font-size: 21pt; }
+.part p { margin: 0; opacity: .92; font-size: 10pt; }
+
+/* ---------- step header ---------- */
+.step-head { display: flex; gap: 12px; align-items: stretch; margin-bottom: 10px; }
+.step-num { flex: 0 0 auto; width: 58px; background: var(--step); color: #fff; border-radius: 9px; text-align: center; padding-top: 6px; }
+.step-num small { display: block; font-size: 7pt; letter-spacing: .14em; opacity: .85; }
+.step-num span { display: block; font-size: 24pt; font-weight: 700; line-height: 1.05; }
+.step-head h2 { margin: 2px 0 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { font-size: 7.6pt; border: 1px solid var(--line); border-radius: 20px; padding: 1px 8px; color: #44505e; background: #fafbfc; }
+.chip b { color: var(--accent-dark); font-weight: 600; letter-spacing: .04em; margin-right: 3px; }
+
+/* ---------- click path ---------- */
+.path { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0 9px; font-size: 8.8pt; }
+.path .lbl { font-size: 7.5pt; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; margin-right: 4px; }
+.path span.p { background: var(--accent-soft); color: var(--accent-dark); border: 1px solid #c4d7ee; border-radius: 4px; padding: 1px 7px; font-weight: 600; }
+.path i { font-style: normal; color: #8a96a6; }
+
+/* ---------- boxes ---------- */
+.box { border-left: 4px solid; border-radius: 0 6px 6px 0; padding: 7px 11px 6px; margin: 8px 0; break-inside: avoid; }
+.box > .t { font-size: 7.6pt; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 2px; }
+.box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+.why { background: var(--accent-soft); border-color: var(--accent); } .why > .t { color: var(--accent); }
+.warn { background: var(--warn-soft); border-color: #e08a1e; } .warn > .t { color: var(--warn); }
+.check { background: var(--ok-soft); border-color: var(--ok); } .check > .t { color: var(--ok); }
+.note { background: var(--note-soft); border-color: var(--note); } .note > .t { color: var(--note); }
+.bicep { background: #f4f6f9; border-color: #3a4a5e; } .bicep > .t { color: #3a4a5e; }
+.bicep pre { margin: 4px 0 2px; }
+
+/* ---------- tables ---------- */
+table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 8.8pt; break-inside: auto; }
+th { text-align: left; background: #eef2f7; color: #2b3847; font-weight: 600; padding: 5px 7px; border-bottom: 1px solid #cfd7e1; }
+td { padding: 4.5px 7px; border-bottom: 1px solid #e6eaf0; vertical-align: top; }
+tr { break-inside: avoid; }
+table.fields td:first-child { font-weight: 600; width: 26%; color: #263443; }
+table.fields td:nth-child(2) { width: 33%; }
+td .v { font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.3pt; background: #fff7d6; padding: 0 3px; border-radius: 3px; color: #3d2f00; }
+.yes { color: var(--ok); font-weight: 700; } .no { color: var(--bad); font-weight: 700; }
+
+/* ---------- numbered actions ---------- */
+ol.do { counter-reset: d; list-style: none; padding-left: 0; }
+ol.do > li { counter-increment: d; position: relative; padding-left: 26px; margin: 5px 0; }
+ol.do > li::before { content: counter(d); position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; background: var(--accent-dark); color: #fff; font-size: 8pt; font-weight: 700; text-align: center; line-height: 18px; }
+
+/* ---------- figures ---------- */
+figure { margin: 8px 0 10px; break-inside: avoid; }
+figcaption { font-size: 8pt; color: var(--muted); margin-top: 4px; }
+figcaption b { color: #3a4654; }
+svg { display: block; width: 100%; height: auto; }
+svg text { font-family: "Segoe UI", sans-serif; }
+
+/* ---------- portal mock-ups ---------- */
+.mock { border: 1px solid #c3ccd7; border-radius: 8px; overflow: hidden; font-size: 8.3pt; line-height: 1.35; background: #fff; box-shadow: 0 1px 4px rgba(16, 38, 66, .10); }
+.mock .bar { background: #1b3555; color: #fff; display: flex; align-items: center; gap: 9px; padding: 5px 10px; font-size: 8pt; }
+.mock .bar .menu { width: 13px; height: 9px; border-top: 2px solid #fff; border-bottom: 2px solid #fff; position: relative; }
+.mock .bar .menu::after { content: ""; position: absolute; left: 0; right: 0; top: 1.5px; border-top: 2px solid #fff; }
+.mock .bar .s { flex: 1; background: rgba(255, 255, 255, .14); border-radius: 4px; padding: 2px 8px; color: #d9e4f1; }
+.mock .bar .ic { display: inline-flex; gap: 8px; align-items: center; color: #d9e4f1; font-family: Consolas, monospace; font-size: 8pt; }
+.mock .bar .av { width: 15px; height: 15px; border-radius: 50%; background: #8fb6e3; display: inline-block; }
+.mock .crumb { color: var(--accent); padding: 7px 14px 0; font-size: 7.8pt; }
+.mock .ttl { font-size: 12pt; font-weight: 600; padding: 1px 14px 6px; }
+.mock .ttl small { font-size: 8pt; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.mock .tabs { display: flex; gap: 15px; padding: 0 14px; border-bottom: 1px solid #e1e5ea; flex-wrap: wrap; }
+.mock .tabs span { padding: 5px 0 4px; color: #4b5563; }
+.mock .tabs .on { border-bottom: 2px solid var(--accent); font-weight: 600; color: #111; }
+.mock .body { padding: 8px 14px 10px; }
+.mock .sec { font-weight: 600; margin: 7px 0 3px; font-size: 8.8pt; }
+.mock .sec:first-child { margin-top: 0; }
+.mock .hint { color: var(--muted); font-size: 7.8pt; margin: 0 0 4px; }
+.mock .row { display: grid; grid-template-columns: 37% 1fr; align-items: center; gap: 8px; padding: 2.5px 0; }
+.mock .row.ind label { padding-left: 14px; }
+.mock .row label { color: #2f3a46; }
+.mock .req::after { content: " *"; color: var(--bad); }
+.mock .in, .mock .sel { border: 1px solid #8a8886; border-radius: 2px; padding: 2px 6px; min-height: 19px; background: #fff; }
+.mock .sel { position: relative; padding-right: 20px; }
+.mock .sel::after { content: ""; position: absolute; right: 7px; top: 7px; border: 4px solid transparent; border-top-color: #555; }
+.mock .lnk { color: var(--accent); font-size: 7.8pt; }
+.mock .hl { background: #fff6cf; box-shadow: 0 0 0 1.5px #f0c23b; }
+.mock .foot { border-top: 1px solid #e1e5ea; padding: 7px 14px; display: flex; gap: 7px; align-items: center; }
+.mock .btn { border: 1px solid #8a8886; border-radius: 2px; padding: 2px 11px; background: #fff; white-space: nowrap; }
+.mock .btn.p { background: var(--accent); color: #fff; border-color: var(--accent); }
+.mock .radio, .mock .chk { display: inline-flex; align-items: center; gap: 5px; margin-right: 12px; }
+.mock .radio::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #605e5c; box-sizing: border-box; }
+.mock .radio.on::before { border: 3.5px solid var(--accent); }
+.mock .chk::before { content: ""; width: 11px; height: 11px; border: 1.5px solid #605e5c; border-radius: 2px; box-sizing: border-box; }
+.mock .chk.on::before { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); background-image: linear-gradient(45deg, transparent 45%, #fff 45%, #fff 58%, transparent 58%); }
+.mock .chk.on { position: relative; }
+.mock .chk.on::after { content: "✓"; position: absolute; left: 1.5px; top: -1px; color: #fff; font-size: 8.5pt; font-weight: 700; }
+.mock .chk.on::before { background-image: none; }
+.mock .ok { color: var(--ok); } .mock .bad { color: var(--bad); }
+.mock .banner { border-radius: 3px; padding: 5px 8px; margin: 2px 0 6px; }
+.mock .banner.ok { background: #dff6dd; color: #0e5b2c; } .mock .banner.err { background: #fde7e9; color: #8e1b1b; } .mock .banner.info { background: #e6f0fb; color: #183e6a; }
+.mock .split { display: grid; grid-template-columns: 30% 1fr; min-height: 160px; }
+.mock .nav { border-right: 1px solid #e1e5ea; padding: 6px 0; font-size: 7.9pt; background: #fbfcfd; }
+.mock .nav div { padding: 2px 12px; color: #2f3a46; }
+.mock .nav .g { font-weight: 600; color: #111; margin-top: 4px; }
+.mock .nav .on { background: #e6eef9; border-left: 3px solid var(--accent); padding-left: 9px; font-weight: 600; }
+.mock .nav .in2 { padding-left: 22px; }
+.mock .cmd { display: flex; gap: 12px; padding: 5px 12px; border-bottom: 1px solid #e1e5ea; color: #2f3a46; font-size: 7.9pt; flex-wrap: wrap; }
+.mock .cmd b { color: var(--accent); font-weight: 600; }
+.mock .ess { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px; padding: 8px 12px; font-size: 7.9pt; }
+.mock .ess span { color: var(--muted); display: block; font-size: 7.4pt; }
+.mock .tiles { display: flex; gap: 8px; padding: 8px 12px 4px; flex-wrap: wrap; }
+.mock .tile { width: 70px; text-align: center; font-size: 7.4pt; color: #2f3a46; }
+.mock .tile i { display: block; width: 30px; height: 30px; margin: 0 auto 3px; border-radius: 7px; background: #dbe8f7; border: 1px solid #b6cce8; font-style: normal; color: var(--accent); font-size: 14pt; line-height: 27px; font-weight: 600; }
+.mock .tile.plus i { background: #fff; border: 1px dashed var(--accent); }
+.mock table { font-size: 7.9pt; margin: 2px 0; }
+.mock th { background: #f6f8fa; padding: 3px 6px; font-weight: 600; }
+.mock td { padding: 3px 6px; }
+.mock .card { border: 1px solid #c8d0da; border-radius: 6px; padding: 7px 9px; font-size: 7.8pt; }
+.mock .card.sel2 { border: 2px solid var(--accent); background: #f3f8fe; }
+.mock .card b { display: block; font-size: 8.6pt; margin-bottom: 2px; }
+.mock .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.cn { display: inline-block; min-width: 15px; height: 15px; border-radius: 8px; background: #d13438; color: #fff; font: 700 7.6pt/15px "Segoe UI", sans-serif; text-align: center; padding: 0 3px; vertical-align: 1px; margin: 0 2px; font-style: normal; }
+.legend { list-style: none; padding: 0; margin: 6px 0 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; font-size: 8.5pt; }
+.legend li { margin: 0; }
+.legend.one { grid-template-columns: 1fr; }
+
+/* ---------- flow chips ---------- */
+.flow { display: flex; align-items: stretch; gap: 0; margin: 8px 0 10px; break-inside: avoid; }
+.flow > div { flex: 1; background: var(--accent-soft); border: 1px solid #c4d7ee; padding: 7px 8px 6px 15px; font-size: 8pt; position: relative; margin-right: 9px; border-radius: 4px; }
+.flow > div > b:first-of-type { display: block; color: var(--accent-dark); font-size: 8.6pt; }
+table.names { font-size: 8.4pt; margin-bottom: 0; }
+table.names td { padding: 2.5px 7px; }
+.mock.mini { font-size: 7.6pt; }
+.mock.mini .tabs { gap: 9px; padding: 0 9px; flex-wrap: nowrap; }
+.mock.mini .body { padding: 7px 9px 8px; }
+.mock.mini .foot { padding: 6px 9px; }
+.flow > div em { font-style: normal; display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; text-align: center; font-size: 7.6pt; line-height: 16px; position: absolute; left: -6px; top: -6px; }
+.flow > div::after { content: ""; position: absolute; right: -9px; top: 50%; margin-top: -6px; border: 6px solid transparent; border-left-color: #8fb1d9; }
+.flow > div:last-child { margin-right: 0; } .flow > div:last-child::after { display: none; }
+.flow.green > div { background: var(--ok-soft); border-color: #b9dcc6; } .flow.green > div > b:first-of-type { color: #0b5a2f; } .flow.green > div em { background: var(--ok); }
+
+/* ---------- contents ---------- */
+.toc { columns: 2; column-gap: 9mm; font-size: 9pt; }
+.toc .g { break-inside: avoid; margin-bottom: 7px; }
+.toc .g > b { display: block; color: var(--accent-dark); font-size: 9.6pt; border-bottom: 1px solid var(--line); padding-bottom: 2px; margin-bottom: 3px; }
+.toc a { display: flex; color: var(--ink); padding: 1px 0; }
+.toc a .n { flex: 1; overflow: hidden; white-space: nowrap; }
+.toc a .n::after { content: " . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . ."; color: #b8c0ca; }
+.toc a .pn { flex: 0 0 auto; padding-left: 4px; font-weight: 600; color: var(--accent); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.two > div { min-width: 0; }
+.kbd { border: 1px solid #b9c2cd; border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; font-size: 8pt; background: #fbfcfd; }
+.notebook td { height: 22px; }
+.notebook td:first-child { width: 36%; font-weight: 600; }
+.notebook td:nth-child(2) { color: #9aa4b0; font-size: 8pt; width: 22%; }
+.tick { display: inline-block; width: 11px; height: 11px; border: 1.5px solid #7c8794; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<!-- =============================================================== COVER -->
+<section class="cover">
+  <div class="band">
+    <div class="kicker">CloudMart · Azure hands-on series · Beginner</div>
+    <h1>Your first steps in<br>the Azure Portal</h1>
+    <div class="subtitle">Build CloudMart's foundation by clicking, one resource at a time. A visual guide for anyone who is new to Azure.</div>
+  </div>
+  <div class="art">
+    <svg viewBox="0 0 640 300" role="img" aria-label="A resource group drawn as a folder holding the CloudMart building blocks">
+      <defs>
+        <filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0a2f5c" flood-opacity=".22"/></filter>
+      </defs>
+      <rect x="20" y="10" width="600" height="280" rx="18" fill="#ffffff" filter="url(#sh)"/>
+      <rect x="40" y="30" width="560" height="240" rx="12" fill="#f5f8fc" stroke="#7fa6d6" stroke-width="1.5" stroke-dasharray="6 5"/>
+      <text x="60" y="58" font-size="13" font-weight="700" fill="#0a2f5c">rg-cloudmart-lab</text>
+      <text x="190" y="58" font-size="11" fill="#5d6876">a resource group: one folder for the whole lab</text>
+      <g font-size="11.5" font-weight="600" fill="#0a2f5c">
+        <g transform="translate(60,78)"><rect width="118" height="74" rx="9" fill="#e3eefb" stroke="#9dbde4"/><text x="59" y="33" text-anchor="middle">Web App</text><text x="59" y="51" text-anchor="middle" font-weight="400" font-size="10" fill="#4a5868">the API</text></g>
+        <g transform="translate(190,78)"><rect width="118" height="74" rx="9" fill="#e3eefb" stroke="#9dbde4"/><text x="59" y="33" text-anchor="middle">Function App</text><text x="59" y="51" text-anchor="middle" font-weight="400" font-size="10" fill="#4a5868">background jobs</text></g>
+        <g transform="translate(320,78)"><rect width="118" height="74" rx="9" fill="#e3eefb" stroke="#9dbde4"/><text x="59" y="33" text-anchor="middle">Static Web App</text><text x="59" y="51" text-anchor="middle" font-weight="400" font-size="10" fill="#4a5868">the shop website</text></g>
+        <g transform="translate(450,78)"><rect width="118" height="74" rx="9" fill="#fdf0dc" stroke="#e8b874"/><text x="59" y="33" text-anchor="middle">Key Vault</text><text x="59" y="51" text-anchor="middle" font-weight="400" font-size="10" fill="#4a5868">secrets</text></g>
+        <g transform="translate(60,170)"><rect width="118" height="74" rx="9" fill="#fdf0dc" stroke="#e8b874"/><text x="59" y="33" text-anchor="middle">Storage</text><text x="59" y="51" text-anchor="middle" font-weight="400" font-size="10" fill="#4a5868">product images</text></g>
+        <g transform="translate(190,170)"><rect width="118" height="74" rx="9" fill="#e6f4ea" stroke="#9fd0ae"/><text x="59" y="33" text-anchor="middle">Monitoring</text><text x="59" y="51" text-anchor="middle" font-weight="400" font-size="10" fill="#4a5868">logs and alerts</text></g>
+        <g transform="translate(320,170)"><rect width="118" height="74" rx="9" fill="#efeafb" stroke="#bfb1e6"/><text x="59" y="33" text-anchor="middle">Identities</text><text x="59" y="51" text-anchor="middle" font-weight="400" font-size="10" fill="#4a5868">no passwords</text></g>
+        <g transform="translate(450,170)"><rect width="118" height="74" rx="9" fill="#f1f3f6" stroke="#b9c2cd"/><text x="59" y="33" text-anchor="middle">Guard rails</text><text x="59" y="51" text-anchor="middle" font-weight="400" font-size="10" fill="#4a5868">budget, policy, lock</text></g>
+      </g>
+      <path d="M 404 136 l 0 26 l 7 -6 l 5 11 l 5 -2 l -5 -11 l 9 0 z" fill="#1d2733" stroke="#fff" stroke-width="1.5"/>
+    </svg>
+  </div>
+  <div class="inside">
+    <div><b>1 · Understand</b>Portal, CLI and Bicep, and the five ideas that make Azure make sense.</div>
+    <div><b>2 · Build</b>Thirteen illustrated steps that recreate what <span class="mono">infra/main.bicep</span> builds.</div>
+    <div><b>3 · Run</b>Put the CloudMart code on it and watch it work in the portal.</div>
+    <div><b>4 · Clean up</b>Connect clicks to code, delete everything, fix common errors.</div>
+  </div>
+  <div class="foot"><span>For the CloudMart repository · phase 1 foundation · Edition October 2026</span><span>No Azure experience needed</span></div>
+</section>
+
+<!-- =============================================================== HOW TO USE + CONTENTS -->
+<section class="page">
+  <h2>How to use this guide</h2>
+  <p class="lead">This guide is for someone who has never used Azure. You will build a small copy of CloudMart's cloud setup by clicking through the Azure Portal, so you can <b>see</b> every option before you automate it.</p>
+  <div class="two">
+    <div>
+      <h3>You will need</h3>
+      <ul>
+        <li>A web browser and an <b>Azure subscription</b> where you are allowed to create things. A free account works (see Step 1).</li>
+        <li>About <b>2 to 3 hours</b> for Part 2. You can stop between steps.</li>
+        <li>An email address for budget and alert emails.</li>
+        <li>For Part 3 only: a laptop with the .NET 10 SDK, Node.js 24, Git and the Azure CLI (CloudMart's <span class="mono">docs/learning-path.md</span>, phase 0).</li>
+      </ul>
+    </div>
+    <div>
+      <h3>The coloured boxes</h3>
+      <div class="box why" style="margin:4px 0"><div class="t">Why</div><p>What a thing is for, in plain words.</p></div>
+      <div class="box warn" style="margin:4px 0"><div class="t">Watch out</div><p>A mistake beginners often make.</p></div>
+      <div class="box check" style="margin:4px 0"><div class="t">Check it worked</div><p>How to prove the step succeeded.</p></div>
+      <div class="box bicep" style="margin:4px 0"><div class="t">Same thing in Bicep</div><p>Where CloudMart's code does what you just clicked.</p></div>
+    </div>
+  </div>
+  <p class="small muted">Click paths look like this: <span class="path" style="display:inline-flex;margin:0"><span class="p">Search</span><i>›</i><span class="p">Key vaults</span><i>›</i><span class="p">+ Create</span></span>. Red numbers such as <i class="cn">1</i> point at parts of a picture. Values to type look like <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">this</span>.</p>
+
+  <h2 style="margin-top:14px">Contents</h2>
+  <div class="toc">
+    <div class="g"><b>Part 1 · Understand before you click</b>
+      <a href="#p1-doors"><span class="n">1.1 Portal, CLI or Bicep? A quick correction</span><span class="pn" data-for="p1-doors">3</span></a>
+      <a href="#p1-ideas"><span class="n">1.2 Azure in five ideas</span><span class="pn" data-for="p1-ideas">4</span></a>
+      <a href="#p1-planes"><span class="n">1.3 Two kinds of permission</span><span class="pn" data-for="p1-planes">5</span></a>
+      <a href="#p1-money"><span class="n">1.4 Money: avoiding a surprise bill</span><span class="pn" data-for="p1-money">6</span></a>
+      <a href="#p1-tour"><span class="n">1.5 A tour of the Azure Portal</span><span class="pn" data-for="p1-tour">7</span></a>
+      <a href="#p1-pattern"><span class="n">1.6 The pattern every "Create" follows</span><span class="pn" data-for="p1-pattern">8</span></a>
+    </div>
+    <div class="g"><b>Part 2 · Build CloudMart's foundation</b>
+      <a href="#p2-map"><span class="n">What you will build</span><span class="pn" data-for="p2-map">9</span></a>
+      <a href="#s1"><span class="n">Step 1 · Sign in and check your subscription</span><span class="pn" data-for="s1">11</span></a>
+      <a href="#s2"><span class="n">Step 2 · Resource group</span><span class="pn" data-for="s2">12</span></a>
+      <a href="#s3"><span class="n">Step 3 · Budget</span><span class="pn" data-for="s3">13</span></a>
+      <a href="#s4"><span class="n">Step 4 · Log Analytics workspace</span><span class="pn" data-for="s4">14</span></a>
+      <a href="#s5"><span class="n">Step 5 · Application Insights</span><span class="pn" data-for="s5">14</span></a>
+      <a href="#s6"><span class="n">Step 6 · Two managed identities</span><span class="pn" data-for="s6">15</span></a>
+      <a href="#s7"><span class="n">Step 7 · Key Vault</span><span class="pn" data-for="s7">16</span></a>
+      <a href="#s8"><span class="n">Step 8 · Storage account</span><span class="pn" data-for="s8">19</span></a>
+      <a href="#s9"><span class="n">Step 9 · Static Web App</span><span class="pn" data-for="s9">21</span></a>
+      <a href="#s10"><span class="n">Step 10 · Web App for the API</span><span class="pn" data-for="s10">22</span></a>
+      <a href="#s11"><span class="n">Step 11 · Function App</span><span class="pn" data-for="s11">24</span></a>
+      <a href="#s12"><span class="n">Step 12 · An alert that emails you</span><span class="pn" data-for="s12">26</span></a>
+      <a href="#s13"><span class="n">Step 13 · Guard rails: policy and lock</span><span class="pn" data-for="s13">27</span></a>
+    </div>
+    <div class="g"><b>Part 3 · Put CloudMart's code on it</b>
+      <a href="#p3"><span class="n">Deploy, try the shop, watch it live</span><span class="pn" data-for="p3">28</span></a>
+    </div>
+    <div class="g"><b>Part 4 · From clicks to code</b>
+      <a href="#p4"><span class="n">Export template, activity log, deployments</span><span class="pn" data-for="p4">30</span></a>
+      <a href="#p4-rosetta"><span class="n">Portal ↔ CLI ↔ Bicep cheat sheet</span><span class="pn" data-for="p4-rosetta">31</span></a>
+      <a href="#p4-real"><span class="n">Now do it the real way, with Bicep</span><span class="pn" data-for="p4-real">32</span></a>
+    </div>
+    <div class="g"><b>Part 5 · Clean up and reference</b>
+      <a href="#p5"><span class="n">Clean up: delete everything</span><span class="pn" data-for="p5">33</span></a>
+      <a href="#trouble"><span class="n">Troubleshooting: messages and fixes</span><span class="pn" data-for="trouble">34</span></a>
+      <a href="#glossary"><span class="n">Glossary</span><span class="pn" data-for="glossary">35</span></a>
+      <a href="#next"><span class="n">What's next</span><span class="pn" data-for="next">36</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== PART 1 -->
+<section class="page" id="p1-doors">
+  <div class="part"><div class="k">Part 1</div><h1>Understand before you click</h1><p>Six short pages that make every later step easier.</p></div>
+
+  <h2>1.1 Portal, CLI or Bicep? A quick correction</h2>
+  <p>You may have heard that CloudMart "uses the Azure CLI to create its resources". That is <b>almost</b> right. Here is the precise picture:</p>
+  <ul>
+    <li>CloudMart's resources are <b>described in Bicep files</b>: <span class="mono">infra/main.bicep</span> plus 27 modules in <span class="mono">infra/modules/</span>. Bicep is a blueprint. It says <i>what should exist</i>, not the clicks or commands to get there.</li>
+    <li>The <b>Azure CLI is the courier</b>. <code>az deployment sub what-if</code> previews the blueprint and <code>az deployment sub create</code> hands it to Azure, which builds everything in the right order. The CLI does not create the resources one command at a time.</li>
+    <li>The CLI is used directly only for hands-on jobs: signing in (<code>az login</code>), uploading code (<code>az webapp deploy</code>), building images (<code>az acr build</code>) and lab exercises.</li>
+    <li>From phase 8, an <b>Azure Pipeline</b> runs the same commands for you whenever code is pushed.</li>
+  </ul>
+  <figure>
+    <svg viewBox="0 0 680 290" role="img" aria-label="Portal, CLI and Bicep all send requests to Azure Resource Manager, which builds the resources">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5d7fa8"/></marker></defs>
+      <g font-size="12.5">
+        <rect x="6" y="12" width="190" height="64" rx="10" fill="#fff" stroke="#9db7dd" stroke-width="1.5"/>
+        <text x="20" y="38" font-weight="700" fill="#0a2f5c">Azure Portal</text><text x="20" y="58" font-size="11" fill="#4a5868">click through web pages</text>
+        <rect x="6" y="104" width="190" height="64" rx="10" fill="#fff" stroke="#9db7dd" stroke-width="1.5"/>
+        <text x="20" y="130" font-weight="700" fill="#0a2f5c">Azure CLI (az …)</text><text x="20" y="150" font-size="11" fill="#4a5868">type commands in a terminal</text>
+        <rect x="6" y="196" width="190" height="64" rx="10" fill="#e9f1fb" stroke="#0b5cad" stroke-width="2"/>
+        <text x="20" y="222" font-weight="700" fill="#0a2f5c">Bicep files (.bicep)</text><text x="20" y="242" font-size="11" fill="#4a5868">describe what should exist</text>
+        <rect x="128" y="186" width="74" height="18" rx="9" fill="#0b5cad"/><text x="165" y="199" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff">CloudMart</text>
+        <text x="6" y="281" font-size="10.5" fill="#4a5868">sent to ARM by <tspan font-family="Consolas" fill="#0a2f5c">az deployment sub create</tspan> or a pipeline</text>
+      </g>
+      <path d="M196 44 C 230 44, 230 100, 262 104" fill="none" stroke="#5d7fa8" stroke-width="2" marker-end="url(#ar)"/>
+      <path d="M196 136 L 262 136" fill="none" stroke="#5d7fa8" stroke-width="2" marker-end="url(#ar)"/>
+      <path d="M196 228 C 230 228, 230 172, 262 168" fill="none" stroke="#0b5cad" stroke-width="2.5" marker-end="url(#ar)"/>
+      <rect x="264" y="70" width="190" height="132" rx="12" fill="#0a2f5c"/>
+      <text x="359" y="96" text-anchor="middle" font-size="13.5" font-weight="700" fill="#fff">Azure Resource Manager</text>
+      <text x="359" y="113" text-anchor="middle" font-size="10.5" fill="#bcd2ee">(ARM): the front desk</text>
+      <g font-size="10.8" fill="#e6eef8">
+        <text x="280" y="140">1  Who are you? (Entra ID)</text>
+        <text x="280" y="160">2  Are you allowed? (RBAC, Policy)</text>
+        <text x="280" y="180">3  Build or update it, in order</text>
+      </g>
+      <path d="M454 136 L 492 136" fill="none" stroke="#5d7fa8" stroke-width="2" marker-end="url(#ar)"/>
+      <rect x="496" y="14" width="178" height="246" rx="12" fill="#f5f8fc" stroke="#7fa6d6" stroke-width="1.5" stroke-dasharray="6 5"/>
+      <text x="510" y="36" font-size="11" font-weight="700" fill="#0a2f5c">a resource group</text>
+      <g font-size="11" fill="#0a2f5c">
+        <rect x="510" y="48" width="150" height="30" rx="6" fill="#e3eefb" stroke="#9dbde4"/><text x="522" y="67">Web App (API)</text>
+        <rect x="510" y="88" width="150" height="30" rx="6" fill="#e3eefb" stroke="#9dbde4"/><text x="522" y="107">Function App</text>
+        <rect x="510" y="128" width="150" height="30" rx="6" fill="#e3eefb" stroke="#9dbde4"/><text x="522" y="147">Static Web App</text>
+        <rect x="510" y="168" width="150" height="30" rx="6" fill="#fdf0dc" stroke="#e8b874"/><text x="522" y="187">Key Vault</text>
+        <rect x="510" y="208" width="150" height="30" rx="6" fill="#fdf0dc" stroke="#e8b874"/><text x="522" y="227">Storage account</text>
+      </g>
+    </svg>
+    <figcaption><b>Three doors, one room.</b> Whatever you use, the request lands at Azure Resource Manager. A key vault made by a click is the same as one made by Bicep, which is why practising in the portal teaches you the Bicep.</figcaption>
+  </figure>
+  <table class="avoid">
+    <tr><th style="width:17%"></th><th>Azure Portal</th><th>Azure CLI</th><th>Bicep</th></tr>
+    <tr><td><b>What it is</b></td><td>The website at portal.azure.com</td><td>A command-line tool, <code>az</code></td><td>Text files that describe resources</td></tr>
+    <tr><td><b>Best for</b></td><td>Learning, exploring, checking, one-off fixes</td><td>Scripts, quick tasks, <b>launching</b> Bicep</td><td>Whole environments: repeatable, reviewed in Git</td></tr>
+    <tr><td><b>In CloudMart</b></td><td>You, while learning (this guide)</td><td><code>az login</code>, <code>az deployment sub create</code>, <code>az webapp deploy</code></td><td><span class="mono">infra/</span>: the real source of truth</td></tr>
+  </table>
+  <div class="box warn"><div class="t">The golden rule: learn in the portal, build with Bicep</div>
+    <p>If you change a Bicep-managed resource by clicking, the next Bicep deployment may quietly put it back. This is called <b>drift</b>. So in this guide you build a <b>separate practice copy</b> in its own resource group, <code>rg-cloudmart-lab</code>, and delete it at the end. Your real Bicep environment, <code>rg-cloudmart-dev</code>, never sees your clicks.</p>
+  </div>
+</section>
+
+<section class="page" id="p1-ideas">
+  <h2>1.2 Azure in five ideas</h2>
+  <p>Almost everything in Azure fits into one picture. Learn these five words and the portal starts to make sense.</p>
+  <figure>
+    <svg viewBox="0 0 680 350" role="img" aria-label="Nested boxes: tenant contains management group, which contains a subscription, which contains resource groups, which contain resources">
+      <rect x="4" y="4" width="440" height="342" rx="14" fill="#eef3fb" stroke="#9db7dd" stroke-width="1.5"/>
+      <text x="20" y="27" font-size="12.5" font-weight="700" fill="#0a2f5c">① Microsoft Entra ID tenant</text>
+      <text x="20" y="43" font-size="10.5" fill="#4a5868">your organisation's directory of people and app identities</text>
+      <rect x="18" y="54" width="412" height="280" rx="11" fill="#f8fafd" stroke="#b3c6e0" stroke-dasharray="5 4"/>
+      <text x="32" y="74" font-size="11" font-weight="600" fill="#4a5868">Management group (optional folders for subscriptions)</text>
+      <rect x="32" y="84" width="384" height="238" rx="10" fill="#fff" stroke="#0b5cad" stroke-width="1.8"/>
+      <text x="46" y="105" font-size="12.5" font-weight="700" fill="#0a2f5c">② Subscription</text>
+      <text x="152" y="105" font-size="10.5" fill="#4a5868">who pays, limits, an access boundary</text>
+      <rect x="46" y="116" width="174" height="194" rx="9" fill="#f2f8f3" stroke="#7dbb8f" stroke-width="1.5"/>
+      <text x="58" y="136" font-size="11.5" font-weight="700" fill="#0b5a2f">③ rg-cloudmart-lab</text>
+      <text x="58" y="151" font-size="9.8" fill="#4a5868">resource group: this guide</text>
+      <rect x="230" y="116" width="174" height="194" rx="9" fill="#f2f8f3" stroke="#7dbb8f" stroke-width="1.5"/>
+      <text x="242" y="136" font-size="11.5" font-weight="700" fill="#0b5a2f">③ rg-cloudmart-dev</text>
+      <text x="242" y="151" font-size="9.8" fill="#4a5868">resource group: made by Bicep</text>
+      <g font-size="10.5" fill="#0a2f5c">
+        <rect x="58" y="162" width="150" height="26" rx="5" fill="#e3eefb" stroke="#9dbde4"/><text x="68" y="179">④ Web App</text>
+        <rect x="58" y="196" width="150" height="26" rx="5" fill="#e3eefb" stroke="#9dbde4"/><text x="68" y="213">④ Key Vault</text>
+        <rect x="58" y="230" width="150" height="26" rx="5" fill="#e3eefb" stroke="#9dbde4"/><text x="68" y="247">④ Storage account</text>
+        <rect x="58" y="264" width="150" height="26" rx="5" fill="#e3eefb" stroke="#9dbde4"/><text x="68" y="281">… and more</text>
+        <rect x="242" y="162" width="150" height="26" rx="5" fill="#e3eefb" stroke="#9dbde4"/><text x="252" y="179">④ Web App</text>
+        <rect x="242" y="196" width="150" height="26" rx="5" fill="#e3eefb" stroke="#9dbde4"/><text x="252" y="213">④ Key Vault</text>
+        <rect x="242" y="230" width="150" height="26" rx="5" fill="#e3eefb" stroke="#9dbde4"/><text x="252" y="247">④ Storage account</text>
+        <rect x="242" y="264" width="150" height="26" rx="5" fill="#e3eefb" stroke="#9dbde4"/><text x="252" y="281">… and more</text>
+      </g>
+      <g font-size="11" fill="#1d2733">
+        <text x="462" y="26" font-weight="700" fill="#0a2f5c" font-size="11.5">In everyday words</text>
+        <text x="462" y="54" font-weight="700">① Tenant</text><text x="462" y="70" fill="#4a5868">the company and its staff list</text>
+        <text x="462" y="100" font-weight="700">② Subscription</text><text x="462" y="116" fill="#4a5868">the company card that pays</text>
+        <text x="462" y="146" font-weight="700">③ Resource group</text><text x="462" y="162" fill="#4a5868">a project folder; delete the</text><text x="462" y="177" fill="#4a5868">folder and everything inside goes</text>
+        <text x="462" y="207" font-weight="700">④ Resource</text><text x="462" y="223" fill="#4a5868">one thing in the folder: a web</text><text x="462" y="238" fill="#4a5868">app, a vault, a database</text>
+        <text x="462" y="268" font-weight="700">⑤ Region</text><text x="462" y="284" fill="#4a5868">the city whose datacentres</text><text x="462" y="299" fill="#4a5868">run it, e.g. East US 2</text>
+      </g>
+    </svg>
+  </figure>
+  <h3>Three more facts that save beginners hours</h3>
+  <ul>
+    <li><b>Some names are global.</b> A key vault, storage account or web app name becomes a web address (for example <code>kv-cloudmart-xy123.vault.azure.net</code>), so nobody else in the world can be using it. That is why this guide adds a personal suffix, <code>xy123</code>. Replace it with <b>your initials and three random digits</b>, the same everywhere.</li>
+    <li><b>Resources live in one region</b>, chosen when you create them. Keep everything in the same region (this guide uses <b>East US 2</b>, like CloudMart's Bicep) so the parts talk to each other quickly and cheaply.</li>
+    <li><b>Tags are sticky notes</b> (name = value) you put on resources, for example <code>environment = lab</code>. Cost reports and policies can use them.</li>
+  </ul>
+  <div class="box note"><div class="t">Beginner note: "resource provider"</div>
+    <p>Each kind of resource is run by a <b>resource provider</b>, such as <code>Microsoft.KeyVault</code> or <code>Microsoft.Web</code>. A provider must be <b>registered</b> (switched on) for your subscription before you can use it. Azure usually does this for you; Step 1 shows what to do when it doesn't.</p>
+  </div>
+</section>
+
+<section class="page" id="p1-planes">
+  <h2>1.3 Two kinds of permission</h2>
+  <p>This is the idea that surprises almost every beginner, and you will meet it in Steps 7 and 8. Azure has <b>two separate sets of locks</b>:</p>
+  <figure>
+    <svg viewBox="0 0 680 262" role="img" aria-label="Control plane versus data plane">
+      <rect x="4" y="4" width="330" height="192" rx="12" fill="#eef3fb" stroke="#9db7dd" stroke-width="1.5"/>
+      <text x="20" y="30" font-size="10" font-weight="700" fill="#0b5cad" letter-spacing="1.2">CONTROL PLANE</text>
+      <text x="20" y="50" font-size="13.5" font-weight="700" fill="#0a2f5c">Managing the resource</text>
+      <text x="20" y="68" font-size="10.5" fill="#4a5868">like holding the keys to the building</text>
+      <g font-size="11" fill="#1d2733">
+        <text x="20" y="96">•  create, configure and delete it</text>
+        <text x="20" y="116">•  change settings, tags, network rules</text>
+        <text x="20" y="136">•  give other people access</text>
+      </g>
+      <text x="20" y="166" font-size="10.5" font-weight="700" fill="#0a2f5c">Roles: Owner, Contributor, Reader</text>
+      <text x="20" y="182" font-size="10" fill="#4a5868">granted on a subscription, resource group or resource</text>
+      <rect x="346" y="4" width="330" height="192" rx="12" fill="#fdf2e2" stroke="#e8b874" stroke-width="1.5"/>
+      <text x="362" y="30" font-size="10" font-weight="700" fill="#9a4d00" letter-spacing="1.2">DATA PLANE</text>
+      <text x="362" y="50" font-size="13.5" font-weight="700" fill="#5c3000">Using what is inside it</text>
+      <text x="362" y="68" font-size="10.5" fill="#6b5a45">like the combination to the safe inside</text>
+      <g font-size="11" fill="#1d2733">
+        <text x="362" y="96">•  read or write secrets in a key vault</text>
+        <text x="362" y="116">•  upload or download files (blobs)</text>
+        <text x="362" y="136">•  read queues, tables, database rows</text>
+      </g>
+      <text x="362" y="166" font-size="10.5" font-weight="700" fill="#5c3000">Roles: Key Vault Secrets User / Officer,</text>
+      <text x="362" y="182" font-size="10.5" font-weight="700" fill="#5c3000">Storage Blob Data Contributor, …</text>
+      <rect x="4" y="208" width="672" height="50" rx="10" fill="#fff" stroke="#d8dee6"/>
+      <text x="20" y="230" font-size="11.5" font-weight="700" fill="#1d2733">You, as Owner of the subscription:</text>
+      <circle cx="240" cy="226" r="9" fill="#0f7b3f"/><path d="M235 226 l3.5 3.5 l6 -7" stroke="#fff" stroke-width="2" fill="none"/>
+      <text x="255" y="230" font-size="11" fill="#1d2733">can create the vault</text>
+      <circle cx="400" cy="226" r="9" fill="#c42b1c"/><path d="M396 222 l8 8 M404 222 l-8 8" stroke="#fff" stroke-width="2"/>
+      <text x="415" y="230" font-size="11" fill="#1d2733">cannot read its secrets</text>
+      <text x="20" y="250" font-size="10.5" fill="#4a5868">… until you also give yourself a data role (Step 7). Owner does not include the data plane.</text>
+    </svg>
+  </figure>
+  <h3>Managed identities: an ID badge for an app</h3>
+  <p>Apps need data roles too. Instead of giving an app a password or key (which can leak), Azure gives it a <b>managed identity</b>: a badge that Microsoft Entra ID recognises. The app shows the badge, gets a short-lived <b>token</b>, and the vault checks whether that badge has a role. CloudMart uses no passwords or keys at all, only identities.</p>
+  <figure>
+    <svg viewBox="0 0 680 196" role="img" aria-label="How a managed identity gets a token and reads a secret">
+      <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5d7fa8"/></marker></defs>
+      <rect x="6" y="80" width="182" height="84" rx="11" fill="#e3eefb" stroke="#9dbde4" stroke-width="1.5"/>
+      <text x="97" y="106" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0a2f5c">Web App (the API)</text>
+      <rect x="22" y="120" width="150" height="30" rx="15" fill="#efeafb" stroke="#bfb1e6"/>
+      <text x="97" y="139" text-anchor="middle" font-size="10" font-weight="600" fill="#3e2f86">badge: id-cloudmart-lab-api</text>
+      <rect x="250" y="6" width="180" height="62" rx="11" fill="#0a2f5c"/>
+      <text x="340" y="32" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Microsoft Entra ID</text>
+      <text x="340" y="50" text-anchor="middle" font-size="10.5" fill="#bcd2ee">checks the badge, issues tokens</text>
+      <rect x="492" y="80" width="182" height="84" rx="11" fill="#fdf0dc" stroke="#e8b874" stroke-width="1.5"/>
+      <text x="583" y="108" text-anchor="middle" font-size="12.5" font-weight="700" fill="#5c3000">Key Vault</text>
+      <text x="583" y="127" text-anchor="middle" font-size="10" fill="#6b5a45">checks role assignments:</text>
+      <text x="583" y="143" text-anchor="middle" font-size="10" fill="#6b5a45">"Secrets User" ✓</text>
+      <path d="M140 80 L 252 50" stroke="#5d7fa8" stroke-width="2" fill="none" marker-end="url(#ar2)"/>
+      <text x="10" y="50" font-size="10.5" fill="#1d2733"><tspan font-weight="700">1</tspan> "token for Key Vault, please"</text>
+      <path d="M262 68 L 168 86" stroke="#5d7fa8" stroke-width="2" fill="none" marker-end="url(#ar2)" stroke-dasharray="5 3"/>
+      <text x="234" y="96" font-size="10.5" fill="#1d2733"><tspan font-weight="700">2</tspan> token (valid about an hour)</text>
+      <path d="M188 128 L 488 128" stroke="#5d7fa8" stroke-width="2" fill="none" marker-end="url(#ar2)"/>
+      <text x="252" y="122" font-size="10.5" fill="#1d2733"><tspan font-weight="700">3</tspan> token + "read PaymentGateway--ApiKey"</text>
+      <path d="M492 150 L 192 150" stroke="#0f7b3f" stroke-width="2" fill="none" marker-end="url(#ar2)" stroke-dasharray="5 3"/>
+      <text x="270" y="168" font-size="10.5" fill="#0b5a2f"><tspan font-weight="700">4</tspan> the secret, because the badge has a role</text>
+      <text x="340" y="190" text-anchor="middle" font-size="10.5" fill="#4a5868">No password or key is stored anywhere in the app's code or settings.</text>
+    </svg>
+  </figure>
+  <div class="box note"><div class="t">System-assigned or user-assigned?</div>
+    <p>A <b>system-assigned</b> identity is born and dies with one app. A <b>user-assigned</b> identity is its own resource: you create it first, give it roles, then attach it to any app. CloudMart uses user-assigned identities (<span class="mono">infra/modules/identity.bicep</span>), so you will too.</p>
+  </div>
+</section>
+
+<section class="page" id="p1-money">
+  <h2>1.4 Money: avoiding a surprise bill</h2>
+  <p>Azure charges in three main ways: <b>per hour</b> for things that are always running (like an App Service plan), <b>per use</b> for serverless things (Functions, storage transactions) and <b>per gigabyte</b> for stored data and logs. Here is what the lab costs at list prices (check the <a href="https://azure.microsoft.com/pricing/calculator/">pricing calculator</a> for your region):</p>
+  <table>
+    <tr><th>Resource in this lab</th><th>How it is charged</th><th style="width:28%">Rough cost</th></tr>
+    <tr><td>App Service plan, Basic B1</td><td>Per hour while it exists, even if idle</td><td><b>≈ US$13 a month</b> (≈ 2 cents an hour). The main cost.</td></tr>
+    <tr><td>Function App, Flex Consumption</td><td>Per execution and memory used</td><td>≈ $0 while idle</td></tr>
+    <tr><td>Static Web App, Free plan</td><td>Free</td><td>$0</td></tr>
+    <tr><td>Storage account (LRS)</td><td>Per GB stored and per operation</td><td>a few cents</td></tr>
+    <tr><td>Key Vault (Standard)</td><td>Per 10,000 operations</td><td>a few cents</td></tr>
+    <tr><td>Log Analytics + Application Insights</td><td>Per GB of logs collected</td><td>cents at lab volume; capped at 1 GB a day in Step 4</td></tr>
+    <tr><td>Log search alert rule</td><td>Per rule per month</td><td>≈ $1.50 a month (pro-rated)</td></tr>
+    <tr><td>Resource group, identities, budget, policy, lock</td><td>Free</td><td>$0</td></tr>
+  </table>
+  <div class="box check"><div class="t">The bottom line</div><p>If you do Part 2 and Part 3 in one sitting and delete everything in Part 5, expect <b>well under US$1</b>. Leave it running for a month and it is roughly US$15.</p></div>
+  <h3>Three habits that protect you</h3>
+  <div class="flow green">
+    <div><em>1</em><b>Budget first</b>Create a budget with email alerts before anything else (Step 3).</div>
+    <div><em>2</em><b>Delete when done</b>Delete the whole resource group at the end (Part 5).</div>
+    <div><em>3</em><b>Look the next day</b>Open Cost Management and check that spending stopped.</div>
+  </div>
+  <div class="box warn"><div class="t">Watch out: a budget is an alarm, not a limit</div>
+    <p>An Azure budget <b>emails</b> you when spending crosses a line. It does <b>not</b> stop or delete anything. Only deleting resources stops the charges. Cost data also updates a few times a day, not instantly.</p>
+  </div>
+  <div class="box note"><div class="t">Free account</div>
+    <p>A new Azure free account usually comes with some credit for the first 30 days plus always-free amounts of popular services. Check the current offer at azure.microsoft.com/free. At work, ask your Azure administrator for a sandbox subscription instead of using a production one.</p>
+  </div>
+</section>
+
+<section class="page" id="p1-tour">
+  <h2>1.5 A tour of the Azure Portal</h2>
+  <p>Open <b>https://portal.azure.com</b> and sign in. The home page looks roughly like this:</p>
+  <figure>
+    <div class="mock">
+      <div class="bar"><i class="cn">1</i><span class="menu"></span><b>Microsoft Azure</b><span class="s"><i class="cn">2</i> Search resources, services, and docs (G+/)</span><span class="ic"><i class="cn">3</i>&gt;_<i class="cn">4</i>🔔 ⚙ ?<i class="cn">5</i></span><span class="av"></span><span style="font-size:7.6pt;line-height:1.1">you@contoso.com<br><span style="opacity:.75">CONTOSO</span></span></div>
+      <div class="body" style="padding-bottom:4px">
+        <div class="sec">Azure services</div>
+        <div class="tiles">
+          <div class="tile plus"><i>+</i>Create a resource <i class="cn" style="display:inline-block;width:auto;height:15px;border:0;background:#d13438;color:#fff;font-size:7.6pt;line-height:15px;margin:2px auto 0">6</i></div>
+          <div class="tile"><i>[ ]</i>Resource groups</div>
+          <div class="tile"><i>◇</i>App Services</div>
+          <div class="tile"><i>▤</i>Storage accounts</div>
+          <div class="tile"><i>⚿</i>Key vaults</div>
+          <div class="tile"><i>$</i>Cost Management</div>
+          <div class="tile"><i>→</i>More services</div>
+        </div>
+        <div class="sec">Resources <span class="lnk" style="font-weight:400">Recent · Favorite</span> <i class="cn">7</i></div>
+        <table><tr><th>Name</th><th>Type</th><th>Last viewed</th></tr><tr><td class="lnk">rg-cloudmart-lab</td><td>Resource group</td><td>a few seconds ago</td></tr><tr><td class="lnk">Azure subscription 1</td><td>Subscription</td><td>2 minutes ago</td></tr></table>
+      </div>
+    </div>
+    <figcaption>Simplified illustration of the portal home page.</figcaption>
+  </figure>
+  <ul class="legend">
+    <li><i class="cn">1</i><b>Portal menu</b>: Home, Dashboard, All services, Favorites.</li>
+    <li><i class="cn">2</i><b>Search bar</b>: the fastest way anywhere. Type a service ("key vaults") or a resource's name.</li>
+    <li><i class="cn">3</i><b>Cloud Shell</b> (&gt;_): a terminal in your browser with the Azure CLI and Bicep already installed.</li>
+    <li><i class="cn">4</i><b>Notifications</b> (bell): deployment progress appears here.</li>
+    <li><i class="cn">5</i><b>Settings, help, account</b>: switch directory (tenant), theme, language; see who you are signed in as.</li>
+    <li><i class="cn">6</i><b>Create a resource</b>: the Marketplace of everything you can create.</li>
+    <li><i class="cn">7</i><b>Recent resources</b>: jump back to what you were working on.</li>
+  </ul>
+  <h3>Every resource page has the same skeleton</h3>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › rg-cloudmart-lab › kv-cloudmart-xy123</div>
+      <div class="ttl">kv-cloudmart-xy123 <small>Key vault</small></div>
+      <div class="split">
+        <div class="nav"><i class="cn" style="margin-left:10px">A</i>
+          <div class="on">Overview</div><div>Activity log</div><div>Access control (IAM)</div><div>Tags</div><div>Diagnose and solve problems</div>
+          <div class="g">Objects</div><div class="in2">Keys</div><div class="in2">Secrets</div><div class="in2">Certificates</div>
+          <div class="g">Settings</div><div class="in2">Access configuration</div><div class="in2">Networking</div><div class="in2">Locks</div>
+          <div class="g">Monitoring</div><div class="in2">Alerts · Metrics · Logs</div>
+          <div class="g">Automation</div><div class="in2">Export template</div>
+        </div>
+        <div>
+          <div class="cmd"><i class="cn">B</i><b>⟳ Refresh</b><b>🗑 Delete</b><b>↗ Open in mobile</b></div>
+          <div class="ess"><i class="cn" style="grid-column:1/3;width:15px">C</i>
+            <div><span>Resource group</span><b class="lnk">rg-cloudmart-lab</b></div><div><span>Vault URI</span>https://kv-cloudmart-xy123.vault.azure.net/</div>
+            <div><span>Location</span>East US 2</div><div><span>Pricing tier</span>Standard</div>
+            <div><span>Subscription</span><b class="lnk">Azure subscription 1</b></div><div><span>Tags</span>application : cloudmart · environment : lab</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Simplified illustration of a resource page (Microsoft calls these pages <b>blades</b>).</figcaption>
+  </figure>
+  <ul class="legend">
+    <li><i class="cn">A</i><b>Left menu</b>. Every resource has Overview, Activity log, Access control (IAM), Tags and, under Settings, Locks.</li>
+    <li><i class="cn">B</i><b>Command bar</b>: actions for this resource, such as Delete or Restart.</li>
+    <li><i class="cn">C</i><b>Essentials</b>: the key facts (group, region, subscription, address). You will copy values from here.</li>
+  </ul>
+</section>
+
+<section class="page" id="p1-pattern">
+  <h2>1.6 The pattern every "Create" follows</h2>
+  <p>Creating anything in the portal, from a resource group to a database, goes through the same wizard. Once you know the pattern, every step in Part 2 feels familiar.</p>
+  <div class="flow">
+    <div><em>1</em><b>Find it</b>Search the service, e.g. "Key vaults".</div>
+    <div><em>2</em><b>+ Create</b>Opens the create wizard.</div>
+    <div><em>3</em><b>Basics tab</b>Subscription, resource group, name, region, size.</div>
+    <div><em>4</em><b>Other tabs</b>Networking, security, monitoring, tags.</div>
+  </div>
+  <div class="flow">
+    <div><em>5</em><b>Review + create</b>Azure validates your choices.</div>
+    <div><em>6</em><b>Create</b>Sends the request to Resource Manager.</div>
+    <div><em>7</em><b>Deployment in progress</b>Watch it under the bell.</div>
+    <div><em>8</em><b>Go to resource</b>Finish the settings there.</div>
+  </div>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › Key vaults ›</div>
+      <div class="ttl">Create a key vault</div>
+      <div class="tabs"><span class="on">Basics <i class="cn">1</i></span><span>Access configuration</span><span>Networking</span><span>Tags</span><span>Review + create</span></div>
+      <div class="body">
+        <div class="sec">Project details</div>
+        <div class="hint">Select the subscription to manage deployed resources and costs. Use resource groups like folders to organize and manage all your resources.</div>
+        <div class="row"><label class="req">Subscription</label><div class="sel">Azure subscription 1</div></div>
+        <div class="row ind"><label class="req">Resource group <i class="cn">2</i></label><div><div class="sel">rg-cloudmart-lab</div><span class="lnk">Create new</span></div></div>
+        <div class="sec">Instance details</div>
+        <div class="row"><label class="req">Key vault name <i class="cn">3</i></label><div class="in">kv-cloudmart-xy123 <span class="ok">✓</span></div></div>
+        <div class="row"><label class="req">Region</label><div class="sel">East US 2</div></div>
+      </div>
+      <div class="foot"><span class="btn p">Review + create <i class="cn">4</i></span><span class="btn">&lt; Previous</span><span class="btn">Next: Access configuration &gt;</span></div>
+    </div>
+    <figcaption>Simplified illustration of a create wizard.</figcaption>
+  </figure>
+  <ul class="legend">
+    <li><i class="cn">1</i><b>Tabs</b> run left to right. You can jump between them; most have sensible defaults.</li>
+    <li><i class="cn">2</i><b>Resource group</b>: always pick <code>rg-cloudmart-lab</code> in this guide.</li>
+    <li><i class="cn">3</i><b>Name</b>: a green tick means it is valid and free. A red asterisk (*) means required.</li>
+    <li><i class="cn">4</i><b>Review + create</b> runs validation. You must then click <b>Create</b> on the next page.</li>
+  </ul>
+  <div class="box why"><div class="t">Why the review page matters</div>
+    <p>The Review + create page usually has a link such as <b>Download a template for automation</b> (or <b>View automation template</b>). It shows the exact template the portal is about to send, which is the same kind of file that CloudMart's Bicep produces. Peek at it once; it makes Part 4 obvious.</p>
+  </div>
+  <div class="box check"><div class="t">How to tell a create worked</div>
+    <p>The page changes to <b>"Your deployment is complete"</b> with a green tick, and the bell shows "Deployment succeeded". Click <b>Go to resource</b>. If it fails, the page shows an error code; look it up in the Troubleshooting table at the back.</p>
+  </div>
+</section>
+
+<!-- =============================================================== PART 2 -->
+<section class="page" id="p2-map">
+  <div class="part"><div class="k">Part 2</div><h1>Build CloudMart's foundation by hand</h1><p>Thirteen steps that create, by clicking, what <span style="font-family:Consolas">infra/main.bicep</span> creates with its default switches (phase 1).</p></div>
+  <h2>What you will build</h2>
+  <figure>
+    <svg viewBox="0 0 680 440" role="img" aria-label="Architecture of the lab resource group" style="width:92%;margin:0 auto">
+      <defs>
+        <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5d7fa8"/></marker>
+        <marker id="a3g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2f8a52"/></marker>
+      </defs>
+      <!-- browser -->
+      <rect x="4" y="150" width="84" height="70" rx="10" fill="#fff" stroke="#9aa5b3" stroke-width="1.5"/>
+      <rect x="4" y="150" width="84" height="16" rx="8" fill="#e4e8ee"/>
+      <text x="46" y="190" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1d2733">Browser</text>
+      <text x="46" y="206" text-anchor="middle" font-size="9.5" fill="#4a5868">a shopper</text>
+      <!-- resource group -->
+      <rect x="104" y="4" width="572" height="432" rx="14" fill="#f8fafd" stroke="#7fa6d6" stroke-width="1.5" stroke-dasharray="6 5"/>
+      <text x="120" y="25" font-size="11.5" font-weight="700" fill="#0a2f5c">rg-cloudmart-lab</text>
+      <text x="232" y="25" font-size="10" fill="#4a5868">resource group · East US 2 · Step 2</text>
+      <!-- SWA -->
+      <rect x="122" y="54" width="150" height="62" rx="9" fill="#e3eefb" stroke="#9dbde4" stroke-width="1.5"/>
+      <text x="197" y="78" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0a2f5c">Static Web App</text>
+      <text x="197" y="94" text-anchor="middle" font-size="9.5" fill="#4a5868">the React shop · Step 9</text>
+      <!-- API -->
+      <rect x="300" y="54" width="170" height="62" rx="9" fill="#e3eefb" stroke="#9dbde4" stroke-width="1.5"/>
+      <text x="385" y="78" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0a2f5c">Web App: the API</text>
+      <text x="385" y="94" text-anchor="middle" font-size="9.5" fill="#4a5868">App Service plan B1 · Step 10</text>
+      <rect x="318" y="122" width="134" height="20" rx="10" fill="#efeafb" stroke="#bfb1e6"/>
+      <text x="385" y="136" text-anchor="middle" font-size="9" font-weight="600" fill="#3e2f86">id-cloudmart-lab-api · Step 6</text>
+      <!-- Func -->
+      <rect x="300" y="168" width="170" height="62" rx="9" fill="#e3eefb" stroke="#9dbde4" stroke-width="1.5"/>
+      <text x="385" y="192" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0a2f5c">Function App</text>
+      <text x="385" y="208" text-anchor="middle" font-size="9.5" fill="#4a5868">Flex Consumption · Step 11</text>
+      <rect x="318" y="236" width="134" height="20" rx="10" fill="#efeafb" stroke="#bfb1e6"/>
+      <text x="385" y="250" text-anchor="middle" font-size="9" font-weight="600" fill="#3e2f86">id-cloudmart-lab-func · Step 6</text>
+      <!-- KV -->
+      <rect x="506" y="54" width="154" height="62" rx="9" fill="#fdf0dc" stroke="#e8b874" stroke-width="1.5"/>
+      <text x="583" y="78" text-anchor="middle" font-size="11.5" font-weight="700" fill="#5c3000">Key Vault</text>
+      <text x="583" y="94" text-anchor="middle" font-size="9.5" fill="#6b5a45">1 secret · Step 7</text>
+      <!-- Storage -->
+      <rect x="506" y="168" width="154" height="62" rx="9" fill="#fdf0dc" stroke="#e8b874" stroke-width="1.5"/>
+      <text x="583" y="192" text-anchor="middle" font-size="11.5" font-weight="700" fill="#5c3000">Storage account</text>
+      <text x="583" y="208" text-anchor="middle" font-size="9.5" fill="#6b5a45">4 blob containers · Step 8</text>
+      <!-- monitoring row -->
+      <rect x="122" y="290" width="150" height="56" rx="9" fill="#e6f4ea" stroke="#9fd0ae" stroke-width="1.5"/>
+      <text x="197" y="313" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0b5a2f">Alert + action group</text>
+      <text x="197" y="330" text-anchor="middle" font-size="9.5" fill="#3f6b4f">emails you · Step 12</text>
+      <rect x="300" y="290" width="170" height="56" rx="9" fill="#e6f4ea" stroke="#9fd0ae" stroke-width="1.5"/>
+      <text x="385" y="313" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0b5a2f">Application Insights</text>
+      <text x="385" y="330" text-anchor="middle" font-size="9.5" fill="#3f6b4f">app monitoring · Step 5</text>
+      <rect x="506" y="290" width="154" height="56" rx="9" fill="#e6f4ea" stroke="#9fd0ae" stroke-width="1.5"/>
+      <text x="583" y="313" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0b5a2f">Log Analytics</text>
+      <text x="583" y="330" text-anchor="middle" font-size="9.5" fill="#3f6b4f">the logbook · Step 4</text>
+      <!-- guard rails -->
+      <rect x="122" y="370" width="538" height="50" rx="9" fill="#f1f3f6" stroke="#b9c2cd"/>
+      <text x="138" y="391" font-size="10" font-weight="700" fill="#3a4654" letter-spacing=".8">GUARD RAILS ON THE WHOLE GROUP</text>
+      <text x="138" y="409" font-size="10.5" fill="#1d2733">Budget with email alerts (Step 3) · Policy: only East US 2 (Step 13) · Delete lock (Step 13)</text>
+      <!-- arrows -->
+      <path d="M88 168 L 120 110" stroke="#5d7fa8" stroke-width="1.8" fill="none" marker-end="url(#a3)"/>
+      <text x="22" y="126" font-size="9.5" fill="#4a5868">loads the shop</text>
+      <path d="M88 200 L 286 200 L 286 98 L 298 98" stroke="#5d7fa8" stroke-width="1.8" fill="none" marker-end="url(#a3)"/>
+      <text x="130" y="195" font-size="9.5" fill="#4a5868">calls /api/… on the API</text>
+      <path d="M470 76 L 504 76" stroke="#2f8a52" stroke-width="1.8" fill="none" marker-end="url(#a3g)"/>
+      <path d="M470 108 L 504 178" stroke="#2f8a52" stroke-width="1.8" fill="none" marker-end="url(#a3g)"/>
+      <path d="M470 200 L 504 200" stroke="#2f8a52" stroke-width="1.8" fill="none" marker-end="url(#a3g)"/>
+      <path d="M470 180 L 504 106" stroke="#2f8a52" stroke-width="1.8" fill="none" marker-end="url(#a3g)"/>
+      <path d="M385 256 L 385 288" stroke="#5d7fa8" stroke-width="1.6" fill="none" stroke-dasharray="4 3" marker-end="url(#a3)"/>
+      <text x="392" y="276" font-size="9.2" fill="#4a5868">both apps send telemetry</text>
+      <path d="M470 318 L 504 318" stroke="#5d7fa8" stroke-width="1.6" fill="none" marker-end="url(#a3)"/>
+      <path d="M300 318 L 274 318" stroke="#5d7fa8" stroke-width="1.6" fill="none" marker-end="url(#a3)"/>
+      <path d="M10 262 L 34 262" stroke="#2f8a52" stroke-width="1.8" fill="none" marker-end="url(#a3g)"/>
+      <text x="8" y="280" font-size="9" fill="#2f8a52">green = calls made</text>
+      <text x="8" y="292" font-size="9" fill="#2f8a52">with an identity</text>
+    </svg>
+    <figcaption><b>The lab, step by step.</b> Green arrows are calls made with a managed identity and a data role, never a key.</figcaption>
+  </figure>
+  <h3>Names used in this guide</h3>
+  <p class="small">Replace <code>xy123</code> with your initials and three digits, and use the same suffix everywhere. The right-hand column shows what CloudMart's Bicep calls the same thing, so you can recognise it later in <code>rg-cloudmart-dev</code>.</p>
+  <table class="names">
+    <tr><th style="width:7%">Step</th><th style="width:24%">Resource</th><th style="width:36%">Name in this lab</th><th>Name made by Bicep</th></tr>
+    <tr><td>2</td><td>Resource group</td><td><code>rg-cloudmart-lab</code></td><td><code>rg-cloudmart-dev</code></td></tr>
+    <tr><td>4</td><td>Log Analytics workspace</td><td><code>log-cloudmart-lab</code></td><td><code>log-cloudmart-dev</code></td></tr>
+    <tr><td>5</td><td>Application Insights</td><td><code>appi-cloudmart-lab</code></td><td><code>appi-cloudmart-dev</code></td></tr>
+    <tr><td>6</td><td>Managed identities</td><td><code>id-cloudmart-lab-api</code>, <code>-func</code></td><td><code>id-cloudmart-dev-api</code>, <code>-func</code> (+2)</td></tr>
+    <tr><td>7</td><td>Key Vault</td><td><code>kv-cloudmart-xy123</code></td><td><code>kv-cloudmart-</code> + generated</td></tr>
+    <tr><td>8</td><td>Storage account</td><td><code>stcloudmartxy123</code></td><td><code>stcloudmart</code> + generated characters</td></tr>
+    <tr><td>9</td><td>Static Web App</td><td><code>stapp-cloudmart-lab</code></td><td><code>stapp-cloudmart-dev</code></td></tr>
+    <tr><td>10</td><td>App Service plan</td><td><code>asp-cloudmart-lab</code></td><td><code>asp-cloudmart-dev</code></td></tr>
+    <tr><td>10</td><td>Web App (API)</td><td><code>app-cloudmart-lab-api-xy123</code></td><td><code>app-cloudmart-dev-api-</code>…</td></tr>
+    <tr><td>11</td><td>Function App</td><td><code>func-cloudmart-lab-xy123</code></td><td><code>func-cloudmart-dev-</code>…</td></tr>
+    <tr><td>12</td><td>Action group</td><td><code>ag-cloudmart-lab</code></td><td><code>ag-cloudmart-dev</code></td></tr>
+  </table>
+</section>
+
+<section class="page">
+  <h2>Your lab notebook</h2>
+  <p>Several steps ask you to copy a value now and paste it later. Write them here (or in a text file) as you go. None of these values are secret, except where noted.</p>
+  <table class="notebook">
+    <tr><th>Value</th><th>Where you find it</th><th>Write it here</th></tr>
+    <tr><td>Your suffix (initials + 3 digits)</td><td>you choose</td><td></td></tr>
+    <tr><td>Subscription name</td><td>Step 1</td><td></td></tr>
+    <tr><td>Application Insights connection string</td><td>Step 5, Overview</td><td></td></tr>
+    <tr><td>Client ID of id-cloudmart-lab-api</td><td>Step 6, Overview</td><td></td></tr>
+    <tr><td>Client ID of id-cloudmart-lab-func</td><td>Step 6, Overview</td><td></td></tr>
+    <tr><td>Key Vault URI</td><td>Step 7, Overview</td><td></td></tr>
+    <tr><td>Storage blob endpoint</td><td>Step 8, Endpoints</td><td></td></tr>
+    <tr><td>Static Web App URL</td><td>Step 9, Overview</td><td></td></tr>
+    <tr><td>Web App (API) default domain</td><td>Step 10, Overview</td><td></td></tr>
+    <tr><td>Function App name</td><td>Step 11</td><td></td></tr>
+  </table>
+  <h3>Your progress</h3>
+  <table>
+    <tr><th style="width:8%"></th><th>Step</th><th style="width:16%">Time</th><th>You'll learn</th></tr>
+    <tr><td><span class="tick"></span></td><td>1 · Sign in, check subscription</td><td>5 min</td><td>Subscriptions, your role, resource providers</td></tr>
+    <tr><td><span class="tick"></span></td><td>2 · Resource group</td><td>3 min</td><td>The create pattern, tags</td></tr>
+    <tr><td><span class="tick"></span></td><td>3 · Budget</td><td>5 min</td><td>Cost alerts</td></tr>
+    <tr><td><span class="tick"></span></td><td>4 · Log Analytics workspace</td><td>5 min</td><td>Central logging, daily cap</td></tr>
+    <tr><td><span class="tick"></span></td><td>5 · Application Insights</td><td>3 min</td><td>App monitoring</td></tr>
+    <tr><td><span class="tick"></span></td><td>6 · Two managed identities</td><td>5 min</td><td>Identity without passwords</td></tr>
+    <tr><td><span class="tick"></span></td><td>7 · Key Vault</td><td>15 min</td><td>Secrets, control vs data plane, role assignments</td></tr>
+    <tr><td><span class="tick"></span></td><td>8 · Storage account</td><td>15 min</td><td>Blob storage, turning keys off, data roles</td></tr>
+    <tr><td><span class="tick"></span></td><td>9 · Static Web App</td><td>5 min</td><td>Hosting a website, CORS</td></tr>
+    <tr><td><span class="tick"></span></td><td>10 · Web App for the API</td><td>15 min</td><td>App Service, app settings, identities on apps</td></tr>
+    <tr><td><span class="tick"></span></td><td>11 · Function App</td><td>10 min</td><td>Serverless, Flex Consumption</td></tr>
+    <tr><td><span class="tick"></span></td><td>12 · Alert</td><td>10 min</td><td>Log search alerts, action groups</td></tr>
+    <tr><td><span class="tick"></span></td><td>13 · Policy and lock</td><td>10 min</td><td>Governance: what may exist, what may be deleted</td></tr>
+  </table>
+</section>
+
+<!-- ------------------------------------------------ STEP 1 -->
+<section class="page" id="s1">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>1</span></div><div><h2>Sign in and check your subscription</h2><div class="chips"><span class="chip"><b>TIME</b>5 min</span><span class="chip"><b>COST</b>free</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>Everything you create is billed to a subscription, and later steps assign roles to identities. You need to know which subscription you are in and that you are allowed to do both.</p></div>
+  <ol class="do">
+    <li>Go to <b>https://portal.azure.com</b> and sign in with the account that owns (or was given) the subscription.</li>
+    <li>Type <b>Subscriptions</b> in the search bar and open it. You should see at least one subscription with status <b>Active</b>. Write its name in your notebook.<div class="box note" style="margin-top:5px"><div class="t">You see none?</div><p>You have no subscription in this directory. Create a free account at azure.microsoft.com/free, or use the <b>Settings</b> (gear) icon to switch to another directory. At work, ask your Azure administrator for a sandbox.</p></div></li>
+    <li>Click the subscription, then <b>Access control (IAM)</b> › <b>Check access</b> › <b>View my access</b>. You need <b>Owner</b>, or <b>Contributor</b> plus <b>Role Based Access Control Administrator</b> (or User Access Administrator), because Steps 7 and 8 assign roles.</li>
+    <li>Still in the subscription, open <b>Settings</b> › <b>Resource providers</b>. You do not need to change anything now; just know where this page is.</li>
+  </ol>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Subscriptions</span><i>›</i><span class="p">your subscription</span><i>›</i><span class="p">Access control (IAM)</span><i>›</i><span class="p">Check access</span><i>›</i><span class="p">View my access</span></div>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › Subscriptions › Azure subscription 1</div>
+      <div class="ttl">Azure subscription 1 | Access control (IAM) <small>Subscription</small></div>
+      <div class="tabs"><span class="on">Check access</span><span>Role assignments</span><span>Roles</span><span>Deny assignments</span><span>Classic administrators</span></div>
+      <div class="body">
+        <div class="sec">My access</div>
+        <div class="hint">View my level of access to this resource.</div>
+        <span class="btn">View my access</span>
+        <table style="margin-top:8px"><tr><th>Role</th><th>Scope</th><th>Description</th></tr><tr><td class="hl"><b>Owner</b></td><td>This resource</td><td>Grants full access to manage all resources, including the ability to assign roles in Azure RBAC.</td></tr></table>
+      </div>
+    </div>
+    <figcaption>Simplified illustration. <b>Owner</b> at subscription scope is what you want for this lab.</figcaption>
+  </figure>
+  <div class="box warn"><div class="t">Watch out: "The subscription is not registered to use namespace …"</div>
+    <p>If a later step fails with this message, come back to <b>Resource providers</b>, search for the namespace it names (for example <code>Microsoft.Web</code>), select it and click <b>Register</b>. Wait until it says <b>Registered</b> (a minute or two), then retry.</p>
+  </div>
+  <div class="box check"><div class="t">Check it worked</div><p>You know your subscription's name and your role on it is Owner (or equivalent).</p></div>
+</section>
+
+<!-- ------------------------------------------------ STEP 2 -->
+<section class="page" id="s2">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>2</span></div><div><h2>Create the resource group</h2><div class="chips"><span class="chip"><b>TIME</b>3 min</span><span class="chip"><b>COST</b>free</span><span class="chip"><b>BICEP</b>infra/main.bicep (resource rg)</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>A resource group is the folder for this whole lab. Everything in Part 2 goes inside it, and in Part 5 you delete the folder to delete everything at once.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Resource groups</span><i>›</i><span class="p">+ Create</span></div>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › Resource groups ›</div>
+      <div class="ttl">Create a resource group</div>
+      <div class="tabs"><span class="on">Basics</span><span>Tags <i class="cn">4</i></span><span>Review + create</span></div>
+      <div class="body">
+        <div class="sec">Project details</div>
+        <div class="row"><label class="req">Subscription <i class="cn">1</i></label><div class="sel">Azure subscription 1</div></div>
+        <div class="row"><label class="req">Resource group <i class="cn">2</i></label><div class="in hl">rg-cloudmart-lab</div></div>
+        <div class="sec">Resource details</div>
+        <div class="row"><label class="req">Region <i class="cn">3</i></label><div class="sel hl">(US) East US 2</div></div>
+      </div>
+      <div class="foot"><span class="btn p">Review + create</span><span class="btn">&lt; Previous</span><span class="btn">Next: Tags &gt;</span></div>
+    </div>
+    <figcaption>Simplified illustration. Highlighted fields are the ones you change.</figcaption>
+  </figure>
+  <table class="fields">
+    <tr><th>Field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td><i class="cn">1</i> Subscription</td><td>your subscription</td><td>Who pays for what goes in this group.</td></tr>
+    <tr><td><i class="cn">2</i> Resource group</td><td><span class="v">rg-cloudmart-lab</span></td><td>"rg-" is the naming prefix Microsoft's Cloud Adoption Framework recommends; CloudMart uses it too.</td></tr>
+    <tr><td><i class="cn">3</i> Region</td><td><span class="v">East US 2</span></td><td>Where the group's own record lives. Keep every resource in the same region.</td></tr>
+    <tr><td><i class="cn">4</i> Tags tab</td><td><span class="v">application = cloudmart</span><br><span class="v">environment = lab</span><br><span class="v">managed-by = portal</span></td><td>Labels for cost reports and policy. Bicep sets the same tags, with <code>managed-by = bicep</code>.</td></tr>
+  </table>
+  <p>Click <b>Review + create</b>, wait for <b>Validation passed</b>, then click <b>Create</b>. A resource group is created in a second or two.</p>
+  <div class="box check"><div class="t">Check it worked</div><p>Open <b>Resource groups</b>: <code>rg-cloudmart-lab</code> is listed. Open it: it says there are no resources yet, and the <b>Tags</b> on its Overview show your three tags.</p></div>
+  <div class="box bicep"><div class="t">Same thing in Bicep</div>
+<pre>resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: 'rg-cloudmart-dev'    <span class="c">// names.resourceGroup</span>
+  location: 'eastus2'
+  tags: { application: 'cloudmart', environment: 'dev', 'managed-by': 'bicep' }
+}</pre>
+  </div>
+</section>
+
+<!-- ------------------------------------------------ STEP 3 -->
+<section class="page" id="s3">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>3</span></div><div><h2>Set a budget before you spend anything</h2><div class="chips"><span class="chip"><b>TIME</b>5 min</span><span class="chip"><b>COST</b>free</span><span class="chip"><b>BICEP</b>infra/modules/governance.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>A budget emails you when spending on this resource group reaches a level you choose. It is the cheapest insurance in Azure. Remember: it warns, it does not stop anything.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">rg-cloudmart-lab</span><i>›</i><span class="p">Budgets</span><span class="small muted">(left menu, under Cost Management)</span><i>›</i><span class="p">+ Add</span></div>
+  <h3>Page 1: Create a budget</h3>
+  <table class="fields">
+    <tr><th>Field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Scope</td><td>shows <span class="v">rg-cloudmart-lab</span></td><td>The budget only counts costs inside this group.</td></tr>
+    <tr><td>Name</td><td><span class="v">cloudmart-lab-monthly</span></td><td>Bicep's budget is called <code>cloudmart-monthly</code>.</td></tr>
+    <tr><td>Reset period</td><td><span class="v">Monthly</span></td><td>Starts counting from zero every month.</td></tr>
+    <tr><td>Creation / expiration date</td><td>leave the defaults</td><td></td></tr>
+    <tr><td>Amount</td><td><span class="v">20</span></td><td>In your billing currency. CloudMart's Bicep uses 50 for the full lab.</td></tr>
+  </table>
+  <p>Click <b>Next</b>.</p>
+  <h3>Page 2: Set alerts</h3>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › rg-cloudmart-lab | Budgets ›</div>
+      <div class="ttl">Create budget</div>
+      <div class="tabs"><span>Create a budget</span><span class="on">Set alerts</span></div>
+      <div class="body">
+        <div class="sec">Alert conditions</div>
+        <table><tr><th>Type</th><th>% of budget</th><th>Amount</th></tr>
+          <tr><td><div class="sel hl" style="width:110px">Actual</div></td><td><div class="in hl" style="width:60px">50</div></td><td>10</td></tr>
+          <tr><td><div class="sel hl" style="width:110px">Actual</div></td><td><div class="in hl" style="width:60px">80</div></td><td>16</td></tr>
+          <tr><td><div class="sel hl" style="width:110px">Forecasted</div></td><td><div class="in hl" style="width:60px">100</div></td><td>20</td></tr>
+        </table>
+        <div class="sec">Alert recipients (email)</div>
+        <div class="in hl" style="width:60%">you@example.com</div>
+      </div>
+      <div class="foot"><span class="btn p">Create</span><span class="btn">&lt; Previous</span></div>
+    </div>
+    <figcaption>Simplified illustration. "Forecasted" warns you early: when Azure predicts you will reach 100% by the end of the month.</figcaption>
+  </figure>
+  <p>Click <b>Create</b>.</p>
+  <div class="box check"><div class="t">Check it worked</div><p><b>Budgets</b> now lists <code>cloudmart-lab-monthly</code> with an amount of 20 and current spend of 0.</p></div>
+  <div class="box bicep"><div class="t">Same thing in Bicep</div><p><code>governance.bicep</code> creates the same three alerts: <code>actual50</code>, <code>actual80</code> and <code>forecast100</code>, sent to <code>ownerEmail</code> from <code>main.bicepparam</code>.</p></div>
+</section>
+
+<!-- ------------------------------------------------ STEP 4 + 5 -->
+<section class="page" id="s4">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>4</span></div><div><h2>Log Analytics workspace: the logbook</h2><div class="chips"><span class="chip"><b>TIME</b>5 min</span><span class="chip"><b>COST</b>per GB, capped</span><span class="chip"><b>BICEP</b>infra/modules/monitoring.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>One central place where every service writes its logs. You search it with a query language called <b>KQL</b>. Creating it first means everything you build later can send logs here from day one.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Log Analytics workspaces</span><i>›</i><span class="p">+ Create</span></div>
+  <table class="fields">
+    <tr><th>Field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Resource group</td><td><span class="v">rg-cloudmart-lab</span></td><td>Always this group.</td></tr>
+    <tr><td>Name</td><td><span class="v">log-cloudmart-lab</span></td><td>"log-" prefix, as in Bicep.</td></tr>
+    <tr><td>Region</td><td><span class="v">East US 2</span></td><td></td></tr>
+    <tr><td>Tags</td><td>the same three tags as Step 2</td><td>Do this on every resource.</td></tr>
+  </table>
+  <p><b>Review + create</b> › <b>Create</b> › <b>Go to resource</b>. Then add a safety cap:</p>
+  <ol class="do">
+    <li>In the workspace's left menu open <b>Settings</b> › <b>Usage and estimated costs</b>.</li>
+    <li>Click <b>Daily cap</b>, set it <b>On</b> with <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">1</span> GB/day, and click <b>OK</b>. Leave <b>Data retention</b> at 30 days.</li>
+  </ol>
+  <div class="box warn"><div class="t">Watch out</div><p>When the daily cap is reached, the workspace <b>stops collecting</b> until the next day. Great for a lab budget; risky in production, where you would rather pay than lose logs.</p></div>
+
+  <div class="step-head" id="s5" style="margin-top:16px"><div class="step-num"><small>STEP</small><span>5</span></div><div><h2>Application Insights: watching the app</h2><div class="chips"><span class="chip"><b>TIME</b>3 min</span><span class="chip"><b>COST</b>per GB, shares the cap</span><span class="chip"><b>BICEP</b>infra/modules/monitoring.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>Application Insights records what the app does: each request, how long it took, failures, and which service called which. It stores everything inside the workspace from Step 4.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Application Insights</span><i>›</i><span class="p">+ Create</span></div>
+  <table class="fields">
+    <tr><th>Field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Resource group · Name</td><td><span class="v">rg-cloudmart-lab</span> · <span class="v">appi-cloudmart-lab</span></td><td>"appi-" prefix, as in Bicep.</td></tr>
+    <tr><td>Region</td><td><span class="v">East US 2</span></td><td></td></tr>
+    <tr><td>Log Analytics workspace</td><td><span class="v">log-cloudmart-lab</span></td><td>"Workspace-based" is now the only kind; older "classic" resources are retired.</td></tr>
+  </table>
+  <p><b>Review + create</b> › <b>Create</b> › <b>Go to resource</b>. On the <b>Overview</b> page, copy the <b>Connection string</b> into your notebook. You will paste it into the website's settings in Part 3; the Web App and Function App wizards link to it for you.</p>
+  <div class="box check"><div class="t">Check it worked</div><p>The resource group now holds <code>log-cloudmart-lab</code> and <code>appi-cloudmart-lab</code>. (You may also see an alert rule called <i>Failure Anomalies</i> that Azure adds automatically.)</p></div>
+</section>
+
+<!-- ------------------------------------------------ STEP 6 -->
+<section class="page" id="s6">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>6</span></div><div><h2>Two managed identities: ID badges for the apps</h2><div class="chips"><span class="chip"><b>TIME</b>5 min</span><span class="chip"><b>COST</b>free</span><span class="chip"><b>BICEP</b>infra/modules/identity.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>Each app gets its own badge, so each can be given only the access it needs (the idea of <b>least privilege</b>). Creating the badges before the apps lets you grant access in Steps 7 and 8 before the apps even exist.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Managed Identities</span><i>›</i><span class="p">+ Create</span></div>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › Managed Identities ›</div>
+      <div class="ttl">Create User Assigned Managed Identity</div>
+      <div class="tabs"><span class="on">Basics</span><span>Tags</span><span>Review + create</span></div>
+      <div class="body">
+        <div class="sec">Project details</div>
+        <div class="row"><label class="req">Subscription</label><div class="sel">Azure subscription 1</div></div>
+        <div class="row"><label class="req">Resource group</label><div class="sel hl">rg-cloudmart-lab</div></div>
+        <div class="sec">Instance details</div>
+        <div class="row"><label class="req">Region</label><div class="sel hl">East US 2</div></div>
+        <div class="row"><label class="req">Name</label><div class="in hl">id-cloudmart-lab-api</div></div>
+      </div>
+      <div class="foot"><span class="btn p">Review + create</span><span class="btn">&lt; Previous</span><span class="btn">Next &gt;</span></div>
+    </div>
+    <figcaption>Simplified illustration. Do this twice.</figcaption>
+  </figure>
+  <ol class="do">
+    <li>Create <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">id-cloudmart-lab-api</span> (the badge for the API in Step 10). Add the usual tags.</li>
+    <li>Create <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">id-cloudmart-lab-func</span> (the badge for the Function App in Step 11).</li>
+    <li>Open each identity's <b>Overview</b> and copy its <b>Client ID</b> into your notebook. The app code uses the Client ID to say which badge it wants to wear.</li>
+  </ol>
+  <div class="box note"><div class="t">Client ID or Object (principal) ID?</div>
+    <p>An identity shows two IDs. The <b>Client ID</b> is what an app's settings use (<code>AZURE_CLIENT_ID</code>). The <b>Object (principal) ID</b> is what role assignments use behind the scenes. In the portal you pick identities by name, so you only need to note the Client ID.</p>
+  </div>
+  <div class="box check"><div class="t">Check it worked</div><p>Both identities appear in <code>rg-cloudmart-lab</code> with type <b>Managed Identity</b>. Right now they can do nothing at all; Steps 7 and 8 give them roles.</p></div>
+  <div class="box bicep"><div class="t">Same thing in Bicep</div>
+<pre>resource api 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: apiIdentityName      <span class="c">// id-cloudmart-dev-api</span>
+  location: location
+  tags: tags
+}</pre>
+  </div>
+</section>
+
+<!-- ------------------------------------------------ STEP 7 -->
+<section class="page" id="s7">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>7</span></div><div><h2>Key Vault: a safe for secrets</h2><div class="chips"><span class="chip"><b>TIME</b>15 min</span><span class="chip"><b>COST</b>cents</span><span class="chip"><b>BICEP</b>infra/modules/keyvault.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>Key Vault keeps secrets (API keys, passwords, certificates) out of code and settings. CloudMart stores a pretend payment-gateway key in it to show how an app reads a secret with no password of its own.</p></div>
+  <h3>7a · Create the vault</h3>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Key vaults</span><i>›</i><span class="p">+ Create</span></div>
+  <table class="fields">
+    <tr><th>Field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Resource group</td><td><span class="v">rg-cloudmart-lab</span></td><td></td></tr>
+    <tr><td>Key vault name</td><td><span class="v">kv-cloudmart-xy123</span></td><td>3–24 letters, digits and hyphens; must be unique worldwide because it becomes <code>https://kv-cloudmart-xy123.vault.azure.net</code>.</td></tr>
+    <tr><td>Region · Pricing tier</td><td><span class="v">East US 2</span> · <span class="v">Standard</span></td><td>Premium adds hardware-protected keys; not needed here.</td></tr>
+    <tr><td>Days to retain deleted vaults</td><td><span class="v">7</span></td><td>Deleted vaults are kept ("soft-deleted") this long, then gone. 7 is the minimum.</td></tr>
+    <tr><td>Purge protection</td><td><span class="v">Disable</span></td><td>Lab only. In production, enable it: then nobody can permanently delete the vault early.</td></tr>
+  </table>
+  <p>Now open the <b>Access configuration</b> tab. This choice matters more than any other in this step:</p>
+  <figure>
+    <div class="mock">
+      <div class="ttl" style="padding-top:8px">Create a key vault</div>
+      <div class="tabs"><span>Basics</span><span class="on">Access configuration</span><span>Networking</span><span>Tags</span><span>Review + create</span></div>
+      <div class="body">
+        <div class="sec">Permission model <i class="cn">1</i></div>
+        <div class="hint">Grant data plane access by using an Azure RBAC or Key Vault access policy.</div>
+        <div><span class="radio on hl">Azure role-based access control</span></div>
+        <div style="margin-top:3px"><span class="radio">Vault access policy</span> <span class="muted small">(older, "legacy" model)</span></div>
+        <div class="sec">Resource access <i class="cn">2</i></div>
+        <div><span class="chk">Azure Virtual Machines for deployment</span><span class="chk">Azure Resource Manager for template deployment</span><span class="chk">Azure Disk Encryption for volume encryption</span></div>
+      </div>
+    </div>
+    <figcaption>Simplified illustration of the Access configuration tab.</figcaption>
+  </figure>
+  <ul class="legend one">
+    <li><i class="cn">1</i><b>Permission model: Azure role-based access control.</b> Access to secrets is then given with ordinary role assignments, the same way as everything else in Azure. CloudMart's Bicep sets <code>enableRbacAuthorization: true</code>.</li>
+    <li><i class="cn">2</i><b>Resource access</b>: leave all three unticked; CloudMart doesn't need them.</li>
+  </ul>
+  <p>On <b>Networking</b> leave public access enabled from all networks (phase 4 of the learning path moves the vault behind a private endpoint). Add tags, then <b>Review + create</b> › <b>Create</b> › <b>Go to resource</b>. Copy the <b>Vault URI</b> from Overview into your notebook.</p>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">7b · The surprise: you are Owner, but the safe is locked</h3>
+  <p>In the vault's left menu open <b>Objects</b> › <b>Secrets</b>. Instead of a list you will probably see a message like this:</p>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › rg-cloudmart-lab › kv-cloudmart-xy123</div>
+      <div class="ttl">kv-cloudmart-xy123 | Secrets <small>Key vault</small></div>
+      <div class="cmd"><b>+ Generate/Import</b><b>⟳ Refresh</b><b>↺ Restore Backup</b><b>Manage deleted secrets</b></div>
+      <div class="body"><div class="banner err">ⓘ The operation is not allowed by RBAC. If role assignments were recently changed, please wait several minutes for role assignments to become effective.</div><div class="hint">You are unauthorized to view these contents.</div></div>
+    </div>
+    <figcaption>Simplified illustration. The exact wording varies; the meaning is "you have no data-plane role on this vault".</figcaption>
+  </figure>
+  <p>This is the <b>control plane vs data plane</b> idea from section 1.3. Owner let you <i>create</i> the vault; reading its secrets needs a separate <b>data</b> role. Give yourself one:</p>
+  <h3>7c · Give yourself the data role</h3>
+  <div class="path"><span class="lbl">Click path</span><span class="p">kv-cloudmart-xy123</span><i>›</i><span class="p">Access control (IAM)</span><i>›</i><span class="p">+ Add</span><i>›</i><span class="p">Add role assignment</span></div>
+  <figure>
+    <div class="two" style="grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div class="mock mini">
+        <div class="tabs" style="padding-top:5px"><span class="on">Role <i class="cn">1</i></span><span>Members</span><span>Review + assign</span></div>
+        <div class="body">
+          <div style="margin-bottom:5px;font-size:7.2pt"><b style="border-bottom:2px solid #0b5cad">Job function roles</b> &nbsp;<span class="muted">Privileged administrator roles</span></div>
+          <div class="in" style="margin-bottom:5px">🔍 key vault secrets</div>
+          <table><tr><th>Name</th></tr><tr><td>Key Vault Secrets User</td></tr><tr><td class="hl"><b>Key Vault Secrets Officer</b></td></tr><tr><td>Key Vault Reader</td></tr></table>
+        </div>
+        <div class="foot"><span class="btn p">Next</span></div>
+      </div>
+      <div class="mock mini">
+        <div class="tabs" style="padding-top:5px"><span>Role</span><span class="on">Members <i class="cn">2</i></span><span>Review + assign</span></div>
+        <div class="body">
+          <div class="sec">Assign access to</div>
+          <div><span class="radio on hl">User, group, or service principal</span></div>
+          <div style="margin:2px 0 6px"><span class="radio">Managed identity</span></div>
+          <div class="sec">Members</div>
+          <span class="lnk">+ Select members</span>
+          <table style="margin-top:4px"><tr><th>Name</th></tr><tr><td class="hl">You (you@contoso.com)</td></tr></table>
+        </div>
+        <div class="foot"><span class="btn p">Next</span></div>
+      </div>
+      <div class="mock mini">
+        <div class="tabs" style="padding-top:5px"><span>Role</span><span>Members</span><span class="on">Review + assign <i class="cn">3</i></span></div>
+        <div class="body" style="font-size:7.9pt">
+          <div><span class="muted">Role</span><br><b>Key Vault Secrets Officer</b></div>
+          <div style="margin-top:4px"><span class="muted">Scope</span><br>…/vaults/kv-cloudmart-xy123</div>
+          <div style="margin-top:4px"><span class="muted">Members</span><br>You (User)</div>
+        </div>
+        <div class="foot"><span class="btn p">Review + assign</span></div>
+      </div>
+    </div>
+    <figcaption>Simplified illustration of the three-tab Add role assignment wizard. You will use this wizard about ten times in this guide.</figcaption>
+  </figure>
+  <ul class="legend one">
+    <li><i class="cn">1</i><b>Role</b> tab: stay on <b>Job function roles</b>, search <b>key vault secrets</b>, select <b>Key Vault Secrets Officer</b> (read and write secrets), click <b>Next</b>.</li>
+    <li><i class="cn">2</i><b>Members</b> tab: <b>Assign access to</b> = <b>User, group, or service principal</b>; click <b>+ Select members</b>, search your own name, click it, click <b>Select</b>, then <b>Next</b>.</li>
+    <li><i class="cn">3</i>Click <b>Review + assign</b> (it may ask twice). Wait 1–5 minutes, then refresh <b>Secrets</b>: the error is gone and the list is empty.</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">7d · Add the secret</h3>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Secrets</span><i>›</i><span class="p">+ Generate/Import</span></div>
+  <table class="fields">
+    <tr><th>Field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Upload options</td><td><span class="v">Manual</span></td><td></td></tr>
+    <tr><td>Name</td><td><span class="v">PaymentGateway--ApiKey</span></td><td>Secret names can't contain ":". .NET turns "--" back into ":", so the app sees the setting <code>PaymentGateway:ApiKey</code>.</td></tr>
+    <tr><td>Secret value</td><td>any made-up text, e.g. <span class="v">fake-key-123</span></td><td>It is pretend. <b>Never</b> put a real key in a lab.</td></tr>
+    <tr><td>Set expiration date</td><td>tick it; about 90 days from today</td><td>An expiry is a promise to rotate the secret. Bicep sets 90 days too.</td></tr>
+    <tr><td>Enabled</td><td><span class="v">Yes</span></td><td></td></tr>
+  </table>
+  <p>Click <b>Create</b>. The secret appears in the list with status Enabled.</p>
+
+  <h3>7e · Let the two apps read it</h3>
+  <p>Open <b>Access control (IAM)</b> › <b>+ Add</b> › <b>Add role assignment</b> again, this time for the identities from Step 6:</p>
+  <ol class="do">
+    <li><b>Role</b>: <b>Key Vault Secrets User</b> (read only), <b>Next</b>.</li>
+    <li><b>Members</b>: <b>Assign access to</b> = <b>Managed identity</b> › <b>+ Select members</b> › <b>Managed identity</b> = <b>User-assigned managed identity</b> › tick <code>id-cloudmart-lab-api</code> and <code>id-cloudmart-lab-func</code> › <b>Select</b>.</li>
+    <li><b>Review + assign</b>.</li>
+  </ol>
+  <table>
+    <tr><th>Who</th><th>Role on this vault</th><th>Can do</th></tr>
+    <tr><td>You</td><td>Key Vault Secrets Officer</td><td>create, read, update and delete secrets</td></tr>
+    <tr><td>id-cloudmart-lab-api</td><td>Key Vault Secrets User</td><td>read secrets only</td></tr>
+    <tr><td>id-cloudmart-lab-func</td><td>Key Vault Secrets User</td><td>read secrets only</td></tr>
+  </table>
+  <div class="box check"><div class="t">Check it worked</div><p><b>Access control (IAM)</b> › <b>Role assignments</b> tab lists these three entries (plus any inherited from the subscription, such as your Owner role).</p></div>
+  <div class="box warn"><div class="t">Watch out: role assignments are not instant</div><p>New role assignments can take a few minutes, occasionally up to 10, to take effect. If something says "forbidden" right after you assigned a role, wait, refresh, or sign out and back in.</p></div>
+  <div class="box bicep"><div class="t">Same thing in Bicep</div>
+<pre>resource vault 'Microsoft.KeyVault/vaults@2024-11-01' = {
+  properties: {
+    sku: { family: 'A', name: 'standard' }
+    enableRbacAuthorization: true      <span class="c">// "Azure role-based access control"</span>
+    softDeleteRetentionInDays: 7       <span class="c">// "Days to retain deleted vaults"</span>
+  }
+}
+<span class="c">// main.bicep passes the role list: API + Functions get keyVaultSecretsUser, you get keyVaultSecretsOfficer</span></pre>
+  </div>
+</section>
+
+<!-- ------------------------------------------------ STEP 8 -->
+<section class="page" id="s8">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>8</span></div><div><h2>Storage account: product images and app files</h2><div class="chips"><span class="chip"><b>TIME</b>15 min</span><span class="chip"><b>COST</b>cents</span><span class="chip"><b>BICEP</b>infra/modules/storage.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>Cheap, durable storage for files ("blobs"). CloudMart keeps uploaded product images here, and the Function App keeps its own working files here. You will also switch off storage <b>keys</b>, so every caller must use Entra ID.</p></div>
+  <h3>8a · Create the account</h3>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Storage accounts</span><i>›</i><span class="p">+ Create</span></div>
+  <table class="fields">
+    <tr><th>Tab · field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Basics · Storage account name</td><td><span class="v">stcloudmartxy123</span></td><td>3–24 <b>lowercase letters and digits only</b> (no hyphens), unique worldwide.</td></tr>
+    <tr><td>Basics · Region</td><td><span class="v">East US 2</span></td><td></td></tr>
+    <tr><td>Basics · Preferred storage type</td><td><span class="v">Azure Blob Storage or Azure Data Lake Storage Gen 2</span></td><td>Optional; it only tailors the defaults shown.</td></tr>
+    <tr><td>Basics · Performance</td><td><span class="v">Standard</span></td><td>Premium is for very low latency; not needed.</td></tr>
+    <tr><td>Basics · Redundancy</td><td><span class="v">Locally-redundant storage (LRS)</span></td><td>Cheapest: 3 copies in one datacentre. Phase 11 explores ZRS and GRS.</td></tr>
+    <tr><td>Advanced · Access tier</td><td><span class="v">Hot</span></td><td>For files read often.</td></tr>
+    <tr><td>Networking · Public network access</td><td>Enable from all networks</td><td>The shopper's browser uploads straight to it (Step 9).</td></tr>
+    <tr><td>Data protection</td><td>tick <b>soft delete for blobs</b> (7 days), <b>soft delete for containers</b> (7 days), <b>versioning for blobs</b></td><td>A recycle bin and history for files. Same as Bicep.</td></tr>
+  </table>
+  <p>Then the <b>Security</b> tab (on some screens these options sit on the Advanced tab):</p>
+  <figure>
+    <div class="mock">
+      <div class="ttl" style="padding-top:8px">Create a storage account</div>
+      <div class="tabs"><span>Basics</span><span>Advanced</span><span>Networking</span><span>Data protection</span><span class="on">Security</span><span>Encryption</span><span>Tags</span><span>Review + create</span></div>
+      <div class="body">
+        <div class="row"><label>Require secure transfer for REST API operations</label><div><span class="chk on">on</span></div></div>
+        <div class="row"><label>Allow enabling anonymous access on individual containers</label><div><span class="chk">off</span></div></div>
+        <div class="row hl"><label><b>Enable storage account key access</b> <i class="cn">1</i></label><div><span class="chk">off</span> <span class="bad small">untick this</span></div></div>
+        <div class="row"><label>Default to Microsoft Entra authorization in the Azure portal <i class="cn">2</i></label><div><span class="chk on">on</span></div></div>
+        <div class="row"><label>Minimum TLS version</label><div class="sel" style="width:120px">Version 1.2</div></div>
+      </div>
+    </div>
+    <figcaption>Simplified illustration of the storage security settings.</figcaption>
+  </figure>
+  <ul class="legend one">
+    <li><i class="cn">1</i><b>Turn key access off.</b> A storage key is a master password for the whole account: anyone who has it can do anything, and it never expires. With keys off, every caller (you, the apps, the portal) must sign in with Entra ID and have a data role. Bicep: <code>allowSharedKeyAccess: false</code>.</li>
+    <li><i class="cn">2</i><b>Use Entra in the portal</b>, so the portal's file browser signs in as you instead of using a key.</li>
+  </ul>
+  <p>Add tags, <b>Review + create</b> › <b>Create</b> › <b>Go to resource</b>. Open <b>Settings</b> › <b>Endpoints</b> and copy the <b>Blob service</b> URL (<code>https://stcloudmartxy123.blob.core.windows.net/</code>) into your notebook.</p>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">8b · Give yourself data access first</h3>
+  <p>Same lesson as the vault: with keys off, even the portal needs <b>you</b> to hold a data role before it can list or create containers.</p>
+  <p><b>Access control (IAM)</b> › <b>+ Add</b> › <b>Add role assignment</b> › role <b>Storage Blob Data Contributor</b> › member: <b>you</b> › <b>Review + assign</b>. Wait a minute or two.</p>
+  <h3>8c · Create four containers</h3>
+  <p>A <b>container</b> is a folder inside the account. Open <b>Data storage</b> › <b>Containers</b> › <b>+ Container</b> (or <b>+ Add container</b>) and create each of these with <b>Anonymous access level</b> = <b>Private</b>:</p>
+  <table>
+    <tr><th>Container</th><th>What CloudMart keeps in it</th></tr>
+    <tr><td><code>product-uploads</code></td><td>images just uploaded by an admin, waiting to be processed</td></tr>
+    <tr><td><code>product-images</code></td><td>processed product images the shop displays</td></tr>
+    <tr><td><code>function-deployments</code></td><td>the Function App's code package</td></tr>
+    <tr><td><code>eventgrid-deadletter</code></td><td>upload events that failed (used from phase 5)</td></tr>
+  </table>
+  <h3>8d · Give the apps their storage roles</h3>
+  <p>Repeat the Add role assignment wizard (one role per pass; you can pick both identities when they share a role). Choose <b>Assign access to</b> = <b>Managed identity</b>.</p>
+  <table>
+    <tr><th>Identity</th><th>Role</th><th>Why it needs it</th></tr>
+    <tr><td rowspan="2">id-cloudmart-lab-api</td><td>Storage Blob Data Contributor</td><td>read and write product images</td></tr>
+    <tr><td>Storage Blob Delegator</td><td>sign short-lived upload links (a "user delegation SAS") for the browser</td></tr>
+    <tr><td rowspan="3">id-cloudmart-lab-func</td><td>Storage Blob Data Owner</td><td>the Functions host's own files, and image processing</td></tr>
+    <tr><td>Storage Queue Data Contributor</td><td>the Functions host's internal queues</td></tr>
+    <tr><td>Storage Table Data Contributor</td><td>the Functions host's bookkeeping tables</td></tr>
+  </table>
+  <div class="box note"><div class="t">What is a SAS?</div><p>A <b>shared access signature</b> is a link that grants narrow, temporary access, such as "upload this one file in the next 10 minutes". The API signs one with its identity so a shopper's browser can upload an image directly, without ever holding a key. This is called the <b>valet key</b> pattern.</p></div>
+  <div class="box check"><div class="t">Check it worked</div><p><b>Containers</b> shows four private containers. <b>Access control (IAM)</b> › <b>Role assignments</b> shows six storage roles: one for you, two for the API identity, three for the Functions identity.</p></div>
+  <div class="box bicep"><div class="t">Same thing in Bicep</div>
+<pre>properties: {
+  allowSharedKeyAccess: false           <span class="c">// "Enable storage account key access": off</span>
+  allowBlobPublicAccess: false          <span class="c">// no anonymous containers</span>
+  defaultToOAuthAuthentication: true    <span class="c">// "Default to Microsoft Entra authorization"</span>
+  minimumTlsVersion: 'TLS1_2'
+}
+var containerNames = ['product-uploads', 'product-images', 'function-deployments', 'eventgrid-deadletter']</pre>
+  </div>
+</section>
+
+<!-- ------------------------------------------------ STEP 9 -->
+<section class="page" id="s9">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>9</span></div><div><h2>Static Web App: the shop's website</h2><div class="chips"><span class="chip"><b>TIME</b>5 min</span><span class="chip"><b>COST</b>free (Free plan)</span><span class="chip"><b>BICEP</b>infra/modules/staticwebapp.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>CloudMart's website is a React app: just HTML, JavaScript and CSS files. Static Web Apps serves such files from Microsoft's global network, with HTTPS, for free. It is created before the API because the API and storage need to know its address.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Static Web Apps</span><i>›</i><span class="p">+ Create</span></div>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › Static Web Apps ›</div>
+      <div class="ttl">Create Static Web App</div>
+      <div class="tabs"><span class="on">Basics</span><span>Advanced</span><span>Tags</span><span>Review + create</span></div>
+      <div class="body">
+        <div class="row"><label class="req">Resource group</label><div class="sel hl">rg-cloudmart-lab</div></div>
+        <div class="sec">Static Web App details</div>
+        <div class="row"><label class="req">Name</label><div class="in hl">stapp-cloudmart-lab</div></div>
+        <div class="sec">Hosting plan <i class="cn">1</i></div>
+        <div class="row"><label class="req">Plan type</label><div><span class="radio on hl">Free: For hobby or personal projects</span><br><span class="radio">Standard: For general purpose production apps</span></div></div>
+        <div class="row"><label>Region for Azure Functions API and staging environments <i class="cn">2</i></label><div class="sel">East US 2</div></div>
+        <div class="sec">Deployment details <i class="cn">3</i></div>
+        <div class="row"><label class="req">Source</label><div><span class="radio">GitHub</span><span class="radio">Azure DevOps</span><span class="radio on hl">Other</span></div></div>
+      </div>
+      <div class="foot"><span class="btn p">Review + create</span><span class="btn">Next: Advanced &gt;</span></div>
+    </div>
+    <figcaption>Simplified illustration.</figcaption>
+  </figure>
+  <ul class="legend one">
+    <li><i class="cn">1</i><b>Plan type: Free.</b> Standard (about US$9 a month) is only needed in phase 10, to lock the site behind Front Door.</li>
+    <li><i class="cn">2</i>Static Web Apps is offered in only a few regions; the files themselves are served worldwide anyway.</li>
+    <li><i class="cn">3</i><b>Source: Other.</b> You will upload the files yourself in Part 3. Choosing GitHub would create a pipeline in your repository.</li>
+  </ul>
+  <p><b>Review + create</b> › <b>Create</b> › <b>Go to resource</b>. Copy the <b>URL</b> from Overview (something like <code>https://&lt;random-words&gt;.azurestaticapps.net</code>) into your notebook. Opening it now shows a placeholder page.</p>
+  <h3>9b · Let the website upload to storage (CORS)</h3>
+  <p>Browsers block a web page from sending data to a different website unless that site says "I trust this origin". This rule is called <b>CORS</b>. Tell the storage account to trust your shop, then click <b>Save</b>:</p>
+  <div class="path"><span class="lbl">Click path</span><span class="p">stcloudmartxy123</span><i>›</i><span class="p">Settings</span><i>›</i><span class="p">Resource sharing (CORS)</span><i>›</i><span class="p">Blob service</span></div>
+  <table class="fields">
+    <tr><th>Field</th><th>Enter</th><th>Why</th></tr>
+    <tr><td>Allowed origins</td><td>your Static Web App URL, e.g. <span class="v">https://…azurestaticapps.net</span></td><td>Exactly as copied: <code>https://</code>, no slash at the end.</td></tr>
+    <tr><td>Allowed methods</td><td><span class="v">PUT</span>, <span class="v">OPTIONS</span></td><td>Upload, plus the browser's "may I?" check.</td></tr>
+    <tr><td>Allowed / exposed headers</td><td><span class="v">*</span> and <span class="v">*</span></td><td>Any header.</td></tr>
+    <tr><td>Max age</td><td><span class="v">3600</span></td><td>The browser remembers the answer for an hour.</td></tr>
+  </table>
+</section>
+
+<!-- ------------------------------------------------ STEP 10 -->
+<section class="page" id="s10">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>10</span></div><div><h2>Web App: a home for the API</h2><div class="chips"><span class="chip"><b>TIME</b>15 min</span><span class="chip"><b>COST</b>≈ US$13/month (B1)</span><span class="chip"><b>BICEP</b>infra/modules/appservice.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>App Service runs web applications without you managing servers. The <b>App Service plan</b> is the machine you rent (size B1); the <b>Web App</b> is the application running on it. CloudMart's .NET API lives here.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">App Services</span><i>›</i><span class="p">+ Create</span><i>›</i><span class="p">Web App</span></div>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › App Services ›</div>
+      <div class="ttl">Create Web App</div>
+      <div class="tabs"><span class="on">Basics</span><span>Database</span><span>Deployment <i class="cn">5</i></span><span>Networking</span><span>Monitor + secure <i class="cn">6</i></span><span>Tags</span><span>Review + create</span></div>
+      <div class="body">
+        <div class="row"><label class="req">Resource group</label><div class="sel hl">rg-cloudmart-lab</div></div>
+        <div class="sec">Instance Details</div>
+        <div class="row"><label class="req">Name <i class="cn">1</i></label><div><div class="in hl">app-cloudmart-lab-api-xy123</div><span class="hint">app-cloudmart-lab-api-xy123-a1b2c3d4e5f6g7h8.eastus2-01.azurewebsites.net</span></div></div>
+        <div class="row"><label class="req">Publish</label><div><span class="radio on hl">Code</span><span class="radio">Container</span></div></div>
+        <div class="row"><label class="req">Runtime stack <i class="cn">2</i></label><div class="sel hl">.NET 10 (LTS)</div></div>
+        <div class="row"><label class="req">Operating System</label><div><span class="radio on hl">Linux</span><span class="radio">Windows</span></div></div>
+        <div class="row"><label class="req">Region</label><div class="sel hl">East US 2</div></div>
+        <div class="sec">Pricing plans</div>
+        <div class="row"><label class="req">Linux Plan (East US 2) <i class="cn">3</i></label><div><div class="sel hl">(New) asp-cloudmart-lab</div><span class="lnk">Create new</span></div></div>
+        <div class="row"><label class="req">Pricing plan <i class="cn">4</i></label><div><div class="sel hl">Basic B1 (100 total ACU, 1.75 GB memory, 1 vCPU)</div><span class="lnk">Explore pricing plans</span></div></div>
+      </div>
+      <div class="foot"><span class="btn p">Review + create</span><span class="btn">Next: Database &gt;</span></div>
+    </div>
+    <figcaption>Simplified illustration of the Web App Basics tab.</figcaption>
+  </figure>
+  <ul class="legend one">
+    <li><i class="cn">1</i><b>Name</b> must be unique. New apps get a <b>secure unique default hostname</b> with a random part and the region in it, which protects against "subdomain takeover". Use the exact address shown on Overview later.</li>
+    <li><i class="cn">2</i><b>Runtime stack: .NET 10 (LTS)</b>, Operating System <b>Linux</b>: what CloudMart's API targets (<code>DOTNETCORE|10.0</code> in Bicep).</li>
+    <li><i class="cn">3</i><b>Linux Plan</b>: <b>Create new</b> › <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">asp-cloudmart-lab</span>.</li>
+    <li><i class="cn">4</i><b>Pricing plan: Basic B1.</b> If you only see Free or Premium, click <b>Explore pricing plans</b>. B1 is the cheapest plan with <i>Always On</i>; deployment slots and autoscale need Standard or above.</li>
+    <li><i class="cn">5</i><b>Deployment</b> tab: Continuous deployment <b>Disable</b>; <b>Basic authentication: Disable</b> (code is uploaded with your Entra ID login, not a username and password).</li>
+    <li><i class="cn">6</i><b>Monitor + secure</b> tab: <b>Enable Application Insights: Yes</b> › choose <code>appi-cloudmart-lab</code>. This adds the connection string to the app for you.</li>
+  </ul>
+  <p>Leave <b>Database</b> and <b>Networking</b> at their defaults (public access on). Add tags, <b>Review + create</b> › <b>Create</b>. It takes a minute or two.</p>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">10b · Put the badge on the app</h3>
+  <div class="path"><span class="lbl">Click path</span><span class="p">app-cloudmart-lab-api-xy123</span><i>›</i><span class="p">Settings</span><i>›</i><span class="p">Identity</span><i>›</i><span class="p">User assigned</span><i>›</i><span class="p">+ Add</span></div>
+  <p>Pick <code>id-cloudmart-lab-api</code> and click <b>Add</b>. Leave <b>System assigned</b> off.</p>
+  <h3>10c · App settings: tell the code where things are</h3>
+  <p>App settings are name = value pairs the code reads at start-up, like a configuration file kept by Azure. Open <b>Settings</b> › <b>Environment variables</b> › <b>App settings</b> and click <b>+ Add</b> for each row:</p>
+  <figure>
+    <div class="mock">
+      <div class="crumb">Home › app-cloudmart-lab-api-xy123</div>
+      <div class="ttl">app-cloudmart-lab-api-xy123 | Environment variables <small>Web App</small></div>
+      <div class="tabs"><span class="on">App settings</span><span>Connection strings</span></div>
+      <div class="cmd"><b>+ Add</b><b>✎ Advanced edit</b><b>⟳ Refresh</b><b>👁 Show values</b></div>
+      <div class="body" style="padding-top:4px">
+        <table>
+          <tr><th>Name</th><th>Value</th><th>Source</th></tr>
+          <tr><td>APPLICATIONINSIGHTS_CONNECTION_STRING</td><td>InstrumentationKey=…;IngestionEndpoint=…</td><td>App Service</td></tr>
+          <tr><td class="hl">AZURE_CLIENT_ID</td><td>&lt;Client ID of id-cloudmart-lab-api&gt;</td><td>App Service</td></tr>
+          <tr><td class="hl">KeyVault__Uri</td><td>https://kv-cloudmart-xy123.vault.azure.net/</td><td>App Service</td></tr>
+        </table>
+      </div>
+      <div class="foot"><span class="btn p">Apply</span><span class="btn">Discard</span></div>
+    </div>
+    <figcaption>Simplified illustration. Click <b>Apply</b> at the bottom when all rows are in, then <b>Confirm</b>; the app restarts.</figcaption>
+  </figure>
+  <table>
+    <tr><th style="width:37%">Name</th><th style="width:27%">Value</th><th>What it does</th></tr>
+    <tr><td><code>AZURE_CLIENT_ID</code></td><td>its Client ID (Step 6)</td><td>Which badge the code should wear.</td></tr>
+    <tr><td><code>CLOUDMART_REGION</code></td><td><code>eastus2</code></td><td>Shown on the shop's Platform page.</td></tr>
+    <tr><td><code>KeyVault__Uri</code></td><td>Vault URI (Step 7)</td><td>The API loads its secrets from here at start-up.</td></tr>
+    <tr><td><code>Storage__BlobEndpoint</code></td><td>Blob service URL (Step 8)</td><td>Where product images live.</td></tr>
+    <tr><td><code>Cors__AllowedOrigins</code></td><td>Static Web App URL<code>,http://localhost:5173</code></td><td>Which websites may call the API (comma-separated, no spaces).</td></tr>
+    <tr><td><code>Auth__AllowAnonymousDevMode</code></td><td><code>true</code></td><td>Lab only: everyone is a demo admin (phase 6 adds sign-in).</td></tr>
+    <tr><td><code>APPLICATIONINSIGHTS_CONNECTION_STRING</code></td><td>already there</td><td>Added by the wizard; just check.</td></tr>
+  </table>
+  <p class="small">"__" stands for ":" because Linux settings can't contain a colon: .NET reads <code>KeyVault__Uri</code> as <code>KeyVault:Uri</code>.</p>
+  <h3>10d · Safety settings</h3>
+  <ol class="do">
+    <li><b>Settings</b> › <b>Configuration</b> › <b>General settings</b>: <b>HTTPS Only</b> On · <b>Always on</b> On · <b>HTTP version</b> 2.0 · <b>Minimum inbound TLS version</b> 1.2 · <b>SCM</b> and <b>FTP Basic Auth Publishing Credentials</b> Off · <b>FTP state</b> Disabled › <b>Save</b>.</li>
+    <li><b>Monitoring</b> › <b>Health check</b> › <b>Enable</b>, path <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">/health/live</span> › <b>Save</b>. App Service now restarts the app if it stops answering.</li>
+  </ol>
+  <div class="box check"><div class="t">Check it worked</div><p>On <b>Overview</b>, copy the <b>Default domain</b> into your notebook and open it with <code>https://</code> in front. You see a default "waiting for your content" page: the server works; the code comes in Part 3.</p></div>
+</section>
+
+<!-- ------------------------------------------------ STEP 11 -->
+<section class="page" id="s11">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>11</span></div><div><h2>Function App: background jobs, serverless</h2><div class="chips"><span class="chip"><b>TIME</b>10 min</span><span class="chip"><b>COST</b>≈ $0 idle</span><span class="chip"><b>BICEP</b>infra/modules/functionapp.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>Azure Functions run small pieces of code when something happens: a message arrives, a file is uploaded, a timer ticks. On the <b>Flex Consumption</b> plan you pay only while code runs, and it scales to zero when idle. CloudMart's order processing and image handling run here.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Function App</span><i>›</i><span class="p">+ Create</span><i>›</i><span class="p">Flex Consumption</span><i>›</i><span class="p">Select</span></div>
+  <figure>
+    <div class="mock">
+      <div class="ttl" style="padding-top:8px">Select a hosting option</div>
+      <div class="body">
+        <div class="cards">
+          <div class="card sel2"><b>Flex Consumption</b>Pay per use, fast scaling, scale to zero, virtual network support. <span class="lnk">Recommended for serverless</span></div>
+          <div class="card"><b>Functions Premium</b>Always-warm instances, no cold start; you pay per hour.</div>
+          <div class="card"><b>App Service</b>Run on an App Service plan you already pay for.</div>
+          <div class="card"><b>Consumption</b>The older pay-per-use plan.</div>
+        </div>
+      </div>
+      <div class="foot"><span class="btn p">Select</span><span class="btn">Cancel</span></div>
+    </div>
+    <figcaption>Simplified illustration. The choices offered may differ; pick <b>Flex Consumption</b>.</figcaption>
+  </figure>
+  <table class="fields">
+    <tr><th>Tab · field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Basics · Function App name</td><td><span class="v">func-cloudmart-lab-xy123</span></td><td>Unique worldwide; write it in your notebook.</td></tr>
+    <tr><td>Basics · Region</td><td><span class="v">East US 2</span></td><td>Flex isn't in every region; unsupported ones are hidden.</td></tr>
+    <tr><td>Basics · Runtime stack · Version</td><td><span class="v">.NET</span> · <span class="v">10 (isolated worker model)</span></td><td>Matches CloudMart's Functions project.</td></tr>
+    <tr><td>Basics · Instance size</td><td><span class="v">2048 MB</span></td><td>Memory per instance; the recommended default.</td></tr>
+    <tr><td>Storage · Storage account</td><td><span class="v">stcloudmartxy123</span></td><td>Use the account from Step 8 instead of creating a new one.</td></tr>
+    <tr><td>Networking · Enable public access</td><td>On</td><td>Private networking comes in phase 2.</td></tr>
+    <tr><td>Monitoring · Enable Application Insights</td><td>Yes › <span class="v">appi-cloudmart-lab</span></td><td>Same monitoring as the API.</td></tr>
+    <tr><td>Authentication · Authentication type</td><td><span class="v">Managed identity</span></td><td><b>Required here.</b> You turned storage keys off in Step 8, so the app must reach its storage with an identity.</td></tr>
+  </table>
+  <div class="box warn"><div class="t">Watch out: which identity?</div>
+    <p>On the Authentication tab the portal may create a <b>new</b> user-assigned identity for the app, and give it the storage roles it needs. That is fine. If it lets you choose an existing one, pick <code>id-cloudmart-lab-func</code>. Either way, after creation open <b>Settings</b> › <b>Identity</b> › <b>User assigned</b> and make sure <code>id-cloudmart-lab-func</code> is attached (<b>+ Add</b> if not): it is the badge with the Key Vault role from Step 7.</p>
+  </div>
+  <p>Add tags, <b>Review + create</b> › <b>Create</b> › <b>Go to resource</b>.</p>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">11b · App settings for the Function App</h3>
+  <p><b>Settings</b> › <b>Environment variables</b> › <b>App settings</b> › <b>+ Add</b> for each row, then <b>Apply</b> › <b>Confirm</b>. Leave the <code>AzureWebJobsStorage__…</code> and Application Insights settings the wizard created as they are.</p>
+  <table>
+    <tr><th style="width:42%">Name</th><th style="width:28%">Value</th><th>What it does</th></tr>
+    <tr><td><code>AZURE_CLIENT_ID</code></td><td>Client ID of <code>id-cloudmart-lab-func</code></td><td>Which badge the code wears.</td></tr>
+    <tr><td><code>CLOUDMART_REGION</code></td><td><code>eastus2</code></td><td></td></tr>
+    <tr><td><code>Storage__BlobEndpoint</code></td><td>your Blob service URL</td><td>Where images are processed.</td></tr>
+    <tr><td><code>AzureWebJobs.FulfillOrder.Disabled</code></td><td><code>true</code></td><td rowspan="5">These functions listen to Service Bus, Event Hubs or a database, which you add in phases 4 and 5. Switching them off stops them failing at start-up. Bicep does exactly this.</td></tr>
+    <tr><td><code>AzureWebJobs.FlagHighValueOrder.Disabled</code></td><td><code>true</code></td></tr>
+    <tr><td><code>AzureWebJobs.NotifyCustomer.Disabled</code></td><td><code>true</code></td></tr>
+    <tr><td><code>AzureWebJobs.AggregateProductViews.Disabled</code></td><td><code>true</code></td></tr>
+    <tr><td><code>AzureWebJobs.DailyOrderReport.Disabled</code></td><td><code>true</code></td></tr>
+  </table>
+  <div class="box note"><div class="t">Optional, advanced: a Key Vault reference</div>
+    <p>Bicep also gives the Function App the setting <code>PaymentGateway__ApiKey</code> with the value <code>@Microsoft.KeyVault(VaultName=kv-cloudmart-xy123;SecretName=PaymentGateway--ApiKey)</code>. Azure then fetches the secret itself and hands it to the code as a normal setting. With a user-assigned identity, Azure must be told which badge to use for this, and the portal has no simple button for it at the time of writing; it takes one CLI command:</p>
+<pre>az functionapp update -g rg-cloudmart-lab -n func-cloudmart-lab-xy123 \
+  --set keyVaultReferenceIdentity=&lt;resource ID of id-cloudmart-lab-func&gt;</pre>
+    <p>(Find the resource ID on the identity's <b>Properties</b> page.) A good example of why the CLI and Bicep exist: not everything has a button.</p>
+  </div>
+  <div class="box check"><div class="t">Check it worked</div><p><b>Overview</b> shows Status <b>Running</b> and an empty <b>Functions</b> list. The functions appear after you deploy the code in Part 3.</p></div>
+  <div class="box bicep"><div class="t">Same thing in Bicep</div>
+<pre>resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
+  sku: { tier: 'FlexConsumption', name: 'FC1' }
+}
+functionAppConfig: {
+  scaleAndConcurrency: { maximumInstanceCount: 40, instanceMemoryMB: 2048 }
+  runtime: { name: 'dotnet-isolated', version: '10.0' }
+}
+<span class="c">// app settings: AzureWebJobsStorage__credential = 'managedidentity' (no connection string)</span></pre>
+  </div>
+</section>
+
+<!-- ------------------------------------------------ STEP 12 -->
+<section class="page" id="s12">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>12</span></div><div><h2>An alert that emails you</h2><div class="chips"><span class="chip"><b>TIME</b>10 min</span><span class="chip"><b>COST</b>≈ US$1.50/month</span><span class="chip"><b>BICEP</b>infra/modules/monitoring.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p>You want to hear about errors before your users do. This alert runs a log query every 5 minutes and emails you if the API throws more than 5 errors (exceptions). An <b>action group</b> is the list of who to tell and how.</p></div>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Monitor</span><i>›</i><span class="p">Alerts</span><i>›</i><span class="p">+ Create</span><i>›</i><span class="p">Alert rule</span></div>
+  <table class="fields">
+    <tr><th>Tab · field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Scope</td><td><span class="v">appi-cloudmart-lab</span> › Apply</td><td>The query runs against this app's data.</td></tr>
+    <tr><td>Condition · Signal name</td><td><span class="v">Custom log search</span></td><td>An alert based on a KQL query.</td></tr>
+    <tr><td>Condition · Search query</td><td colspan="2"><code>exceptions | where client_Type != "Browser"</code> › <b>Run</b> › <b>Continue editing alert</b><br><span class="small muted">Counts server-side errors only, not errors in shoppers' browsers.</span></td></tr>
+    <tr><td>Measure · Aggregation type</td><td><span class="v">Table rows</span> · <span class="v">Count</span></td><td>Count the matching rows.</td></tr>
+    <tr><td>Aggregation granularity</td><td><span class="v">5 minutes</span></td><td>Each check looks at 5 minutes of data.</td></tr>
+    <tr><td>Operator · Threshold value</td><td><span class="v">Greater than</span> · <span class="v">5</span></td><td>More than 5 errors in 5 minutes.</td></tr>
+    <tr><td>Frequency of evaluation</td><td><span class="v">5 minutes</span></td><td>How often to check. More often costs more.</td></tr>
+    <tr><td>Actions</td><td><b>+ Create action group</b> (below)</td><td></td></tr>
+    <tr><td>Details · Severity</td><td><span class="v">2 - Warning</span></td><td>0 is critical, 4 is verbose.</td></tr>
+    <tr><td>Details · Alert rule name</td><td><span class="v">CloudMart lab: exception spike</span></td><td>Bicep's is "CloudMart: exception spike".</td></tr>
+    <tr><td>Details · Region</td><td><span class="v">East US 2</span></td><td></td></tr>
+  </table>
+  <h3>Create the action group (from the Actions tab)</h3>
+  <ol class="do">
+    <li><b>Basics</b>: resource group <code>rg-cloudmart-lab</code>, <b>Action group name</b> <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">ag-cloudmart-lab</span>, <b>Display name</b> <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">cloudmart</span> (max 12 characters; it appears in messages). Region: Global.</li>
+    <li><b>Notifications</b>: type <b>Email/SMS message/Push/Voice</b>, name <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">owner</span>; tick <b>Email</b> and enter your address › <b>OK</b>.</li>
+    <li><b>Review + create</b> › <b>Create</b>. You return to the alert rule with the group selected.</li>
+  </ol>
+  <p>Finish the alert rule with <b>Review + create</b> › <b>Create</b>.</p>
+  <div class="box check"><div class="t">Check it worked</div><p>You get an email saying you were added to the action group <i>cloudmart</i>. <b>Monitor</b> › <b>Alerts</b> › <b>Alert rules</b> lists your rule as Enabled. In Part 3 you can trigger it on purpose from CloudMart's Admin page (the "chaos" buttons).</p></div>
+</section>
+
+<!-- ------------------------------------------------ STEP 13 -->
+<section class="page" id="s13">
+  <div class="step-head"><div class="step-num"><small>STEP</small><span>13</span></div><div><h2>Guard rails: a policy and a lock</h2><div class="chips"><span class="chip"><b>TIME</b>10 min</span><span class="chip"><b>COST</b>free</span><span class="chip"><b>BICEP</b>infra/modules/governance.bicep</span></div></div></div>
+  <div class="box why"><div class="t">Why</div><p><b>RBAC</b> (roles) controls <i>who</i> can act. <b>Azure Policy</b> controls <i>what</i> may exist, whoever asks. <b>Locks</b> protect against accidents, even by Owners.</p></div>
+  <h3>13a · Policy: only allow East US 2</h3>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Policy</span><i>›</i><span class="p">Authoring</span><i>›</i><span class="p">Assignments</span><i>›</i><span class="p">Assign policy</span></div>
+  <table class="fields">
+    <tr><th>Tab · field</th><th>Enter or choose</th><th>Why</th></tr>
+    <tr><td>Basics · Scope</td><td><b>…</b> › your subscription › <span class="v">rg-cloudmart-lab</span> › Select</td><td>The rule applies only inside this group.</td></tr>
+    <tr><td>Basics · Policy definition</td><td><b>…</b> › search <span class="v">Allowed locations</span> › Add</td><td>A built-in rule from Microsoft.</td></tr>
+    <tr><td>Basics · Assignment name</td><td><span class="v">CloudMart lab: allowed locations</span></td><td></td></tr>
+    <tr><td>Basics · Policy enforcement</td><td><span class="v">Enabled</span></td><td>"Disabled" would only report, not block.</td></tr>
+    <tr><td>Parameters · Allowed locations</td><td><span class="v">East US 2</span></td><td>Untick "Only show parameters that need input" if the list is hidden. Add your Static Web App's region if it differs.</td></tr>
+    <tr><td>Non-compliance messages</td><td><span class="v">CloudMart lab resources must be in East US 2.</span></td><td>Shown to whoever gets blocked.</td></tr>
+  </table>
+  <p><b>Review + create</b> › <b>Create</b>. A new assignment can take up to 30 minutes to start working.</p>
+  <div class="box check"><div class="t">Check it worked (try to break it)</div><p>Later, start creating any small resource (for example a storage account) in <code>rg-cloudmart-lab</code> but choose region <b>West Europe</b>. <b>Review + create</b> fails validation with <code>RequestDisallowedByPolicy</code> and your message. Cancel the wizard.</p></div>
+  <div class="box note"><div class="t">Optional: the second policy Bicep assigns</div><p>CloudMart's Bicep also assigns <b>Inherit a tag from the resource group if missing</b> with tag name <code>environment</code>. It uses the <b>Modify</b> effect, so it needs permission to change resources: on the <b>Remediation</b> tab, tick <b>Create a Managed Identity</b> (system assigned). The portal gives that identity the role it needs. Then any new resource without an <code>environment</code> tag gets the group's tag automatically.</p></div>
+  <h3>13b · Lock: prevent accidental deletion</h3>
+  <div class="path"><span class="lbl">Click path</span><span class="p">rg-cloudmart-lab</span><i>›</i><span class="p">Settings</span><i>›</i><span class="p">Locks</span><i>›</i><span class="p">+ Add</span></div>
+  <p>Lock name <span style="font-family:Consolas;background:#fff7d6;padding:0 3px">no-delete</span>, Lock type <b>Delete</b> (called <code>CanNotDelete</code> in the CLI and Bicep), notes "lab safety" › <b>OK</b>. Now try to delete the storage account: Azure refuses, even though you are Owner.</p>
+  <div class="box warn"><div class="t">Watch out</div><p>A <b>Read-only</b> lock is much stronger than its name suggests: it also blocks actions that read via a POST, such as listing keys or restarting an app. And you must <b>remove the lock before Part 5</b>, or the clean-up fails.</p></div>
+  <div class="box check"><div class="t">Part 2 done!</div><p>Open <code>rg-cloudmart-lab</code>. Its Overview lists everything you built (plus a few things Azure adds itself, such as the Function App's own plan and a <i>Failure Anomalies</i> alert). This is the phase 1 foundation of CloudMart.</p></div>
+</section>
+
+<!-- =============================================================== PART 3 -->
+<section class="page" id="p3">
+  <div class="part"><div class="k">Part 3</div><h1>Put CloudMart's code on it</h1><p>The portal is for building and inspecting. Code is uploaded with a command or a pipeline.</p></div>
+  <p>For this part you need a laptop with the <b>.NET 10 SDK</b>, <b>Node.js 24</b>, <b>Git</b>, the <b>Azure CLI</b> and a copy of the CloudMart repository. Open a terminal in the repository folder and sign in once:</p>
+<pre>az login                          <span class="c"># opens a browser; pick the same account as the portal</span>
+az account show -o table          <span class="c"># check it shows the subscription from Step 1</span></pre>
+  <h3>3.1 · The API → Web App</h3>
+<pre><span class="c"># Windows PowerShell</span>
+dotnet publish src/CloudMart.Api -c Release -o out/api
+Compress-Archive -Path out/api/* -DestinationPath out/api.zip -Force
+az webapp deploy -g rg-cloudmart-lab -n app-cloudmart-lab-api-xy123 --src-path out/api.zip --type zip</pre>
+  <p>In the portal, open the Web App's <b>Default domain</b> and add <code>/health/live</code>, then <code>/api/platform/info</code>: you should get a short text or JSON reply instead of the placeholder page.</p>
+  <h3>3.2 · The Functions → Function App</h3>
+<pre>dotnet publish src/CloudMart.Functions -c Release -o out/func
+Compress-Archive -Path out/func/* -DestinationPath out/func.zip -Force
+az functionapp deployment source config-zip -g rg-cloudmart-lab -n func-cloudmart-lab-xy123 --src out/func.zip</pre>
+  <p>In the portal, the Function App's <b>Overview</b> › <b>Functions</b> list now shows CloudMart's functions; the five you switched off show as <b>Disabled</b>.</p>
+  <h3>3.3 · The website → Static Web App</h3>
+  <ol class="do">
+    <li>Build it: <code>cd src/cloudmart-web</code>, then <code>npm install</code> and <code>npm run build</code>. The result is in <code>dist/</code>.</li>
+    <li>Open <code>dist/config.json</code> in a text editor and fill in two values (leave the <code>entra</code> part empty until phase 6):
+<pre>{
+  "apiBaseUrl": "https://&lt;your Web App default domain&gt;",
+  "entra": { "clientId": "", "tenantId": "", "apiScope": "" },
+  "appInsightsConnectionString": "&lt;connection string from Step 5&gt;"
+}</pre></li>
+    <li>In the portal: Static Web App › <b>Overview</b> › <b>Manage deployment token</b> › copy the token.</li>
+    <li>Upload: <code>npx @azure/static-web-apps-cli deploy dist --env production --deployment-token &lt;token&gt;</code></li>
+  </ol>
+  <div class="box warn"><div class="t">Watch out: the deployment token is a secret</div><p>Anyone with it can replace your website. Don't paste it in chat or email, and don't save it in the repository. If it leaks, click <b>Reset token</b> on the same page.</p></div>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">3.4 · Try the shop</h3>
+  <div class="flow green">
+    <div><em>1</em><b>Shop</b>Open your Static Web App URL. Products load from the API.</div>
+    <div><em>2</em><b>Order</b>Place an order: it goes <i>Pending</i>, then <i>Confirmed</i> a moment later.</div>
+    <div><em>3</em><b>Platform</b>Shows <b>App Service</b>, region <b>eastus2</b>, and which parts are still in-memory.</div>
+    <div><em>4</em><b>Admin</b>Upload a product image: it lands in the <code>product-uploads</code> container.</div>
+  </div>
+  <p>Most parts still say <i>In-memory</i> on the Platform page. That is expected: phases 4 and 5 of the learning path swap them for Cosmos DB, Azure SQL and Service Bus.</p>
+  <h3>3.5 · Watch it from the portal</h3>
+  <table>
+    <tr><th style="width:32%">Where in the portal</th><th>What you see</th></tr>
+    <tr><td>Storage account › <b>Storage browser</b> › Blob containers › <code>product-uploads</code></td><td>The image you uploaded from Admin, sent straight from the browser with a SAS link.</td></tr>
+    <tr><td>Application Insights › <b>Application map</b></td><td>A diagram of the browser, the API and its dependencies, drawn from real traffic.</td></tr>
+    <tr><td>Application Insights › <b>Live metrics</b></td><td>Requests per second while you click around the shop.</td></tr>
+    <tr><td>Application Insights › <b>Transaction search</b></td><td>One request followed end to end: browser → API → storage.</td></tr>
+    <tr><td>Application Insights › <b>Logs</b></td><td>Run <code>requests | summarize count() by resultCode</code> to count responses by status.</td></tr>
+    <tr><td>Web App › <b>Log stream</b></td><td>The API's console output, live. The first place to look if it won't start.</td></tr>
+    <tr><td>Key Vault › <b>Logs</b> or <b>Activity log</b></td><td>Who did what to the vault and its settings.</td></tr>
+  </table>
+  <div class="box check"><div class="t">Trigger your alert</div><p>On the shop's <b>Admin</b> page, use the chaos buttons to make the API throw errors for a few minutes. Within about 10 minutes you should get the "exception spike" email from Step 12. That is the whole monitoring chain working: app → Application Insights → Log Analytics → alert rule → action group → you.</p></div>
+  <div class="box warn"><div class="t">If something doesn't work</div><p>Website loads but shows no products: check <code>apiBaseUrl</code> in <code>config.json</code> and <code>Cors__AllowedOrigins</code> on the Web App (exact URL, <code>https://</code>, no trailing slash). API shows "Application Error": open <b>Log stream</b>; the usual cause is a wrong <code>KeyVault__Uri</code> or a missing role from Step 7e. See the Troubleshooting table at the back.</p></div>
+</section>
+
+<!-- =============================================================== PART 4 -->
+<section class="page" id="p4">
+  <div class="part"><div class="k">Part 4</div><h1>From clicks to code</h1><p>See that every click was really a request to Resource Manager, and then let Bicep do the clicking.</p></div>
+  <h3>4.1 · See your clicks as Bicep</h3>
+  <div class="path"><span class="lbl">Click path</span><span class="p">rg-cloudmart-lab</span><i>›</i><span class="p">Automation</span><i>›</i><span class="p">Export template</span><i>›</i><span class="p">Bicep</span></div>
+  <p>The portal writes Bicep (or ARM JSON) describing everything in the group. Find the key vault in it and compare it with <code>infra/modules/keyvault.bicep</code>: you will see the same <code>enableRbacAuthorization: true</code> and <code>softDeleteRetentionInDays: 7</code> you clicked. Exported templates are a learning aid, not production code: they are long and full of default values, which is why CloudMart's Bicep is written by hand.</p>
+  <h3>4.2 · Every click is recorded</h3>
+  <p>Open the resource group's <b>Activity log</b>. Each create, role assignment and setting change is there, with who did it and when. This is the audit trail Azure keeps for every subscription (for 90 days).</p>
+  <h3>4.3 · Every "Create" was a deployment</h3>
+  <p>Open the resource group's <b>Settings</b> › <b>Deployments</b>. Each wizard you finished appears as a deployment, the same kind of object <code>az deployment sub create</code> creates for CloudMart. Click one and choose <b>Template</b> to see what the portal sent.</p>
+  <p>A Bicep deployment is the same thing, only bigger: one deployment that describes the whole environment instead of one resource.</p>
+  <figure>
+    <div class="flow">
+      <div><em>1</em><b>You run</b><code>az deployment sub create</code></div>
+      <div><em>2</em><b>The CLI compiles</b>Bicep into an ARM template (JSON).</div>
+      <div><em>3</em><b>ARM compares</b>What should exist with what does (<code>what-if</code> shows you this).</div>
+      <div><em>4</em><b>ARM builds</b>Only the differences, in dependency order.</div>
+    </div>
+    <figcaption><b>Declarative and repeatable.</b> Run it again and nothing changes; flip a switch in <code>main.bicepparam</code> and only that difference is applied. This is why CloudMart's 16 phases are switches in one file.</figcaption>
+  </figure>
+  <div class="box note"><div class="t">Portal wizard vs Bicep, side by side</div>
+    <table style="margin:2px 0 0">
+      <tr><th></th><th>A portal wizard</th><th>CloudMart's Bicep</th></tr>
+      <tr><td><b>Creates</b></td><td>one resource (sometimes two or three)</td><td>the whole environment, about 20 resources and their roles</td></tr>
+      <tr><td><b>Remembers your choices</b></td><td>no: next time you click again</td><td>yes: they are in Git, reviewed like code</td></tr>
+      <tr><td><b>Time for phase 1</b></td><td>about two hours of clicking</td><td>about five minutes</td></tr>
+      <tr><td><b>Best for</b></td><td>learning what the options mean</td><td>building it right, every time</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="page" id="p4-rosetta">
+  <h2>4.4 · Portal ↔ CLI ↔ Bicep cheat sheet</h2>
+  <p class="small muted">CLI commands are shortened to show their shape; run <code>az &lt;command&gt; --help</code> for the full options.</p>
+  <table>
+    <tr><th style="width:24%">What you did in the portal</th><th style="width:47%">Azure CLI (shortened)</th><th>Where in CloudMart's Bicep</th></tr>
+    <tr><td>Resource group (Step 2)</td><td><code>az group create -n rg-cloudmart-lab -l eastus2 --tags …</code></td><td><code>main.bicep</code>: <code>rg</code></td></tr>
+    <tr><td>Budget (3)</td><td><code>az consumption budget create …</code></td><td><code>governance.bicep</code></td></tr>
+    <tr><td>Workspace, App Insights (4, 5)</td><td><code>az monitor log-analytics workspace create …</code><br><code>az monitor app-insights component create …</code></td><td><code>monitoring.bicep</code></td></tr>
+    <tr><td>Managed identity (6)</td><td><code>az identity create -g … -n id-cloudmart-lab-api</code></td><td><code>identity.bicep</code></td></tr>
+    <tr><td>Key Vault (7)</td><td><code>az keyvault create … --enable-rbac-authorization true</code></td><td><code>keyvault.bicep</code></td></tr>
+    <tr><td>Role assignment (7, 8)</td><td><code>az role assignment create --assignee … --role … --scope …</code></td><td><code>roleAssignments</code> in each module</td></tr>
+    <tr><td>Storage, keys off (8)</td><td><code>az storage account create … --allow-shared-key-access false</code></td><td><code>storage.bicep</code></td></tr>
+    <tr><td>Static Web App (9)</td><td><code>az staticwebapp create … --sku Free</code></td><td><code>staticwebapp.bicep</code></td></tr>
+    <tr><td>Web App + plan (10)</td><td><code>az appservice plan create … --is-linux --sku B1</code><br><code>az webapp create … --runtime "DOTNETCORE:10.0"</code></td><td><code>appservice.bicep</code></td></tr>
+    <tr><td>App settings (10, 11)</td><td><code>az webapp config appsettings set … --settings A=B</code></td><td><code>apiSettings</code>, <code>functionsSettings</code> in <code>main.bicep</code></td></tr>
+    <tr><td>Function App, Flex (11)</td><td><code>az functionapp create … --flexconsumption-location eastus2</code></td><td><code>functionapp.bicep</code></td></tr>
+    <tr><td>Alert, action group (12)</td><td><code>az monitor scheduled-query create …</code><br><code>az monitor action-group create …</code></td><td><code>monitoring.bicep</code></td></tr>
+    <tr><td>Policy (13)</td><td><code>az policy assignment create --policy … --scope …</code></td><td><code>governance.bicep</code></td></tr>
+    <tr><td>Lock (13)</td><td><code>az lock create -g … -n no-delete --lock-type CanNotDelete</code></td><td>learning path, phase 1 lab</td></tr>
+  </table>
+</section>
+
+<section class="page" id="p4-real">
+  <h2>4.5 · Now do it the real way, with Bicep</h2>
+  <p>You have built the foundation by hand in about two hours. CloudMart's Bicep builds the same thing, plus the pieces later phases need, in about five minutes, and can rebuild it identically any time.</p>
+  <ol class="do">
+    <li><b>Clean up the lab first</b> (Part 5), so you don't pay twice and don't confuse the two copies.</li>
+    <li><b>Find your IDs in the portal</b>: search <b>Microsoft Entra ID</b> › <b>Users</b> › select yourself. Copy your <b>Object ID</b> and <b>User principal name</b>.</li>
+    <li><b>Fill in</b> <code>infra/main.bicepparam</code>: <code>deployerPrincipalId</code> = your Object ID, <code>deployerPrincipalName</code> = your user principal name, <code>ownerEmail</code> = where alerts go.</li>
+    <li><b>Preview, then deploy</b> from a terminal (your laptop, or <b>Cloud Shell</b> in the portal after cloning the repository there):
+<pre>az deployment sub what-if -l eastus2 -f infra/main.bicep -p infra/main.bicepparam
+az deployment sub create  -l eastus2 -f infra/main.bicep -p infra/main.bicepparam</pre></li>
+    <li><b>Watch it in the portal</b> while it runs: <b>Subscriptions</b> › your subscription › <b>Settings</b> › <b>Deployments</b> › the newest deployment. Each module (governance, monitoring, identity, key-vault, storage …) appears as it starts and finishes.</li>
+    <li><b>Explore the result</b>: open <code>rg-cloudmart-dev</code>. Every resource you met in Part 2 is there, with the same settings. Use your new portal skills to inspect it, but change things through the Bicep files, not by clicking.</li>
+  </ol>
+  <div class="box warn"><div class="t">Watch out: <code>false</code> does not delete</div><p>Setting a switch back to <code>false</code> and running <code>az deployment sub create</code> stops <i>managing</i> that resource, but does not delete it. Delete it yourself, delete the resource group, or use a <b>deployment stack</b> (learning path, phase 8), which really removes what you take out of the template.</p></div>
+  <div class="box why"><div class="t">The habit to keep for every phase</div><p>The learning path's loop is: <b>click it</b> once in the portal to see the options, <b>script it</b> once with the CLI to learn the model, then <b>read the Bicep</b> that does it. This guide was the "click it" half for phase 1.</p></div>
+</section>
+
+<!-- =============================================================== PART 5 -->
+<section class="page" id="p5">
+  <div class="part"><div class="k">Part 5</div><h1>Clean up and reference</h1><p>Delete everything, then keep the troubleshooting table and glossary handy.</p></div>
+  <h2>Clean up: delete everything</h2>
+  <div class="flow">
+    <div><em>1</em><b>Remove the lock</b>rg-cloudmart-lab › Locks › delete <code>no-delete</code>.</div>
+    <div><em>2</em><b>Delete the group</b>Overview › Delete resource group › type its name.</div>
+    <div><em>3</em><b>Purge the vault</b>Only if you want to reuse its name now.</div>
+    <div><em>4</em><b>Check tomorrow</b>Cost Management shows spending stopped.</div>
+  </div>
+  <figure>
+    <div class="mock">
+      <div class="ttl" style="padding-top:8px">Delete a resource group</div>
+      <div class="body">
+        <div class="banner err">⚠ The following resource group and all its dependent resources will be permanently deleted.</div>
+        <div class="row"><label>Resource group to be deleted</label><div><b>rg-cloudmart-lab</b></div></div>
+        <div class="row"><label>Dependent resources</label><div>log-cloudmart-lab, appi-cloudmart-lab, kv-cloudmart-xy123, stcloudmartxy123, … (14)</div></div>
+        <div class="row"><label class="req">Enter resource group name to confirm deletion</label><div class="in hl">rg-cloudmart-lab</div></div>
+      </div>
+      <div class="foot"><span class="btn p" style="background:#c42b1c;border-color:#c42b1c">Delete</span><span class="btn">Cancel</span></div>
+    </div>
+    <figcaption>Simplified illustration. Typing the name is Azure's "are you sure?". Deletion takes a few minutes; watch the bell.</figcaption>
+  </figure>
+  <h3>The Key Vault comes back to haunt you (on purpose)</h3>
+  <p>Deleted vaults are <b>soft-deleted</b>: kept for 7 days (the number you chose in Step 7), so they can be recovered. While it waits, nobody can create a vault with that name. To free the name now:</p>
+  <div class="path"><span class="lbl">Click path</span><span class="p">Search</span><i>›</i><span class="p">Key vaults</span><i>›</i><span class="p">Manage deleted vaults</span><i>›</i><span class="p">your subscription</span><i>›</i><span class="p">kv-cloudmart-xy123</span><i>›</i><span class="p">Purge</span></div>
+  <h3>What else to check</h3>
+  <ul>
+    <li><b>Budgets</b> and <b>Policy assignments</b> scoped to the resource group normally go with it. Check <b>Cost Management</b> › <b>Budgets</b> and <b>Policy</b> › <b>Assignments</b>; delete anything left over.</li>
+    <li>If the Function App wizard created an extra storage account or identity outside the group, delete it too (search <i>All resources</i> for "cloudmart").</li>
+    <li>The deployment token and connection strings you copied stop working when the resources are deleted. Delete your notes anyway.</li>
+  </ul>
+  <div class="box check"><div class="t">Check it worked</div><p><b>Resource groups</b> no longer lists <code>rg-cloudmart-lab</code>. The next day, <b>Cost Management</b> › <b>Cost analysis</b> shows no new cost for it.</p></div>
+</section>
+
+<section class="page" id="trouble">
+  <h2>Troubleshooting: messages and fixes</h2>
+  <table>
+    <tr><th style="width:34%">What you see</th><th style="width:30%">What it means</th><th>How to fix it</th></tr>
+    <tr><td>"The subscription is not registered to use namespace 'Microsoft.…'"</td><td>That service isn't switched on for your subscription yet.</td><td>Subscription › <b>Resource providers</b> › find the namespace › <b>Register</b>; wait for <i>Registered</i>; retry.</td></tr>
+    <tr><td>Name "is already taken" / "is not available"</td><td>Vault, storage, web and function app names are global: someone has it.</td><td>Change the digits in your suffix.</td></tr>
+    <tr><td>"This region has quota of 0 instances for your subscription"</td><td>New and free subscriptions have small limits for some plans.</td><td>Try another region (and add it to your policy), or request more quota under <b>Quotas</b> / <b>Help + support</b>.</td></tr>
+    <tr><td><code>RequestDisallowedByPolicy</code></td><td>Your policy from Step 13 blocked the region (or another rule did).</td><td>Use East US 2, or edit the assignment's <b>Parameters</b>.</td></tr>
+    <tr><td>Key Vault: "The operation is not allowed by RBAC" or "You are unauthorized to view these contents"</td><td>You have a control-plane role (Owner) but no data role.</td><td>Give yourself <b>Key Vault Secrets Officer</b> (Step 7c). Wait up to 10 minutes; refresh or sign in again.</td></tr>
+    <tr><td>Storage: "You do not have permissions to list the data using your user account" or "Key based authentication is not permitted"</td><td>Keys are off (good!) and you have no data role.</td><td>Give yourself <b>Storage Blob Data Contributor</b> (Step 8b). Wait a few minutes.</td></tr>
+    <tr><td>Function App shows storage errors or "runtime is unreachable"</td><td>It can't reach its storage account: it's trying to use a key, or its identity lacks roles.</td><td>Use <b>Managed identity</b> authentication (Step 11); check the identity has the three storage roles (Step 8d).</td></tr>
+    <tr><td>Web App shows "Application Error" or HTTP 500.30</td><td>The API crashed while starting.</td><td>Open <b>Log stream</b>. Usual causes: wrong <code>KeyVault__Uri</code>, missing <code>AZURE_CLIENT_ID</code>, or the identity's vault role not yet active.</td></tr>
+    <tr><td>Web App shows "waiting for your content"</td><td>No code deployed yet.</td><td>Part 3.1.</td></tr>
+    <tr><td>Shop loads but no products; browser console mentions CORS</td><td>The API doesn't trust the website's address, or the website calls the wrong address.</td><td>Check <code>Cors__AllowedOrigins</code> (Step 10c) and <code>apiBaseUrl</code> (Part 3.3): exact, <code>https://</code>, no trailing slash.</td></tr>
+    <tr><td>Image upload fails in Admin</td><td>Storage CORS or the API's storage roles are missing.</td><td>Step 9b (CORS) and Step 8d (Blob Data Contributor + Blob Delegator).</td></tr>
+    <tr><td>"…cannot perform delete operation because following scope(s) are locked" (<code>ScopeLocked</code>)</td><td>Your lock from Step 13.</td><td>Remove the lock first.</td></tr>
+    <tr><td>Can't create a vault: name "is already in use" after you deleted it</td><td>It is soft-deleted.</td><td>Purge it (Part 5) or pick another name.</td></tr>
+    <tr><td>A role "doesn't work" right after assigning it</td><td>Role assignments take a few minutes to spread.</td><td>Wait 5–10 minutes; sign out and in.</td></tr>
+  </table>
+  <div class="box note"><div class="t">Where Azure tells you more</div><p>Failed deployments: resource group › <b>Deployments</b> › the failed one › <b>Error details</b>. Anything that changed: <b>Activity log</b>. A resource misbehaving: its <b>Diagnose and solve problems</b> page, which often names the cause.</p></div>
+</section>
+
+<section class="page" id="glossary">
+  <h2>Glossary</h2>
+  <div class="two" style="font-size:8.9pt">
+    <div>
+      <p><b>Action group</b>: a list of people and channels (email, SMS, webhook) an alert notifies.</p>
+      <p><b>App Service plan</b>: the rented machine(s) your web apps run on; you pay for it per hour.</p>
+      <p><b>ARM (Azure Resource Manager)</b>: the service behind the portal, CLI and Bicep that checks and carries out every request.</p>
+      <p><b>Bicep</b>: Microsoft's language for describing Azure resources in files. Compiles to ARM templates (JSON).</p>
+      <p><b>Blade</b>: a page in the portal, such as a resource's Overview.</p>
+      <p><b>Blob</b>: a file stored in a storage account container.</p>
+      <p><b>Cloud Shell</b>: a terminal in the portal with the Azure CLI and Bicep preinstalled.</p>
+      <p><b>Control plane</b>: managing a resource (create, configure, delete). Roles: Owner, Contributor, Reader.</p>
+      <p><b>CORS</b>: a browser rule; a site must say which other websites may call it.</p>
+      <p><b>Data plane</b>: using what is inside a resource (secrets, files, messages). Needs data roles.</p>
+      <p><b>Deployment</b>: a record of a request to create or update resources, from a wizard, CLI or Bicep.</p>
+      <p><b>Drift</b>: when a resource is changed by hand and no longer matches its Bicep.</p>
+      <p><b>Entra ID (Microsoft Entra ID)</b>: Azure's directory of users, groups and app identities. Formerly Azure Active Directory.</p>
+      <p><b>Flex Consumption</b>: the serverless plan for Azure Functions: pay per use, scale to zero.</p>
+      <p><b>Idempotent</b>: running it twice gives the same result as running it once. Bicep deployments are.</p>
+    </div>
+    <div>
+      <p><b>KQL (Kusto Query Language)</b>: the query language for Log Analytics and Application Insights.</p>
+      <p><b>Lock</b>: stops a resource being deleted (Delete) or changed (Read-only), even by Owners.</p>
+      <p><b>Managed identity</b>: an identity Azure manages for an app, so the app needs no password or key.</p>
+      <p><b>Policy (Azure Policy)</b>: rules about what may exist, e.g. "only in East US 2". Effects include Deny, Audit and Modify.</p>
+      <p><b>RBAC (role-based access control)</b>: giving a role to someone (or something) at a scope.</p>
+      <p><b>Region</b>: a set of datacentres in one geography, e.g. East US 2.</p>
+      <p><b>Resource</b>: one thing you create: a vault, an app, a storage account.</p>
+      <p><b>Resource group</b>: a folder of resources that share a lifecycle.</p>
+      <p><b>Resource provider</b>: the Azure service that runs a resource type, e.g. <code>Microsoft.KeyVault</code>.</p>
+      <p><b>Role assignment</b>: role + who + scope, e.g. "Key Vault Secrets User for id-…-api on this vault".</p>
+      <p><b>SAS (shared access signature)</b>: a link that grants narrow, temporary access to storage.</p>
+      <p><b>Scope</b>: where a role, policy or lock applies: management group, subscription, resource group or resource.</p>
+      <p><b>SKU / pricing tier</b>: the size or edition of a resource, e.g. B1, Standard, Free.</p>
+      <p><b>Soft delete</b>: deleted things are kept for a while so they can be recovered.</p>
+      <p><b>Subscription</b>: the billing and access boundary that resources belong to.</p>
+      <p><b>Tag</b>: a name = value label on a resource.</p>
+      <p><b>Tenant</b>: your organisation's instance of Microsoft Entra ID.</p>
+      <p><b>What-if</b>: a preview of what a Bicep deployment would change, before it changes anything.</p>
+    </div>
+  </div>
+</section>
+
+<section class="page" id="next">
+  <h2>What's next</h2>
+  <p>You now know your way around the portal and have seen every building block of CloudMart's phase 1. Each later phase of <code>docs/learning-path.md</code> turns on more of Azure with a switch in <code>infra/main.bicepparam</code>. Here is where each one shows up in the portal:</p>
+  <table>
+    <tr><th style="width:24%">Phase</th><th>Switch it on in Bicep</th><th>Then look in the portal at</th></tr>
+    <tr><td>2 · Networking</td><td><code>deployNetwork</code>, <code>deployJumpbox</code></td><td>Virtual network › Subnets; Network security groups; Bastion › Connect to the jumpbox</td></tr>
+    <tr><td>3 · Compute</td><td><code>deployContainerApps</code>, <code>deployAks</code></td><td>Container App › Revisions and replicas; Kubernetes service › Workloads</td></tr>
+    <tr><td>4 · Data</td><td><code>deployCosmos</code>, <code>deploySql</code></td><td>Cosmos DB › Data Explorer (request charges); SQL database › Query editor</td></tr>
+    <tr><td>5 · Messaging</td><td><code>deployMessaging</code></td><td>Service Bus › Topics › Service Bus Explorer; Event Hubs › Metrics</td></tr>
+    <tr><td>6 · Security</td><td><code>enableEntraAuth</code></td><td>Microsoft Entra ID › App registrations › App roles</td></tr>
+    <tr><td>7 · Observability</td><td><code>deployGrafana</code></td><td>Application Insights › Workbooks; Monitor › Alerts</td></tr>
+    <tr><td>8 · DevOps</td><td>pipeline, <code>deployAcr</code></td><td>Container registry › Repositories; subscription › Deployments by the pipeline</td></tr>
+    <tr><td>9 · Governance</td><td><code>deployGovernance</code> (on)</td><td>Policy › Compliance; Cost Management › Cost analysis by tag</td></tr>
+    <tr><td>10 · Architecture</td><td><code>deployFrontDoor</code></td><td>Front Door › Origin groups; WAF policy › Managed rules</td></tr>
+    <tr><td>11 · Continuity</td><td><code>sqlSecondaryLocation</code>, …</td><td>SQL server › Failover groups › Failover</td></tr>
+  </table>
+  <div class="box warn"><div class="t">Some switches are expensive</div><p>AKS, Application Gateway, Front Door Premium, Bastion Basic, Azure Firewall and the SQL failover group cost real money every hour. The learning path flags each one. Turn it on, learn, turn it off (or delete) the same day.</p></div>
+  <div class="box why"><div class="t">Keep this guide's three habits</div>
+    <ol style="margin:2px 0 0">
+      <li><b>Budget first, delete after.</b> Never leave a lab running "just in case".</li>
+      <li><b>Remember the two locks.</b> Owner opens the building, a data role opens the safe.</li>
+      <li><b>Click to learn, Bicep to build.</b> Look at everything in the portal; change things in the code.</li>
+    </ol>
+  </div>
+  <p class="small muted" style="margin-top:14px">This guide follows the CloudMart repository's <code>infra/main.bicep</code> with its default switches. Portal screens are simplified illustrations based on Microsoft Learn documentation as of October 2026; Microsoft updates the portal often, so a label or tab may differ slightly from what you see. When in doubt, the search bar and the <b>?</b> help icon in the portal are your friends.</p>
+</section>
+
+</body>
+</html>
