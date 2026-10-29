@@ -418,6 +418,35 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
    policy requiring MFA for *CloudMart SPA* in report-only mode; make yourself **PIM**-*eligible* (not active) for
    Contributor on the resource group; create an **access review** for whoever holds `CloudMart.Admin`.
 
+### Who can do what
+
+[identity.svg](identity.svg) ([PNG](identity.png)) draws the three ways CloudMart gets a token:
+- people through the SPA and API app registrations;
+- services through app roles (client credentials);
+- AKS and the pipeline through federation.
+
+Below it is this matrix. Each row is an identity; each cell is the least it needs, and everything else is denied.
+
+| Identity | Key Vault | Storage | Cosmos DB ² | Azure SQL ³ | Service Bus | Event Hubs | Payments, Shipping ⁴ | Everything else |
+|---|---|---|---|---|---|---|---|---|
+| **API** (`id-…-api`) | Secrets User ¹ | Blob Data Contributor, Blob Delegator (SAS) | Data Contributor | `cloudmart`: read, write, ddladmin | Data Sender | Data Sender | Payments.Process, Shipments.Manage | AcrPull (phase 8), App Configuration Data Reader, Redis access policy (phase 12) |
+| **Functions** (`id-…-func`) | Secrets User ¹ | Blob Data Owner, Queue + Table Data Contributor | Data Contributor | `cloudmart`: read, write | Data Receiver | Data Receiver | Payments.Process, Shipments.Manage | — |
+| **Payments** (`id-…-pay`, phase 16) | Secrets User: the only reader | — | — | `payments`: read, write, ddladmin | — | — | — | — |
+| **Shipping** (`id-…-ship`, phase 16) | — | Table Data Contributor | — | — | — | — | — | — |
+| **You** (the deployer) | Secrets Officer | Blob Data Contributor, Blob Delegator | Data Contributor | Entra admin of the server(s) | Data Owner | Data Owner | — | Owner on the subscription; VM Administrator Login, Grafana Admin, AKS RBAC Cluster Admin, App Configuration Data Owner |
+| **Pipeline** (service connection) | — | — | — | — | — | — | — | Owner, or Contributor + Role Based Access Control Administrator, on the subscription |
+| **Event Grid system topic** | — | Blob Data Contributor, `eventgrid-deadletter` container only | — | — | — | — | — | — |
+| **Other system-assigned** | — | — | — | — | — | — | — | Grafana: Monitoring Reader; Policy remediation: Tag Contributor; AKS kubelet: AcrPull |
+
+¹ From phase 16, only the Payments identity can read the payment-gateway key.
+² Cosmos DB data-plane RBAC (`sqlRoleAssignments`), not Azure RBAC: the *Access control (IAM)* blade doesn't show it.
+³ Contained database users from [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql), not Azure
+RBAC. `ddladmin` is only there because the apps create their own schema.
+⁴ Entra app roles assigned through Microsoft Graph, not Azure RBAC.
+
+**Exercise:** open the resource group's *Access control (IAM) → Role assignments*, then find which rows of the table
+aren't there, and why: ² ³ ⁴. Then answer: who could read the payment-gateway key before phase 16, and who can after?
+
 ### Architect's questions
 
 | Requirement | Recommendation |

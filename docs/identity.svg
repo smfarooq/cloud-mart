@@ -1,0 +1,369 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1506" width="1700" height="1506" role="img" aria-labelledby="title desc">
+  <title id="title">CloudMart identity and access diagram</title>
+  <desc id="desc">How CloudMart authenticates and authorises. Microsoft Entra ID issues user tokens through the SPA and API app registrations (scope access_as_user, app role CloudMart.Admin), service tokens for the Payments and Shipping app roles, and federated tokens for AKS workload identity and the pipeline's service connection. A matrix lists every Azure RBAC role, Cosmos DB data-plane role, SQL database user and Entra app role held by each identity. No keys or connection-string secrets are used.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#404040"/>
+    </marker>
+    <marker id="arrow-log" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ED7D31"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2E75B6"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7030A0"/>
+    </marker>
+    <style>
+      text { font-family: 'Segoe UI', Calibri, Arial, sans-serif; }
+      .svc { fill: #ffffff; stroke: #00B050; stroke-width: 3; }
+      .opt { fill: #ffffff; stroke: #BFBFBF; stroke-width: 3; }
+      .note { fill: #ffffff; stroke: #70AD47; stroke-width: 1.5; }
+      .zone { fill: none; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .band { fill: #FAFAFA; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .group { fill: #F4FAF0; stroke: #70AD47; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .vnet { fill: #F7FAFE; stroke: #2E75B6; stroke-width: 2; }
+      .subnet { fill: #EEF5FC; stroke: #5B9BD5; stroke-width: 1.5; stroke-dasharray: 5 3; }
+      .optsub { fill: #F7F7F7; stroke: #A6A6A6; stroke-width: 1.5; stroke-dasharray: 5 3; }
+      .pechip { fill: #ffffff; stroke: #00A2AD; stroke-width: 1.5; }
+      .rtchip { fill: #ffffff; stroke: #2E75B6; stroke-width: 1.5; }
+      .name { font-size: 14px; font-weight: 600; fill: #262626; text-anchor: middle; }
+      .role { font-size: 15px; font-weight: 700; fill: #000000; text-anchor: middle; }
+      .sub { font-size: 12px; fill: #595959; text-anchor: middle; }
+      .notetext { font-size: 13px; fill: #262626; }
+      .smallnote { font-size: 12px; fill: #262626; }
+      .zonetitle { font-size: 14px; font-weight: 700; fill: #404040; }
+      .tiletitle { font-size: 12.5px; font-weight: 700; fill: #1F3864; }
+      .tiletext { font-size: 12px; fill: #404040; }
+      .mono { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 11.5px; fill: #404040; }
+      .flow { stroke: #404040; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 6 4; }
+      .vint { stroke: #2E75B6; stroke-width: 1.8; stroke-dasharray: 4 3; fill: none; marker-end: url(#arrow-blue); }
+      .peer { stroke: #2E75B6; stroke-width: 2.4; fill: none; marker-start: url(#arrow-blue); marker-end: url(#arrow-blue); }
+      .log { stroke: #ED7D31; stroke-width: 2; stroke-dasharray: 2 4; stroke-linecap: round; fill: none; marker-end: url(#arrow-log); }
+      .flowlabel { font-size: 12px; font-style: italic; fill: #404040; }
+      .loglabel { font-size: 12px; font-style: italic; fill: #C55A11; }
+      .paneltitle { font-size: 15px; font-weight: 700; fill: #000000; }
+      .itemname { font-size: 13px; font-weight: 600; fill: #262626; }
+      .itemdesc { font-size: 12px; fill: #595959; }
+      .token { stroke: #7030A0; stroke-width: 1.8; stroke-dasharray: 6 4; fill: none; marker-end: url(#arrow-purple); }
+      .tokenlabel { font-size: 12px; font-style: italic; fill: #7030A0; }
+      .appreg { fill: #ffffff; stroke: #7030A0; stroke-width: 2; }
+      .entra { fill: #FBF8FD; stroke: #7030A0; stroke-width: 1.5; stroke-dasharray: 8 5; }
+      .rowlabel { font-size: 14px; font-weight: 700; fill: #1F3864; }
+      .hdr { font-size: 13px; font-weight: 700; fill: #1F3864; text-anchor: middle; }
+      .cell { font-size: 12px; fill: #262626; }
+      .none { font-size: 12px; fill: #BFBFBF; }
+      .alt { fill: #F7FAFE; }
+      .grid { stroke: #D9D9D9; stroke-width: 1; }
+    </style>
+    <symbol id="i-entra" viewBox="0 0 48 48">
+      <polygon points="24,4 44,30 24,44 4,30" fill="#0078D4"/>
+      <polygon points="24,4 24,44 4,30" fill="#50A0E8"/>
+      <polygon points="24,18 33,30 24,36 15,30" fill="#ffffff" opacity="0.85"/>
+    </symbol>
+    <symbol id="i-identity" viewBox="0 0 48 48">
+      <circle cx="24" cy="16" r="8" fill="#0078D4"/>
+      <path d="M9 40 c0 -9 7 -14 15 -14 s15 5 15 14 z" fill="#0078D4"/>
+      <circle cx="37" cy="34" r="6" fill="#FFB900"/>
+    </symbol>
+    <symbol id="i-swa" viewBox="0 0 48 48">
+      <rect x="6" y="8" width="36" height="32" rx="4" fill="#5C2D91"/>
+      <path d="M19 18 l-6 6 6 6 M29 18 l6 6 -6 6" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-appservice" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="18" fill="#0078D4"/>
+      <ellipse cx="24" cy="24" rx="8" ry="18" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <path d="M6 24 h36 M9 15 h30 M9 33 h30" stroke="#ffffff" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-functions" viewBox="0 0 48 48">
+      <path d="M9 10 L3 24 L9 38 M39 10 L45 24 L39 38" stroke="#0078D4" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M27 6 L14 27 h9 l-3 15 L34 20 h-9 l4 -14 z" fill="#FCD116" stroke="#E8A800" stroke-width="1"/>
+    </symbol>
+    <symbol id="i-keyvault" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="19" fill="#FFB900"/>
+      <circle cx="19" cy="21" r="6" fill="none" stroke="#ffffff" stroke-width="3"/>
+      <path d="M23 25 l12 12 m-4 -4 l3 -3 m-6 0 l3 -3" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none"/>
+    </symbol>
+    <symbol id="i-blob" viewBox="0 0 48 48">
+      <rect x="4" y="10" width="40" height="30" rx="2" fill="#E6E6E6"/>
+      <rect x="4" y="10" width="40" height="8" fill="#5EA830"/>
+      <path d="M8 24 h32 M8 30 h32 M8 36 h32 M17 18 v22 M31 18 v22" stroke="#0072C6" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-cosmos" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="13" fill="#0F4C8A"/>
+      <ellipse cx="24" cy="24" rx="22" ry="8" fill="none" stroke="#50A0E8" stroke-width="2.5" transform="rotate(-25 24 24)"/>
+      <circle cx="40" cy="8" r="2" fill="#50A0E8"/>
+      <circle cx="7" cy="40" r="1.6" fill="#50A0E8"/>
+    </symbol>
+    <symbol id="i-sql" viewBox="0 0 48 48">
+      <path d="M8 10 v28 c0 2.8 7.2 5 16 5 s16 -2.2 16 -5 V10 c0 2.8 -7.2 5 -16 5 S8 12.8 8 10 z" fill="#0072C6"/>
+      <ellipse cx="24" cy="10" rx="16" ry="5" fill="#50A0E8"/>
+      <text x="24" y="33" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">SQL</text>
+    </symbol>
+    <symbol id="i-servicebus" viewBox="0 0 48 48">
+      <rect x="4" y="10" width="40" height="28" rx="3" fill="#0072C6"/>
+      <rect x="9" y="17" width="9" height="14" fill="#ffffff"/>
+      <rect x="20" y="17" width="9" height="14" fill="#ffffff" opacity="0.8"/>
+      <rect x="31" y="17" width="9" height="14" fill="#ffffff" opacity="0.6"/>
+    </symbol>
+    <symbol id="i-eventhubs" viewBox="0 0 48 48">
+      <rect x="4" y="8" width="40" height="32" rx="3" fill="#0072C6"/>
+      <path d="M10 16 h22 M10 24 h28 M10 32 h22" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M33 13 l4 3 -4 3 M33 29 l4 3 -4 3" stroke="#ffffff" stroke-width="2" fill="none"/>
+    </symbol>
+    <symbol id="i-acr" viewBox="0 0 48 48">
+      <rect x="16" y="6" width="16" height="12" fill="#50A0E8"/>
+      <rect x="6" y="20" width="16" height="12" fill="#0078D4"/>
+      <rect x="26" y="20" width="16" height="12" fill="#0078D4"/>
+      <rect x="6" y="34" width="36" height="8" fill="#50A0E8"/>
+    </symbol>
+    <symbol id="i-policy" viewBox="0 0 48 48">
+      <path d="M24 4 L40 10 V24 C40 34 32 41 24 44 C16 41 8 34 8 24 V10 Z" fill="#0078D4"/>
+      <path d="M17 24 l5 5 9 -10" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-grafana" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="17" fill="#F46800"/>
+      <circle cx="24" cy="24" r="7" fill="none" stroke="#ffffff" stroke-width="3"/>
+    </symbol>
+    <symbol id="i-eventgrid" viewBox="0 0 48 48">
+      <path d="M24 24 L8 10 M24 24 L40 10 M24 24 L8 38 M24 24 L40 38" stroke="#0072C6" stroke-width="2.5"/>
+      <circle cx="8" cy="10" r="5" fill="#50A0E8"/>
+      <circle cx="40" cy="10" r="5" fill="#50A0E8"/>
+      <circle cx="8" cy="38" r="5" fill="#50A0E8"/>
+      <circle cx="40" cy="38" r="5" fill="#50A0E8"/>
+      <circle cx="24" cy="24" r="7" fill="#0072C6"/>
+    </symbol>
+    <symbol id="i-containers" viewBox="0 0 48 48">
+      <polygon points="24,4 42,14 42,34 24,44 6,34 6,14" fill="#326CE5"/>
+      <polygon points="24,14 33,19 33,29 24,34 15,29 15,19" fill="#ffffff" opacity="0.9"/>
+    </symbol>
+  </defs>
+  <rect width="1700" height="1506" fill="#ffffff"/>
+  <rect x="30" y="24" width="430" height="66" fill="#4472C4"/>
+  <text x="245" y="69" font-size="34" fill="#ffffff" text-anchor="middle">Identity and Access</text>
+  <text x="30" y="132" font-size="15" fill="#404040">Who signs in, how services get tokens, and every role each identity holds. No keys or connection-string secrets anywhere: every arrow is an Entra ID token.</text>
+  <rect x="500" y="24" width="1170" height="82" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="514" y="70" font-size="14" font-weight="700" fill="#000000">Legend</text>
+  <rect x="590" y="41" width="26" height="18" class="appreg"/>
+  <text x="626" y="55" class="notetext">Entra app registration</text>
+  <rect x="850" y="41" width="26" height="18" class="svc"/>
+  <text x="886" y="55" class="notetext">Code that checks the token</text>
+  <rect x="1110" y="41" width="26" height="18" class="note"/>
+  <text x="1146" y="55" class="notetext">Caller / identity</text>
+  <path d="M590 84 H616" class="token"/>
+  <text x="626" y="88" class="notetext">Token request / token</text>
+  <path d="M850 84 H876" class="flow"/>
+  <text x="886" y="88" class="notetext">Calls with the token</text>
+  <text x="1110" y="88" class="notetext">¹ ² ³ ⁴ = not Azure RBAC (see footnotes)</text>
+  <rect x="30" y="150" width="1640" height="460" rx="6" class="entra"/>
+  <use href="#i-entra" x="42" y="158" width="26" height="26"/>
+  <text x="76" y="177" class="zonetitle">Microsoft Entra ID · your tenant: three ways CloudMart gets a token</text>
+  <rect x="50" y="200" width="220" height="110" class="note"/>
+  <use href="#i-identity" x="60" y="214" width="36" height="36"/>
+  <text x="106" y="224" class="itemname">Customer or admin</text>
+  <text class="itemdesc"><tspan x="106" y="242">a person in your tenant,</tspan><tspan x="106" y="257">in the browser</tspan></text>
+  <rect x="330" y="200" width="290" height="110" class="appreg"/>
+  <use href="#i-swa" x="340" y="214" width="36" height="36"/>
+  <text x="386" y="224" class="itemname">CloudMart SPA</text>
+  <text class="itemdesc"><tspan x="386" y="242">app registration, platform: SPA</tspan><tspan x="386" y="257">redirects: localhost, SWA, Front Door</tspan><tspan x="386" y="272">asks for the scope access_as_user</tspan></text>
+  <rect x="830" y="200" width="290" height="110" class="appreg"/>
+  <text x="842" y="224" class="itemname">CloudMart API</text>
+  <text class="itemdesc"><tspan x="842" y="242">Application ID URI api://&lt;client-id&gt;</tspan><tspan x="842" y="257">exposes the scope access_as_user</tspan><tspan x="842" y="272">app role CloudMart.Admin: users, groups</tspan></text>
+  <rect x="1180" y="200" width="260" height="110" class="svc"/>
+  <use href="#i-appservice" x="1190" y="214" width="36" height="36"/>
+  <text x="1236" y="224" class="itemname">The API</text>
+  <text class="itemdesc"><tspan x="1236" y="242">CloudMart.User policy: the scope</tspan><tspan x="1236" y="257">CloudMart.Admin policy: the role</tspan><tspan x="1236" y="272">(Admin tab, all orders, chaos)</tspan></text>
+  <path d="M272 255 H328" class="token"/>
+  <path d="M622 255 H828" class="token"/>
+  <text x="725" y="231" class="tokenlabel" text-anchor="middle">MSAL: auth code + PKCE; token</text>
+  <text x="725" y="247" class="tokenlabel" text-anchor="middle">aud = API, scp = access_as_user</text>
+  <text x="725" y="275" class="tokenlabel" text-anchor="middle">roles = CloudMart.Admin (admins)</text>
+  <path d="M1122 255 H1178" class="flow"/>
+  <text x="1460" y="230" class="itemdesc">Phase 6: enableEntraAuth,</text>
+  <text x="1460" y="246" class="itemdesc">entraApiClientId,</text>
+  <text x="1460" y="262" class="itemdesc">entraSpaClientId</text>
+  <rect x="50" y="335" width="220" height="110" class="note"/>
+  <use href="#i-functions" x="60" y="349" width="36" height="36"/>
+  <text x="106" y="359" class="itemname">Functions + API</text>
+  <text class="itemdesc"><tspan x="106" y="377">managed identities:</tspan><tspan x="106" y="392">no user, no secret</tspan></text>
+  <rect x="330" y="335" width="790" height="110" class="appreg"/>
+  <text x="342" y="359" class="itemname">CloudMart Payments and CloudMart Shipping (two app registrations)</text>
+  <text class="itemdesc"><tspan x="342" y="377">App roles Payments.Process and Shipments.Manage, allowedMemberTypes: Application, assigned to both</tspan><tspan x="342" y="392">identities through Microsoft Graph. Each caller asks for api://&lt;app&gt;/.default with client credentials;</tspan><tspan x="342" y="407">the token carries roles and no scp, because no user is involved.</tspan></text>
+  <rect x="1180" y="335" width="260" height="110" class="svc"/>
+  <use href="#i-appservice" x="1190" y="349" width="36" height="36"/>
+  <text x="1236" y="359" class="itemname">Payments and Shipping APIs</text>
+  <text class="itemdesc"><tspan x="1236" y="377">require the role in "roles":</tspan><tspan x="1236" y="392">any other caller gets 403</tspan><tspan x="1236" y="407">(ServiceDefaults caller policy)</tspan></text>
+  <path d="M272 390 H328" class="token"/>
+  <path d="M1122 390 H1178" class="flow"/>
+  <text x="1460" y="365" class="itemdesc">Phase 16:</text>
+  <text x="1460" y="381" class="itemdesc">deploy/entra/</text>
+  <text x="1460" y="397" class="itemdesc">setup-service-auth.sh</text>
+  <rect x="50" y="470" width="220" height="110" class="note"/>
+  <use href="#i-containers" x="60" y="484" width="36" height="36"/>
+  <text x="106" y="494" class="itemname">AKS service account</text>
+  <text class="itemdesc"><tspan x="106" y="512">cloudmart/cloudmart-api</tspan><tspan x="106" y="527">in the cluster</tspan></text>
+  <rect x="330" y="470" width="290" height="110" class="note"/>
+  <use href="#i-identity" x="340" y="484" width="36" height="36"/>
+  <text x="386" y="494" class="itemname">API identity</text>
+  <text class="itemdesc"><tspan x="386" y="512">a federated credential trusts the</tspan><tspan x="386" y="527">cluster's OIDC issuer: workload</tspan><tspan x="386" y="542">identity, no secret in the pod</tspan></text>
+  <rect x="830" y="470" width="290" height="110" class="appreg"/>
+  <use href="#i-identity" x="840" y="484" width="36" height="36"/>
+  <text x="886" y="494" class="itemname">Pipeline service connection</text>
+  <text class="itemdesc"><tspan x="886" y="512">workload identity federation:</tspan><tspan x="886" y="527">Azure DevOps's OIDC token, no</tspan><tspan x="886" y="542">client secret to store or rotate</tspan></text>
+  <rect x="1180" y="470" width="260" height="110" class="svc"/>
+  <text x="1192" y="494" class="itemname">Azure Resource Manager</text>
+  <text class="itemdesc"><tspan x="1192" y="512">the pipeline deploys Bicep: Owner,</tspan><tspan x="1192" y="527">or Contributor + Role Based Access</tspan><tspan x="1192" y="542">Control Administrator</tspan></text>
+  <path d="M272 525 H328" class="token"/>
+  <text x="725" y="517" class="tokenlabel" text-anchor="middle">two separate federations:</text>
+  <text x="725" y="535" class="tokenlabel" text-anchor="middle">an outside OIDC token is</text>
+  <text x="725" y="553" class="tokenlabel" text-anchor="middle">exchanged for an Entra token</text>
+  <path d="M1122 525 H1178" class="flow"/>
+  <text x="1460" y="500" class="itemdesc">Phase 3 (AKS),</text>
+  <text x="1460" y="516" class="itemdesc">phase 8 (pipeline)</text>
+  <text x="30" y="640" class="zonetitle">Who can do what: Azure RBAC and data-plane access, least privilege</text>
+  <rect x="30" y="654" width="1640" height="70" fill="#EEF5FC"/>
+  <text x="42" y="696" class="rowlabel">Identity</text>
+  <use href="#i-keyvault" x="391" y="662" width="28" height="28"/>
+  <text x="405" y="710" class="hdr">Key Vault</text>
+  <use href="#i-blob" x="546" y="662" width="28" height="28"/>
+  <text x="560" y="710" class="hdr">Storage</text>
+  <use href="#i-cosmos" x="696" y="662" width="28" height="28"/>
+  <text x="710" y="710" class="hdr">Cosmos DB ²</text>
+  <use href="#i-sql" x="841" y="662" width="28" height="28"/>
+  <text x="855" y="710" class="hdr">Azure SQL ³</text>
+  <use href="#i-servicebus" x="976" y="662" width="28" height="28"/>
+  <text x="990" y="710" class="hdr">Service Bus</text>
+  <use href="#i-eventhubs" x="1096" y="662" width="28" height="28"/>
+  <text x="1110" y="710" class="hdr">Event Hubs</text>
+  <use href="#i-appservice" x="1231" y="662" width="28" height="28"/>
+  <text x="1245" y="710" class="hdr">Payments, Shipping ⁴</text>
+  <use href="#i-policy" x="1481" y="662" width="28" height="28"/>
+  <text x="1495" y="710" class="hdr">Everything else</text>
+  <line x1="30" y1="724" x2="1670" y2="724" class="grid"/>
+  <use href="#i-identity" x="40" y="734" width="26" height="26"/>
+  <text x="74" y="748" class="itemname">API identity</text>
+  <text class="itemdesc"><tspan x="74" y="764">id-cloudmart-dev-api, user-assigned</tspan><tspan x="74" y="779">App Service, Container Apps or AKS</tspan></text>
+  <text class="cell"><tspan x="340" y="748">Secrets User ¹</tspan></text>
+  <text class="cell"><tspan x="490" y="748">Blob Data Contributor</tspan><tspan x="490" y="764">Blob Delegator (SAS)</tspan></text>
+  <text class="cell"><tspan x="650" y="748">Data Contributor</tspan></text>
+  <text class="cell"><tspan x="790" y="748">cloudmart: read,</tspan><tspan x="790" y="764">write, ddladmin</tspan></text>
+  <text class="cell"><tspan x="940" y="748">Data Sender</tspan></text>
+  <text class="cell"><tspan x="1060" y="748">Data Sender</tspan></text>
+  <text class="cell"><tspan x="1180" y="748">Payments.Process</tspan><tspan x="1180" y="764">Shipments.Manage</tspan></text>
+  <text class="cell"><tspan x="1330" y="748">AcrPull (phase 8)</tspan><tspan x="1330" y="764">App Configuration Data Reader</tspan><tspan x="1330" y="780">Redis access policy (phase 12)</tspan></text>
+  <rect x="30" y="792" width="1640" height="68" class="alt"/>
+  <line x1="30" y1="792" x2="1670" y2="792" class="grid"/>
+  <use href="#i-identity" x="40" y="802" width="26" height="26"/>
+  <text x="74" y="816" class="itemname">Functions identity</text>
+  <text class="itemdesc"><tspan x="74" y="832">id-cloudmart-dev-func, user-assigned</tspan><tspan x="74" y="847">triggers, the order saga</tspan></text>
+  <text class="cell"><tspan x="340" y="816">Secrets User ¹</tspan></text>
+  <text class="cell"><tspan x="490" y="816">Blob Data Owner</tspan><tspan x="490" y="832">Queue Data Contributor</tspan><tspan x="490" y="848">Table Data Contributor</tspan></text>
+  <text class="cell"><tspan x="650" y="816">Data Contributor</tspan></text>
+  <text class="cell"><tspan x="790" y="816">cloudmart: read,</tspan><tspan x="790" y="832">write</tspan></text>
+  <text class="cell"><tspan x="940" y="816">Data Receiver</tspan></text>
+  <text class="cell"><tspan x="1060" y="816">Data Receiver</tspan></text>
+  <text class="cell"><tspan x="1180" y="816">Payments.Process</tspan><tspan x="1180" y="832">Shipments.Manage</tspan></text>
+  <text class="none"><tspan x="1330" y="816">—</tspan></text>
+  <line x1="30" y1="860" x2="1670" y2="860" class="grid"/>
+  <use href="#i-identity" x="40" y="870" width="26" height="26"/>
+  <text x="74" y="884" class="itemname">Payments identity</text>
+  <text class="itemdesc"><tspan x="74" y="900">id-cloudmart-dev-pay · phase 16</tspan><tspan x="74" y="915">runs the Payments API</tspan></text>
+  <text class="cell"><tspan x="340" y="884">Secrets User: the</tspan><tspan x="340" y="900">only reader once</tspan><tspan x="340" y="916">phase 16 is on</tspan></text>
+  <text class="none"><tspan x="490" y="884">—</tspan></text>
+  <text class="none"><tspan x="650" y="884">—</tspan></text>
+  <text class="cell"><tspan x="790" y="884">payments: read,</tspan><tspan x="790" y="900">write, ddladmin</tspan></text>
+  <text class="none"><tspan x="940" y="884">—</tspan></text>
+  <text class="none"><tspan x="1060" y="884">—</tspan></text>
+  <text class="none"><tspan x="1180" y="884">—</tspan></text>
+  <text class="none"><tspan x="1330" y="884">—</tspan></text>
+  <rect x="30" y="928" width="1640" height="68" class="alt"/>
+  <line x1="30" y1="928" x2="1670" y2="928" class="grid"/>
+  <use href="#i-identity" x="40" y="938" width="26" height="26"/>
+  <text x="74" y="952" class="itemname">Shipping identity</text>
+  <text class="itemdesc"><tspan x="74" y="968">id-cloudmart-dev-ship · phase 16</tspan><tspan x="74" y="983">runs the Shipping API</tspan></text>
+  <text class="none"><tspan x="340" y="952">—</tspan></text>
+  <text class="cell"><tspan x="490" y="952">Table Data Contributor</tspan></text>
+  <text class="none"><tspan x="650" y="952">—</tspan></text>
+  <text class="none"><tspan x="790" y="952">—</tspan></text>
+  <text class="none"><tspan x="940" y="952">—</tspan></text>
+  <text class="none"><tspan x="1060" y="952">—</tspan></text>
+  <text class="none"><tspan x="1180" y="952">—</tspan></text>
+  <text class="none"><tspan x="1330" y="952">—</tspan></text>
+  <line x1="30" y1="996" x2="1670" y2="996" class="grid"/>
+  <use href="#i-entra" x="40" y="1006" width="26" height="26"/>
+  <text x="74" y="1020" class="itemname">You, the deployer</text>
+  <text class="itemdesc"><tspan x="74" y="1036">an Entra user (deployerPrincipalId);</tspan><tspan x="74" y="1051">use a group in real life</tspan></text>
+  <text class="cell"><tspan x="340" y="1020">Secrets Officer</tspan></text>
+  <text class="cell"><tspan x="490" y="1020">Blob Data Contributor</tspan><tspan x="490" y="1036">Blob Delegator</tspan></text>
+  <text class="cell"><tspan x="650" y="1020">Data Contributor</tspan></text>
+  <text class="cell"><tspan x="790" y="1020">Entra admin of the</tspan><tspan x="790" y="1036">server(s)</tspan></text>
+  <text class="cell"><tspan x="940" y="1020">Data Owner</tspan></text>
+  <text class="cell"><tspan x="1060" y="1020">Data Owner</tspan></text>
+  <text class="none"><tspan x="1180" y="1020">—</tspan></text>
+  <text class="cell"><tspan x="1330" y="1020">Owner on the subscription (deploys)</tspan><tspan x="1330" y="1036">VM Administrator Login (jumpbox)</tspan><tspan x="1330" y="1052">Grafana Admin, AKS RBAC Cluster Admin</tspan><tspan x="1330" y="1068">App Configuration Data Owner</tspan></text>
+  <rect x="30" y="1080" width="1640" height="68" class="alt"/>
+  <line x1="30" y1="1080" x2="1670" y2="1080" class="grid"/>
+  <use href="#i-identity" x="40" y="1090" width="26" height="26"/>
+  <text x="74" y="1104" class="itemname">Pipeline</text>
+  <text class="itemdesc"><tspan x="74" y="1120">service connection, workload</tspan><tspan x="74" y="1135">identity federation (phase 8)</tspan></text>
+  <text class="none"><tspan x="340" y="1104">—</tspan></text>
+  <text class="none"><tspan x="490" y="1104">—</tspan></text>
+  <text class="none"><tspan x="650" y="1104">—</tspan></text>
+  <text class="none"><tspan x="790" y="1104">—</tspan></text>
+  <text class="none"><tspan x="940" y="1104">—</tspan></text>
+  <text class="none"><tspan x="1060" y="1104">—</tspan></text>
+  <text class="none"><tspan x="1180" y="1104">—</tspan></text>
+  <text class="cell"><tspan x="1330" y="1104">Owner on the subscription, or</tspan><tspan x="1330" y="1120">Contributor + RBAC Administrator:</tspan><tspan x="1330" y="1136">the template creates role assignments</tspan></text>
+  <line x1="30" y1="1148" x2="1670" y2="1148" class="grid"/>
+  <use href="#i-eventgrid" x="40" y="1158" width="26" height="26"/>
+  <text x="74" y="1172" class="itemname">Event Grid system topic</text>
+  <text class="itemdesc"><tspan x="74" y="1188">system-assigned identity</tspan><tspan x="74" y="1203">writes dead letters (phase 7)</tspan></text>
+  <text class="none"><tspan x="340" y="1172">—</tspan></text>
+  <text class="cell"><tspan x="490" y="1172">Blob Data Contributor</tspan><tspan x="490" y="1188">on the eventgrid-</tspan><tspan x="490" y="1204">deadletter container</tspan></text>
+  <text class="none"><tspan x="650" y="1172">—</tspan></text>
+  <text class="none"><tspan x="790" y="1172">—</tspan></text>
+  <text class="none"><tspan x="940" y="1172">—</tspan></text>
+  <text class="none"><tspan x="1060" y="1172">—</tspan></text>
+  <text class="none"><tspan x="1180" y="1172">—</tspan></text>
+  <text class="none"><tspan x="1330" y="1172">—</tspan></text>
+  <rect x="30" y="1216" width="1640" height="68" class="alt"/>
+  <line x1="30" y1="1216" x2="1670" y2="1216" class="grid"/>
+  <use href="#i-grafana" x="40" y="1226" width="26" height="26"/>
+  <text x="74" y="1240" class="itemname">Other system-assigned</text>
+  <text class="itemdesc"><tspan x="74" y="1256">Managed Grafana, an Azure Policy</tspan><tspan x="74" y="1271">assignment, the AKS kubelet</tspan></text>
+  <text class="none"><tspan x="340" y="1240">—</tspan></text>
+  <text class="none"><tspan x="490" y="1240">—</tspan></text>
+  <text class="none"><tspan x="650" y="1240">—</tspan></text>
+  <text class="none"><tspan x="790" y="1240">—</tspan></text>
+  <text class="none"><tspan x="940" y="1240">—</tspan></text>
+  <text class="none"><tspan x="1060" y="1240">—</tspan></text>
+  <text class="none"><tspan x="1180" y="1240">—</tspan></text>
+  <text class="cell"><tspan x="1330" y="1240">Grafana: Monitoring Reader (RG)</tspan><tspan x="1330" y="1256">Policy: Tag Contributor (RG)</tspan><tspan x="1330" y="1272">AKS kubelet: AcrPull</tspan></text>
+  <line x1="30" y1="1284" x2="1670" y2="1284" class="grid"/>
+  <line x1="330" y1="654" x2="330" y2="1284" class="grid"/>
+  <line x1="480" y1="654" x2="480" y2="1284" class="grid"/>
+  <line x1="640" y1="654" x2="640" y2="1284" class="grid"/>
+  <line x1="780" y1="654" x2="780" y2="1284" class="grid"/>
+  <line x1="930" y1="654" x2="930" y2="1284" class="grid"/>
+  <line x1="1050" y1="654" x2="1050" y2="1284" class="grid"/>
+  <line x1="1170" y1="654" x2="1170" y2="1284" class="grid"/>
+  <line x1="1320" y1="654" x2="1320" y2="1284" class="grid"/>
+  <rect x="30" y="654" width="1640" height="630" fill="none" stroke="#A6A6A6" stroke-width="1"/>
+  <text x="30" y="1310" class="itemdesc">¹ Phase 16 moves the payment-gateway key: only the Payments identity can read it, and the API and Functions lose access.</text>
+  <text x="30" y="1328" class="itemdesc">² Cosmos DB data-plane RBAC (sqlRoleAssignments: Built-in Data Contributor). It is not Azure RBAC, so the IAM blade doesn't show it.</text>
+  <text x="30" y="1346" class="itemdesc">³ Contained database users (CREATE USER ... FROM EXTERNAL PROVIDER) from deploy/sql/grant-managed-identities.sql, not Azure RBAC. ddladmin only because the apps create their schema; production runs migrations from the pipeline.</text>
+  <text x="30" y="1364" class="itemdesc">⁴ Entra app roles (application permissions) on the services' app registrations, assigned through Microsoft Graph, not Azure RBAC. The phase 11 Event Hubs secondary gets the same roles as the primary.</text>
+  <rect x="30" y="1398" width="400" height="78" class="note"/>
+  <text x="42" y="1422" class="itemname">Control plane is not data plane</text>
+  <text class="itemdesc"><tspan x="42" y="1442">Owner and Contributor manage resources, but read</tspan><tspan x="42" y="1458">no blobs, secrets or messages: that takes a data role.</tspan></text>
+  <rect x="443.3" y="1398" width="400" height="78" class="note"/>
+  <text x="455.3" y="1422" class="itemname">No keys anywhere</text>
+  <text class="itemdesc"><tspan x="455.3" y="1442">Shared keys off on Storage; local auth off on Service</tspan><tspan x="455.3" y="1458">Bus and Event Hubs; Cosmos DB keys off; SQL Entra-only.</tspan></text>
+  <rect x="856.6" y="1398" width="400" height="78" class="note"/>
+  <text x="868.6" y="1422" class="itemname">Least privilege by design</text>
+  <text class="itemdesc"><tspan x="868.6" y="1442">Sender or receiver, never both; a secret readable by one</tspan><tspan x="868.6" y="1458">service; a database per service; app roles per API.</tspan></text>
+  <rect x="1269.9" y="1398" width="400" height="78" class="note"/>
+  <text x="1281.9" y="1422" class="itemname">Where to practise</text>
+  <text class="itemdesc"><tspan x="1281.9" y="1442">Phase 1: RBAC basics. Phase 6: app registrations,</tspan><tspan x="1281.9" y="1458">remove a role. Phase 16: app roles through Graph.</tspan></text>
+</svg>

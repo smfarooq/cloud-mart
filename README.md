@@ -54,6 +54,10 @@ phase 13 an optional **hub VNet** with **Azure Firewall** is peered to this one,
 subnets' internet-bound traffic through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
 is allowed out. For slides or documents, use the 2× PNG: [docs/architecture.png](docs/architecture.png).
 
+**Identity and access** has its own diagram too, [docs/identity.svg](docs/identity.svg) ([PNG](docs/identity.png)).
+It shows how people, services, AKS and the pipeline get Entra ID tokens. Its matrix lists every Azure RBAC role,
+Cosmos DB data role, SQL database user and app role that each identity holds (phase 6).
+
 **Disaster recovery** has its own diagram, [docs/continuity.svg](docs/continuity.svg)
 ([PNG](docs/continuity.png)). It shows what each service fails over to in a second region and what that copy costs.
 It also covers what isn't protected, the failover order, and the zones and backups inside each region (phase 11).
