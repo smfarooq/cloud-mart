@@ -3,6 +3,7 @@ using Azure.Identity;
 using Azure.Messaging.EventHubs.Producer;
 using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
+using CloudMart.Core.Analytics;
 using CloudMart.Core.Azure;
 using CloudMart.Core.InMemory;
 using CloudMart.Core.InProcess;
@@ -194,6 +195,11 @@ public static class CloudMartServiceCollectionExtensions
             services.AddSingleton<IShippingGateway, InProcessShippingGateway>();
             shipping = "In-process";
         }
+
+        // Data lake (phase 14): read-only, for the Platform page. Data Factory and Event Hubs Capture write it. No
+        // in-memory version: without a lake there is nothing to show.
+        if (settings.DataLakeEndpoint is not null)
+            services.AddSingleton<IDataLakeCatalog, DataLakeCatalog>();
 
         services.AddSingleton(new CloudMartProviders(catalog, orders, messaging, telemetry, images, payments, shipping));
         return services;

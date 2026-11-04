@@ -72,6 +72,28 @@ export interface PlatformInfo {
   bannerMessage?: string | null;
 }
 
+export interface LakeFile {
+  path: string;
+  lastModified: string;
+  sizeBytes: number;
+}
+
+export interface LakeFolderSummary {
+  container: string;
+  prefix?: string | null;
+  files: number;
+  totalBytes: number;
+  latest?: LakeFile | null;
+  error?: string | null;
+}
+
+/** Phase 14. dataLake is null until the lake exists; clickstream is null while Event Hubs Capture is off. */
+export interface AnalyticsInfo {
+  dataLake?: string | null;
+  orderExports?: LakeFolderSummary | null;
+  clickstream?: LakeFolderSummary | null;
+}
+
 export interface HealthReport {
   status: string;
   dependencies: Record<string, string>;

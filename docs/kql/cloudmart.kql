@@ -74,3 +74,15 @@ Usage
 | where TimeGenerated > ago(7d) and IsBillable
 | summarize GB = sum(Quantity) / 1024 by DataType
 | order by GB desc
+
+// 13. Data Factory runs (phase 14): did last night's export succeed, and how long did it take?
+ADFPipelineRun
+| where TimeGenerated > ago(7d) and Status in ("Succeeded", "Failed", "Cancelled")
+| project TimeGenerated, PipelineName, Status, minutes = datetime_diff("second", End, Start) / 60.0, FailureType, ErrorMessage
+| order by TimeGenerated desc
+
+// 14. Why did an export fail? The activity's own error: a login failure (18456) means the database user is missing
+ADFActivityRun
+| where TimeGenerated > ago(7d) and Status == "Failed"
+| project TimeGenerated, PipelineName, ActivityName, EffectiveIntegrationRuntime, ErrorCode, ErrorMessage
+| order by TimeGenerated desc

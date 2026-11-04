@@ -3,6 +3,7 @@ using CloudMart.Core;
 using CloudMart.Core.Domain;
 using CloudMart.Core.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.FeatureManagement;
 
 namespace CloudMart.Api.Endpoints;
@@ -74,6 +75,11 @@ public static class OrderEndpoints
     {
         app.MapGet("/api/platform/info", (PlatformInfoProvider platform, IFeatureManager features, IFeatureDefinitionProvider definitions) =>
                 platform.GetAsync(features, definitions))
+            .WithTags("Platform");
+
+        // Phase 14. Anonymous like the info above, so cached: every uncached call lists the lake.
+        app.MapGet("/api/platform/analytics", async (PlatformInfoProvider platform, HybridCache cache, CancellationToken ct) =>
+                await cache.GetOrCreateAsync("platform:analytics", async token => await platform.GetAnalyticsAsync(token), cancellationToken: ct))
             .WithTags("Platform");
 
         // App roles are in the API's access token, not the SPA's ID token, so the SPA asks the API who you are.

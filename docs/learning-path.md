@@ -1059,12 +1059,183 @@ Real VPN and ExpressRoute need an on-premises device or a provider circuit. For 
 
 ---
 
-## Phase 14 · Data integration and analytics (new: light hands-on)
+## Phase 14 · Data integration and analytics (new: hands-on)
 
-**Cheap lab:** create a Data Factory (pay per activity run), give its managed identity `db_datareader` on the SQL
-database and Blob Data Contributor on a Data Lake Gen2 account, and build a pipeline that copies `Orders` to Parquet
-nightly. **Free lab:** start a Microsoft Fabric trial, **mirror** the Azure SQL database into OneLake and build a
-Power BI report on orders, with no ETL code.
+**Switches:** `deployAnalytics = true`. It needs `deploySql` (phase 4): the pipeline exports this deployment's orders
+database. Optional: `enableClickstreamCapture = true`, which needs `deployMessaging` (phase 5).
+
+**Cost:** Data Factory bills per use, about $1 per 1,000 activity runs plus $0.25 per DIU-hour of copying, so one
+small copy a night costs cents a month. The lake costs cents per GB. **Event Hubs Capture is ≈ $73/month per
+throughput unit** while it's on, so turn it on for the lab and off the same day. Unlike most switches, setting it back
+to `false` and redeploying does turn it off: Capture is a property of the event hub, not a separate resource.
+
+**What changes:**
+
+- **Data lake:** `dlscloudmart<suffix>` is a second storage account, this one with a **hierarchical namespace**
+  (Data Lake Storage Gen2): real directories, POSIX ACLs and the `abfss://` endpoint that Spark, Fabric and Synapse
+  use. It has two containers: `orders` for Data Factory's Parquet snapshots and `clickstream` for Event Hubs Capture's
+  Avro files. Lifecycle rules delete snapshots after 90 days and move clicks to Cool after 30.
+- **Data Factory:** `adf-cloudmart-dev-xxxxxx`, with a system-assigned identity, a linked service each for SQL and
+  the lake, and the `export-orders` pipeline. Read it in [analytics.bicep](../infra/modules/analytics.bicep).
+- **Event Hubs** (with Capture): every 5 minutes, each partition of `telemetry` writes an Avro file to
+  `clickstream/<yyyy>/<MM>/<dd>/...`.
+- **Platform:** a new **Analytics** panel shows the lake, the newest orders snapshot and today's click-stream files.
+
+**The design.** The pipeline is *extract and load*: one copy activity runs a query against `cloudmart` and writes the
+result to `orders/snapshot_date=<yyyy-MM-dd>/order_lines.parquet`. A few choices are worth noticing:
+
+- **One flat table.** Each row is an order line together with its order's columns. Analytics tools prefer that to
+  the two normalized tables the app writes.
+- **No personal data the lake doesn't need.** The query leaves `CustomerName` out. Each copy of the data is one more
+  place to secure, and to search when someone asks to be forgotten.
+- **Parquet, in `key=value` folders.** Parquet is columnar, typed and compressed. Spark, Fabric and serverless SQL read
+  `snapshot_date` from the folder name as a column, and skip folders a query doesn't need (partition pruning).
+- **A full snapshot every night.** It's simple and fine for a small table. A big one needs incremental loads (see the
+  questions below).
+- **Retries for a sleeping database.** The serverless database is usually paused at 2 a.m. The first attempt wakes it
+  and can fail while it resumes. The activity retries twice, two minutes apart.
+
+**Who can do what.** Nobody has a key:
+
+| Identity | Role | On |
+|---|---|---|
+| Data Factory | `db_datareader` (T-SQL, step 1 below) | the `cloudmart` database |
+| Data Factory | Storage Blob Data Contributor | the `orders` container only |
+| Event Hubs namespace | Storage Blob Data Contributor | the `clickstream` container only |
+| API | Storage Blob Data Reader | the `orders` and `clickstream` containers |
+| You | Storage Blob Data Contributor | the lake |
+
+**Networking.** Before private endpoints, the lake is public and accepts only Entra ID. With `enablePrivateEndpoints`
+(phases 2 and 4) the SQL server refuses public traffic, and Data Factory's default **Azure integration runtime** is a
+public service, so the Bicep changes three things:
+
+- Data Factory gets a **managed virtual network**, a Microsoft-run VNet with its own integration runtime, and two
+  **managed private endpoints**: one to the SQL server and one to the lake's `dfs` endpoint. Each one needs approval
+  by the owner of its target (step 2).
+- The lake's firewall denies by default. Trusted Azure services that sign in with a managed identity, such as Event
+  Hubs Capture, still get in, and so do the IPs in `adminIpAddresses`. Put yours there to browse the lake.
+- The lake gets a blob private endpoint in `snet-private-endpoints`, so the API reaches it through the VNet like
+  every other data store.
+
+### Lab
+
+1. **Deploy and grant.** Place a few orders first, so there's something to export. Run `what-if`: it lists the lake,
+   its containers and lifecycle policy, the factory with its linked services, datasets and pipeline, the role
+   assignments and `Analytics__DataLakeEndpoint` on the API. Deploy, then give the factory's identity read access to
+   the database. Its name is the `dataFactoryName` output. Run the phase 14 part of
+   [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql) against `cloudmart`:
+
+   ```sql
+   CREATE USER [adf-cloudmart-dev-xxxxxx] FROM EXTERNAL PROVIDER;
+   ALTER ROLE db_datareader ADD MEMBER [adf-cloudmart-dev-xxxxxx];
+   ```
+
+   The steps below use these names:
+
+   ```bash
+   rg=rg-cloudmart-dev
+   adf=$(az deployment sub show -n main --query properties.outputs.dataFactoryName.value -o tsv)
+   lake=$(az deployment sub show -n main --query properties.outputs.dataLakeName.value -o tsv)
+   sql=$(az deployment sub show -n main --query properties.outputs.sqlServerName.value -o tsv)
+   ```
+
+2. **Approve the managed private endpoints** (only with private endpoints). Data Factory has requested a connection to
+   the SQL server and to the lake, and each one waits for approval:
+
+   ```bash
+   for id in $(az sql server show -g $rg -n $sql --query id -o tsv) $(az storage account show -g $rg -n $lake --query id -o tsv); do
+     az network private-endpoint-connection list --id $id \
+       --query "[?properties.privateLinkServiceConnectionState.status=='Pending'].id" -o tsv |
+       xargs -r -n1 az network private-endpoint-connection approve --description "Data Factory export" --id
+   done
+   ```
+
+   In ADF Studio, **Manage** → **Managed private endpoints** shows both as *Approved* within a minute or two. This is
+   the managed VNet's security model: the factory can only reach what a target's owner has approved.
+3. **Run the pipeline.**
+
+   ```bash
+   run=$(az datafactory pipeline create-run -g $rg --factory-name $adf --name export-orders --query runId -o tsv)
+   az datafactory pipeline-run show -g $rg --factory-name $adf --run-id $run --query "{status:status, ms:durationInMs, message:message}"
+   ```
+
+   (The first `az datafactory` command installs the CLI's `datafactory` extension.) Watch the run in ADF Studio,
+   under **Monitor**. With the managed VNet, the run waits a minute or two for its compute to start. If the database
+   was paused, the first attempt can fail and the retry succeeds. When it shows *Succeeded*, the Platform page's
+   **Analytics** panel shows one file. The API caches that answer for up to 30 seconds, so give it a moment.
+4. **Read the Parquet.** Download it (your IP must be in `adminIpAddresses` once the lake is private):
+
+   ```bash
+   az storage fs file list -f orders --account-name $lake --auth-mode login -o table
+   az storage fs file download -f orders --account-name $lake --auth-mode login \
+     -p "snapshot_date=$(date -u +%F)/order_lines.parquet" -d .
+   ```
+
+   Then open it in any Parquet reader: Power BI Desktop, DuckDB
+   (`SELECT Status, count(*), sum(LineTotal) FROM 'order_lines.parquet' GROUP BY ALL`) or pandas. Check the columns:
+   `CustomerName` isn't there. Power BI Desktop can also read the lake directly: **Get data** → **Azure Data Lake
+   Storage Gen2** → `https://<lake>.dfs.core.windows.net/orders`, signed in with your organizational account.
+5. **Schedule it.** The trigger is the one part that isn't in Bicep. ARM can't update a started trigger, so if the
+   template contained one, every later deployment of `main.bicep` would fail. Teams that deploy Data Factory from a
+   pipeline stop its triggers before each deployment and start them again after. Here, the CLI creates the trigger
+   once from [nightly-export-trigger.json](../deploy/analytics/nightly-export-trigger.json):
+
+   ```bash
+   az datafactory trigger create -g $rg --factory-name $adf --name nightly-export \
+     --properties @deploy/analytics/nightly-export-trigger.json
+   az datafactory trigger start -g $rg --factory-name $adf --name nightly-export
+   ```
+
+6. **Capture the click stream** (optional, ≈ $73/month). Set `enableClickstreamCapture = true` and redeploy. Browse
+   some products, wait 5 minutes, and the panel lists today's Avro files. Each file holds the raw events with their
+   offsets and enqueue times: Spark, Fabric and Stream Analytics read them as they are. If the first deployment with
+   Capture fails on the `telemetry` event hub, its new role assignment may not have reached Storage yet: wait a few
+   minutes and redeploy. When you're done, set the switch back to `false`, redeploy, and check that the event hub's
+   **Capture** page says *Off*.
+7. **Read the logs.** The factory sends its runs to Log Analytics in their own tables (queries 13 and 14 in
+   [cloudmart.kql](kql/cloudmart.kql)). A failed run also fires the `adf-…-failed-runs` alert, which emails you.
+
+   ```kusto
+   ADFActivityRun
+   | where TimeGenerated > ago(1d)
+   | project TimeGenerated, PipelineName, ActivityName, Status, ErrorCode, ErrorMessage
+   ```
+
+8. **Free extra: Microsoft Fabric.** Start a Fabric trial and create a lakehouse. Then either add a **shortcut** to the
+   lake's `orders` container, which Fabric reads in place with no copy, or **mirror** the Azure SQL database into
+   OneLake, with no pipeline at all. Build a Power BI report on orders from either one. Both need a network path, so
+   try them before the lake and the server go private. Behind private endpoints, Fabric needs trusted workspace
+   access or a data gateway.
+
+### Break it
+
+- **Skip the grant.** Drop the factory's database user (`DROP USER [adf-cloudmart-dev-xxxxxx]`) and run the pipeline.
+  It fails with *Login failed for user '&lt;token-identified principal&gt;'* (error 18456). Entra ID signed the factory
+  in; the database had no user for it. **Fix it:** run the grant again, then rerun.
+- **Take the API's role away.**
+
+  ```bash
+  api=$(az identity show -g $rg -n id-cloudmart-dev-api --query principalId -o tsv)
+  az role assignment delete --assignee $api --role "Storage Blob Data Reader" \
+    --scope "$(az storage account show -g $rg -n $lake --query id -o tsv)/blobServices/default/containers/orders"
+  ```
+
+  A few minutes later, the panel shows `403 AuthorizationPermissionMismatch` for the orders export, while the click
+  stream still works: they're two separate role assignments. **Fix it:** redeploy.
+- **Reject the managed private endpoint** (private endpoints only). Run step 2 with `reject` instead of `approve` for the
+  SQL server, then rerun the pipeline. The copy can't connect to the database, and fails after its retries.
+
+### Architect's questions
+
+- Why a second storage account instead of a container in the images one? The hierarchical namespace must be chosen
+  when you create the account. The access rules differ too: the images account must accept browser uploads, and the
+  lake accepts no one but its writers and readers. So do the redundancy and lifecycle needs.
+- Why not point Power BI at the orders database? Reports would load the database that takes orders, keep the
+  serverless database from pausing, and see only one system's data. A lake or warehouse holds history and joins
+  sources.
+- How redundant should the lake be? The order snapshots can be rebuilt from SQL, so LRS is enough for them. The
+  click stream can't: Event Hubs keeps events for 24 hours, so after that the lake holds the only copy. If that history
+  matters, give it ZRS or GZRS (the phase 11 ladder), which here means changing the lake's SKU in the Bicep.
 
 | Requirement | Recommendation |
 |---|---|
@@ -1076,6 +1247,14 @@ Power BI report on orders, with no ETL code.
 | Land raw events in the lake | **Event Hubs Capture** → Data Lake Gen2 |
 | Log/time-series exploration at scale | **Azure Data Explorer** |
 | Catalogue, lineage, classification | **Microsoft Purview** |
+| An analytics copy of an operational database with no pipeline to maintain | **Fabric mirroring** (Azure SQL, Cosmos DB and others) into OneLake, kept in sync near real time |
+| Load only what changed since the last run | A **watermark** column (`UpdatedUtc`) or SQL **change tracking / CDC**, run by a **tumbling window trigger** (one run per window, with backfill and per-window retries) |
+| Copy from a data store behind a private endpoint | **Managed virtual network** integration runtime with managed private endpoints |
+| Copy from on-premises or another private network | **Self-hosted integration runtime** on a VM inside that network (it connects outbound, so no inbound ports) |
+| Open files that Spark and SQL both query | **Lakehouse** (Delta or Parquet files: Fabric lakehouse, Databricks) |
+| Structured, T-SQL first, multi-table transactions | **Warehouse** (Fabric Warehouse; Synapse dedicated SQL pools on existing estates) |
+| Folder- and file-level permissions in a lake | **Data Lake Storage Gen2** POSIX **ACLs**; Azure RBAC stops at the container |
+| Analytics without personal data | Copy only the columns you need. Mask or hash identifiers on the way, and classify with Purview |
 
 ---
 

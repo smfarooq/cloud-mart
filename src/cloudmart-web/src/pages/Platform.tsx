@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import { errorMessage } from '../format';
-import type { HealthReport, PlatformInfo } from '../types';
+import { bytes, errorMessage, timeAgo } from '../format';
+import type { AnalyticsInfo, HealthReport, LakeFolderSummary, PlatformInfo } from '../types';
 
 // Which learning phase lights each provider up, and what "local" means for it.
 const providerRows: { key: keyof PlatformInfo['providers']; label: string; phase: string; local: string }[] = [
@@ -23,13 +23,63 @@ const integrationLabels: Record<string, string> = {
   frontDoorLock: 'Front Door header lock (X-Azure-FDID)',
 };
 
+// One container of the data lake: how many files arrived, and the newest.
+function LakeFolder({ summary, empty }: { summary?: LakeFolderSummary | null; empty: string }) {
+  if (!summary) return <span className="muted">—</span>;
+  if (summary.error) return <span className="error small">{summary.error}</span>;
+  if (!summary.latest) return <span className="muted">{empty}</span>;
+  return (
+    <>
+      {summary.files} {summary.files === 1 ? 'file' : 'files'}, {bytes(summary.totalBytes)}. Newest{' '}
+      <code>{summary.latest.path}</code> ({timeAgo(summary.latest.lastModified)})
+    </>
+  );
+}
+
+// Phase 14. null while the API lists the lake (it can take a while); a string if the call itself failed.
+function Analytics({ analytics }: { analytics: AnalyticsInfo | string | null }) {
+  if (analytics === null) return <p className="muted small">Listing the data lake…</p>;
+  if (typeof analytics === 'string') return <p className="error small">Analytics unavailable: {analytics}</p>;
+  if (!analytics.dataLake) {
+    return (
+      <p className="muted small">
+        No data lake yet: phase 14 · Data integration (<code>deployAnalytics</code>).
+      </p>
+    );
+  }
+
+  return (
+    <dl className="facts">
+      <dt>Data lake</dt>
+      <dd>
+        <code>{analytics.dataLake}</code>
+      </dd>
+      <dt>Orders export</dt>
+      <dd>
+        <LakeFolder summary={analytics.orderExports} empty="No snapshots yet: run the export-orders pipeline" />
+      </dd>
+      <dt>Click stream today</dt>
+      <dd>
+        {analytics.clickstream ? (
+          <LakeFolder summary={analytics.clickstream} empty="Nothing captured yet today" />
+        ) : (
+          <span className="muted">Event Hubs Capture is off</span>
+        )}
+      </dd>
+    </dl>
+  );
+}
+
 export function Platform() {
   const [info, setInfo] = useState<PlatformInfo | null>(null);
   const [health, setHealth] = useState<HealthReport | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsInfo | string | null>(null);
   const [spread, setSpread] = useState<Record<string, number> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    // Its own request: a slow or failing lake shouldn't hold up or hide the rest of the page.
+    const lake = api.analytics().catch((e: unknown) => errorMessage(e));
     try {
       const [platform, ready] = await Promise.all([api.platform(), api.health()]);
       setInfo(platform);
@@ -38,6 +88,7 @@ export function Platform() {
     } catch (e) {
       setError(errorMessage(e));
     }
+    setAnalytics(await lake);
   }, []);
 
   useEffect(() => {
@@ -155,6 +206,11 @@ export function Platform() {
               </li>
             ))}
         </ul>
+      </section>
+
+      <section className="panel">
+        <h2>Analytics</h2>
+        <Analytics analytics={analytics} />
       </section>
     </div>
   );

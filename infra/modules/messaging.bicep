@@ -3,7 +3,7 @@
 //  - Event Hubs         "telemetry" : high-volume stream, replayable, partitioned, many independent readers
 //  - Event Grid system topic        : reactive "something happened" notifications from Azure resources (BlobCreated)
 
-import { roleAssignment } from 'types.bicep'
+import { roleAssignment, roles } from 'types.bicep'
 
 param serviceBusName string
 @minLength(6)
@@ -30,8 +30,13 @@ param privateDnsZoneId string = ''
 @description('Phase 11: a region for a paired Event Hubs namespace (metadata geo-disaster recovery). Empty = none.')
 param eventHubsSecondaryLocation string = ''
 
+@description('Phase 14: Event Hubs Capture writes the click stream to this Data Lake account as Avro files. Empty = no Capture. About $73/month per throughput unit.')
+param captureStorageAccountName string = ''
+param captureContainerName string = 'clickstream'
+
 var usePrivateEndpoint = !empty(privateEndpointSubnetId)
 var useEventHubsGeoDr = !empty(eventHubsSecondaryLocation)
+var useCapture = !empty(captureStorageAccountName)
 var eventHubsSecondaryName = '${eventHubsName}-dr'
 var eventHubsAliasName = '${eventHubsName}-geo'
 
@@ -185,6 +190,8 @@ resource eventHubs 'Microsoft.EventHub/namespaces@2024-01-01' = {
   tags: tags
   // Basic has one consumer group and no Capture; Standard is the realistic minimum, and supports private endpoints.
   sku: { name: 'Standard', tier: 'Standard', capacity: 1 }
+  // Phase 14: Capture signs in to the lake as the namespace's own identity, so the lake needs no storage key.
+  identity: useCapture ? { type: 'SystemAssigned' } : null
   properties: {
     disableLocalAuth: true
     minimumTlsVersion: '1.2'
@@ -192,12 +199,60 @@ resource eventHubs 'Microsoft.EventHub/namespaces@2024-01-01' = {
   }
 }
 
+resource captureAccount 'Microsoft.Storage/storageAccounts@2024-01-01' existing = if (useCapture) {
+  name: captureStorageAccountName
+
+  resource blobs 'blobServices' existing = {
+    name: 'default'
+
+    resource container 'containers' existing = {
+      name: captureContainerName
+    }
+  }
+}
+
+// Container scope: the namespace can write the click stream and nothing else in the lake. A phase 11 pairing copies
+// the Capture settings to the secondary, not this role: after a failover, Capture stops until that namespace has an
+// identity with the same role.
+resource captureWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (useCapture) {
+  name: guid(captureAccount::blobs::container.id, eventHubs.id, roles.storageBlobDataContributor)
+  scope: captureAccount::blobs::container
+  properties: {
+    principalId: eventHubs.identity!.principalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.storageBlobDataContributor)
+    principalType: 'ServicePrincipal'
+  }
+}
+
 resource telemetryHub 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' = {
   parent: eventHubs
   name: 'telemetry'
+  dependsOn: [captureWriter]
   properties: {
     partitionCount: 2 // fixed at creation on Standard: it caps the parallelism of each consumer group
     retentionDescription: { cleanupPolicy: 'Delete', retentionTimeInHours: 24 }
+    // Phase 14: every 5 minutes (or 300 MB, whichever comes first) each partition's new events become one Avro file in
+    // the lake. Date first in the path, so one day's files share a prefix and a query can skip the other days.
+    // A property of the event hub, not a separate resource, so setting the switch back to false and redeploying
+    // removes it (unlike most switches). Check the event hub's Capture page afterwards: you pay while it is on.
+    captureDescription: useCapture
+      ? {
+          enabled: true
+          encoding: 'Avro'
+          intervalInSeconds: 300
+          sizeLimitInBytes: 314572800
+          skipEmptyArchives: true
+          destination: {
+            name: 'EventHubArchive.AzureBlockBlob'
+            identity: { type: 'SystemAssigned' }
+            properties: {
+              storageAccountResourceId: captureAccount.id
+              blobContainer: captureContainerName
+              archiveNameFormat: '{Year}/{Month}/{Day}/{Hour}/{Minute}/{Second}/{Namespace}/{EventHub}/{PartitionId}'
+            }
+          }
+        }
+      : null
   }
 }
 

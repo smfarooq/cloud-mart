@@ -126,8 +126,14 @@ param deployApim bool = false
 // ------------------------------------------------------------------ Phase 13 · Hub-and-spoke
 @description('Requires deployNetwork and enablePrivateEndpoints. A hub VNet with Azure Firewall Basic; the app subnets\' internet-bound traffic goes through it. About $290/month plus data: deploy, do the lab, remove it.')
 param deployFirewall bool = false
-@description('Your public IP addresses (curl ifconfig.me). With the firewall, Service Bus accepts only its egress IP and these, so the portal\'s Service Bus Explorer and local runs keep working.')
+@description('Your public IP addresses (curl ifconfig.me). With the firewall, Service Bus accepts only its egress IP and these, so the portal\'s Service Bus Explorer and local runs keep working. With private endpoints, the phase 14 data lake accepts these too.')
 param adminIpAddresses string[] = []
+
+// ------------------------------------------------------------------ Phase 14 · Data integration and analytics
+@description('Requires deploySql. A Data Lake Storage Gen2 account and a Data Factory pipeline that copies the orders to it as Parquet. Pay per run: cents a month.')
+param deployAnalytics bool = false
+@description('Requires deployAnalytics and deployMessaging. Event Hubs Capture writes the click stream to the lake. About $73/month: do the lab, then turn it off.')
+param enableClickstreamCapture bool = false
 
 // ------------------------------------------------------------------ Phase 16 · Microservices
 @description('Payments API on the App Service plan. Its ledger database needs deploySql; without it, payments are in memory.')
@@ -165,6 +171,8 @@ var names = {
   firewallPolicy: 'afwp-${prefix}'
   keyVault: 'kv-${compact}-${take(suffix, 8)}'
   storage: take('st${compact}${suffix}', 24)
+  dataLake: take('dls${compact}${suffix}', 24)
+  dataFactory: 'adf-${prefix}-${short}'
   cosmos: 'cosmos-${prefix}-${short}'
   sql: 'sql-${prefix}-${short}'
   postgres: 'psql-${prefix}-${short}'
@@ -210,6 +218,10 @@ var paymentsDatabaseName = 'payments'
 var useShipping = deployShipping && deployAppService
 var paymentsEntra = enableEntraAuth && !empty(entraPaymentsClientId)
 var shippingEntra = enableEntraAuth && !empty(entraShippingClientId)
+
+// Phase 14 exports this deployment's orders database, so it needs one; Capture needs the click stream's Event Hubs.
+var useAnalytics = deployAnalytics && deploySql
+var useCapture = enableClickstreamCapture && useAnalytics && deployMessaging
 
 // ==================================================================================================== foundation
 resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
@@ -457,6 +469,28 @@ module postgres 'modules/postgres.bicep' = if (deployPostgres) {
   }
 }
 
+module analytics 'modules/analytics.bicep' = if (useAnalytics) {
+  scope: rg
+  name: 'analytics'
+  params: {
+    lakeName: names.dataLake
+    factoryName: names.dataFactory
+    location: location
+    tags: tags
+    workspaceId: monitoring.outputs.workspaceId
+    actionGroupId: monitoring.outputs.actionGroupId
+    sqlFqdn: sql!.outputs.connectionFqdn
+    sqlDatabaseName: ordersDatabaseName
+    sqlServerId: sql!.outputs.serverId
+    // The API only reads, for the Platform page. Data Factory and Event Hubs get their write roles in their modules.
+    readerPrincipalIds: [identity.outputs.apiPrincipalId]
+    deployerPrincipalId: deployerPrincipalId
+    allowedIpAddresses: adminIpAddresses
+    privateEndpointSubnetId: peSubnetId
+    blobDnsZoneId: dnsZones.?blob ?? ''
+  }
+}
+
 module messaging 'modules/messaging.bicep' = if (deployMessaging) {
   scope: rg
   name: 'messaging'
@@ -472,6 +506,8 @@ module messaging 'modules/messaging.bicep' = if (deployMessaging) {
     privateDnsZoneId: dnsZones.?serviceBus ?? ''
     actionGroupId: monitoring.outputs.actionGroupId
     eventHubsSecondaryLocation: eventHubsSecondaryLocation
+    captureStorageAccountName: useCapture ? analytics!.outputs.lakeName : ''
+    captureContainerName: useCapture ? analytics!.outputs.clickstreamContainerName : 'clickstream'
     // Phase 13: every app request to Service Bus leaves through the firewall, so that IP is the only one it needs.
     serviceBusAllowedIpAddresses: useFirewall ? concat([firewallHub!.outputs.publicIp], adminIpAddresses) : []
     // Least privilege: the API only sends, the Functions app only receives.
@@ -582,7 +618,10 @@ var apiSettings = union(
     : {},
   deployAppConfig ? { AppConfig__Endpoint: appIntegration!.outputs.appConfigEndpoint } : {},
   deployRedis ? { Redis__Endpoint: appIntegration!.outputs.redisEndpoint } : {},
-  deployFrontDoor ? { FrontDoor__Id: frontDoor!.outputs.frontDoorId } : {}
+  deployFrontDoor ? { FrontDoor__Id: frontDoor!.outputs.frontDoorId } : {},
+  // Phase 14: the Platform page lists what Data Factory and Event Hubs Capture have written to the lake.
+  useAnalytics ? { Analytics__DataLakeEndpoint: analytics!.outputs.blobEndpoint } : {},
+  useCapture ? { Analytics__ClickstreamCapture: 'true' } : {}
 )
 
 var functionsSettings = union(
@@ -861,6 +900,8 @@ output shippingIdentityName string = identity.outputs.shippingName
 output appGatewayUrl string = (deployAppGateway && deployNetwork && deployAppService) ? 'http://${appGateway!.outputs.publicHostName}' : ''
 output grafanaUrl string = deployGrafana ? grafana!.outputs.url : ''
 output firewallPublicIp string = useFirewall ? firewallHub!.outputs.publicIp : ''
+output dataLakeName string = useAnalytics ? analytics!.outputs.lakeName : ''
+output dataFactoryName string = useAnalytics ? analytics!.outputs.factoryName : ''
 
 // Static Web Apps reads this from staticwebapp.config.json, not from ARM, so the pipeline writes it in at deploy time.
 // Front Door adds the X-Azure-FDID header itself; a request straight to *.azurestaticapps.net doesn't have it.

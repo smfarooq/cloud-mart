@@ -43,6 +43,14 @@ public sealed record CloudMartSettings
     public string? ShippingBaseUrl { get; init; }
     public string? ShippingScope { get; init; }
 
+    /// <summary>Phase 14: the data lake's blob endpoint. Empty = no lake; the Platform page shows analytics as off.</summary>
+    public string? DataLakeEndpoint { get; init; }
+    public string OrderExportsContainer { get; init; } = "orders";
+    public string ClickstreamContainer { get; init; } = "clickstream";
+
+    /// <summary>Event Hubs Capture writes the click stream to the lake (phase 14).</summary>
+    public bool ClickstreamCapture { get; init; }
+
     public static CloudMartSettings From(IConfiguration config)
     {
         var sql = Blank(config.GetConnectionString("OrdersSql"));
@@ -70,6 +78,8 @@ public sealed record CloudMartSettings
             PaymentsScope = Blank(config["Payments:Scope"]),
             ShippingBaseUrl = Blank(config["Shipping:BaseUrl"]),
             ShippingScope = Blank(config["Shipping:Scope"]),
+            DataLakeEndpoint = Blank(config["Analytics:DataLakeEndpoint"]),
+            ClickstreamCapture = config.GetValue("Analytics:ClickstreamCapture", false),
         };
     }
 
