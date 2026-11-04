@@ -17,7 +17,8 @@ import { subnetPrefixes as spokeSubnets } from 'modules/network.bicep'
 @description('Short lowercase name used in every resource name.')
 param appName string = 'cloudmart'
 
-@allowed(['dev', 'test', 'prod'])
+@allowed(['dev', 'test', 'prod', 'dr'])
+@description('dr = the second-region copy from phases 10 and 11 (its own parameter file, another location).')
 param environmentName string = 'dev'
 
 param location string = 'eastus2'
