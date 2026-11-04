@@ -58,7 +58,7 @@ between" decisions the exam actually tests.
 | Unstructured data | ⚠️ | **Access tiers** (Hot/Cool/Cold/Archive), **lifecycle management**, **Data Lake Storage Gen2**, Azure Files | Phase 4 |
 | Balance features, performance and cost | ➕ | Premium vs standard storage, reserved capacity, the redundancy ladder | Phase 4 |
 | Protection and durability | ⚠️ | **LRS / ZRS / GRS / GZRS / RA-GZRS**, soft delete, versioning, immutability (WORM), point-in-time restore | Phases 4, 11 |
-| **Data integration** | ➕ | **Data Factory**, **Fabric** / Synapse, Databricks, Stream Analytics, Event Hubs Capture | Phase 14 |
+| **Data integration** | ➕ | **Data Factory** (built: nightly Parquet export, managed VNet runtime), **Fabric** / Synapse, Databricks, Stream Analytics, **Event Hubs Capture** (built) | Phase 14 |
 | **Data analysis** | ➕ | Lakehouse vs warehouse, Power BI, Azure Data Explorer | Phase 14 |
 
 ### Design business continuity (15–20%): entirely added
@@ -119,6 +119,8 @@ between" decisions the exam actually tests.
 | **15** | **Migration** | (new) | **CAF Migrate**, **Azure Migrate**, **DMS**, **Data Box**, Storage Mover |
 
 Phases 11–12 are built into CloudMart (Bicep switches + code), and so is phase 13's hub firewall (`deployFirewall`).
-The rest of phase 13 and phases 14–15 involve on-premises systems or large data platforms that are impractical or
-expensive to build for real, so they are design labs: diagrams and decision tables, plus a cheap hands-on taste where
-one exists.
+Phase 14 is built too: a Data Lake Storage Gen2 account, a Data Factory pipeline that exports the orders to it as
+Parquet (through a managed virtual network once the database is private), and optional Event Hubs Capture
+(`deployAnalytics`, `enableClickstreamCapture`). Fabric, Databricks and Synapse stay in the decision tables. The rest
+of phase 13 and phase 15 involve on-premises systems that are impractical or expensive to build for real, so they are
+design labs: diagrams and decision tables, plus a cheap hands-on taste where one exists.

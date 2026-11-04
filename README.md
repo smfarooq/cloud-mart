@@ -30,6 +30,7 @@ Each part of a shop needs a different Azure design decision:
 | Payments (phase 16) | Payments API → Azure SQL **ledger** table, private endpoint | Database per service, idempotency keys, tamper-evident data |
 | Shipping (phase 16) | Shipping API → **Table Storage**, private endpoint | Key-value storage, idempotent PUT |
 | Charge, ship, refund on failure | **Durable Functions** saga | Orchestration, compensating transactions, app-role auth between services |
+| Sales analytics (phase 14) | Data Factory → **Data Lake Gen2** as Parquet; Event Hubs **Capture** for clicks | Data integration, lake layout, managed VNet integration runtime |
 | Everything | Managed identities + data-plane RBAC | Identity-based access instead of connection strings |
 
 ## Frontend: React (recommended) or Angular?
@@ -58,7 +59,10 @@ Functions saga** takes over checkout: it charges through the **Payments API**, b
 refunds if shipping fails. Both APIs share the App Service plan and are reachable only through private endpoints. In
 phase 13 an optional **hub VNet** with **Azure Firewall** is peered to this one, and a route table sends the app
 subnets' internet-bound traffic through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
-is allowed out. For slides or documents, use the 2× PNG: [docs/architecture.png](docs/architecture.png).
+is allowed out. In phase 14 a **Data Factory** pipeline copies the orders to a **Data Lake Storage Gen2** account as
+Parquet every night, through a managed virtual network once the database is private, and **Event Hubs Capture** can
+land the click stream there too (not in the diagram yet: see the Mermaid version below). For slides or documents, use
+the 2× PNG: [docs/architecture.png](docs/architecture.png).
 
 **Identity and access** has its own diagram too, [docs/identity.svg](docs/identity.svg) ([PNG](docs/identity.png)).
 It shows how people, services, AKS and the pipeline get Entra ID tokens. Its matrix lists every Azure RBAC role,
@@ -110,6 +114,10 @@ flowchart LR
   pe --> sql[(Azure SQL / PostgreSQL<br/>orders + payments ledger)]
   pe --> blob[(Storage<br/>images + shipments table)]
   pe --> kv[(Key Vault)]
+  pe -- "pe-dls: Platform page reads" --> lake[(Data Lake Gen2<br/>orders Parquet + click Avro)]
+  adf[Data Factory<br/>phase 14, managed VNet] -- "managed PE: nightly copy" --> sql
+  adf -- "managed PE: Parquet" --> lake
+  eh -. "Capture, optional" .-> lake
   api & func -.-> ai[App Insights]
   ai -.-> law[Log Analytics]
   eg -. "dead letters" .-> blob
@@ -137,9 +145,10 @@ src/CloudMart.ServiceDefaults/ what every web service shares: telemetry, health,
 src/cloudmart-web/             React 19 + TypeScript + Vite SPA (MSAL, App Insights, runtime config.json)
 tests/CloudMart.Core.Tests     business rules, saga failure paths, payment and shipping idempotency
 infra/main.bicep               subscription-scoped entry point; one switch per phase
-infra/modules/                 27 modules + shared types: network, hub firewall, data, messaging, compute, edge...
+infra/modules/                 28 modules + shared types: network, hub firewall, data, analytics, messaging, compute...
 pipelines/                     Azure Pipelines: build → what-if/deploy infra → deploy apps
-deploy/                        SQL/PostgreSQL identity grants, Entra app roles, Kubernetes manifest, LB lab script
+deploy/                        SQL/PostgreSQL identity grants, Entra app roles, Data Factory trigger, Kubernetes
+                               manifest, LB lab script
 docs/                          learning path, portal guide, gap analysis, KQL queries
 ```
 
@@ -199,6 +208,7 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 | 11 Continuity | `storageSku`, `cosmosSecondaryLocation`, `sqlBackupRedundancy`, `sqlSecondaryLocation`, `eventHubsSecondaryLocation`, `zoneRedundant` | Multi-region data; orders survive a SQL failover |
 | 12 Integration | `deployAppConfig`, `deployRedis`, `deployApim` | Feature flags, Redis L2 cache |
 | 13 Hub-and-spoke | `deployFirewall` (needs `enablePrivateEndpoints`; **≈ $290/month**), `adminIpAddresses` | Order events **Service Bus (WebSockets)**; egress through Azure Firewall |
+| 14 Data integration | `deployAnalytics` (needs `deploySql`), `enableClickstreamCapture` (**≈ $73/month**) | **Analytics** panel: newest orders snapshot, today's captured clicks |
 | 16 Microservices | `deployPayments`, `deployShipping` (+ app registrations) | Payments **Payments API**, Shipping **Shipping API** |
 
 ## Cost guard rails
@@ -213,6 +223,8 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 - `deployFirewall` is one of the most expensive switches: Azure Firewall Basic is **≈ $290/month plus about $0.065
   per GB**, billed every hour it exists. It is off by default. Deploy it, do the phase 13 lab and delete it the same
   day.
+- `enableClickstreamCapture` (phase 14) bills Event Hubs Capture at **≈ $73/month** per throughput unit. Unlike the switches that create resources, `false` does undo it: Capture is a property of the
+  event hub, so redeploying removes it.
 - `false` does not delete anything with `az deployment sub create`. Use a **deployment stack** (phase 8) so removed
   switches delete their resources, or delete the resource group:
   `az group delete -n rg-cloudmart-dev --yes`.
@@ -221,8 +233,9 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 
 ## Status
 
-All .NET projects build, the 30 unit tests pass, the SPA type-checks and builds, and every Bicep file compiles with
-zero warnings (Bicep 0.48). Locally, the API, Payments API and Shipping API run together and the saga confirms,
+All .NET projects build, the 44 unit tests pass, the SPA type-checks and builds, and every Bicep file compiles with
+zero warnings (Bicep 0.48). Phases 1–13 and 16 have switches and code; so does phase 14 (a data lake and a Data
+Factory export). Phase 15 (migration) is a design lab. Locally, the API, Payments API and Shipping API run together and the saga confirms,
 declines and refunds orders as described in phase 16. Nothing has been deployed to a real subscription from this repository yet, so treat the
 first deployment of each phase as part of the lab. `what-if` first, and read the error messages: they are usually
 exactly what the exam asks about.

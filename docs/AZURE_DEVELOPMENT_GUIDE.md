@@ -146,6 +146,8 @@ The table lists each service, what it is in plain words, what CloudMart uses it 
 | **App Configuration** | Central settings and feature flags that apps reload without restarting | Banner message and the `Trending` feature flag | Change behaviour without a redeploy | `deployAppConfig` (12) | [Program.cs](../src/CloudMart.Api/Program.cs#L29-L38) | ✅ resource; 🔧 values set by hand |
 | **Azure Managed Redis** | An in-memory cache shared by all servers | Second-level cache for product lists | Several API instances share one cache | `deployRedis` (12) | [Program.cs](../src/CloudMart.Api/Program.cs#L88-L101) | ✅ |
 | **Application Insights + Log Analytics** (Azure Monitor) | Collects logs, traces and metrics, and lets you query and alert on them | Traces from browser to API to Service Bus to Functions; custom metrics; alerts | One place to see the whole system | Always (1) | [Program.cs](../src/CloudMart.Api/Program.cs#L45-L49), [telemetry.ts](../src/cloudmart-web/src/telemetry.ts), [CloudMartTelemetry.cs](../src/CloudMart.Core/CloudMartTelemetry.cs) | ✅ |
+| **Data Lake Storage Gen2** | A storage account with real folders, made for analytics files | Parquet snapshots of the orders and, optionally, the captured click stream; the API only lists it, for the Platform page | Spark, Fabric and Synapse read it directly; folder-level permissions | `deployAnalytics` (14) | [DataLakeCatalog.cs](../src/CloudMart.Core/Azure/DataLakeCatalog.cs) | ✅ |
+| **Data Factory** | Runs data-copy pipelines on a schedule | Copies every order line from SQL to the lake as Parquet each night | Pay per run, no code, managed private endpoints to private stores | `deployAnalytics` (14) | [analytics.bicep](../infra/modules/analytics.bicep) (no app code) | ✅ pipeline; 🔧 database user and trigger |
 | **Front Door** (with WAF) | A global entry point that routes, caches and filters web traffic | One public address for the SPA and the API, image caching, and a lock so only Front Door reaches the API | Global edge, web application firewall | `deployFrontDoor` (10) | [Program.cs](../src/CloudMart.Api/Program.cs#L130-L143) | ✅ |
 
 **Services with infrastructure but no application code.** Bicep can create these, but the app's code doesn't talk to
@@ -196,6 +198,7 @@ application code does; the full list, including network and governance switches,
 | 10 | `deployFrontDoor` (`false`) | Front Door profile, routes, WAF | API rejects traffic that didn't come through Front Door |
 | 12 | `deployAppConfig`, `deployRedis` (`false`) | App Configuration store, Azure Managed Redis | Settings and feature flags reload live; product lists use a shared cache |
 | 13 | `deployFirewall` (`false`) | Hub network and Azure Firewall | Service Bus traffic switches to AMQP over WebSockets (port 443) |
+| 14 | `deployAnalytics`, `enableClickstreamCapture` (`false`) | Data Lake Storage Gen2 account, Data Factory with the `export-orders` pipeline; Event Hubs Capture | The Platform page lists the orders snapshots and today's captured click files (`Analytics__DataLakeEndpoint`) |
 | 16 | `deployPayments`, `deployShipping` (`false`) | Payments and Shipping App Services, `payments` database, `shipments` table | The saga calls two separate APIs; only Payments may read the Key Vault secret |
 
 > **Turn phases on in order.** The API and the Functions app are separate processes. With in-memory storage they
@@ -1132,6 +1135,7 @@ Everything below is in the repository today, unless marked otherwise.
 | Entra ID app registrations for the API and SPA | 🔧 | Created by hand in phase 6; no script exists |
 | App registrations and app roles for Payments and Shipping | 🔧 | `deploy/entra/setup-service-auth.sh` |
 | App Configuration values and the `Trending` flag | 🔧 | Created with `az appconfig` commands in phase 12 |
+| Data Factory database user, managed private endpoint approvals and nightly trigger | 🔧 | Phase 14 lab: the grant script, `az network private-endpoint-connection approve`, and `az datafactory trigger create` from [nightly-export-trigger.json](../deploy/analytics/nightly-export-trigger.json) |
 | Order saga with Durable Functions | ✅ | |
 | Customer notifications | 📝 | `NotifyCustomer` only writes a log line |
 | Daily order report | Partial | `DailyOrderReport` computes the summary and logs it; it isn't emailed or stored |

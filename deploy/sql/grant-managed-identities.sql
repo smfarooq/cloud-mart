@@ -22,6 +22,13 @@ ALTER ROLE db_datawriter ADD MEMBER [id-cloudmart-dev-func];
 SELECT name, type_desc, authentication_type_desc FROM sys.database_principals WHERE name LIKE 'id-%';
 
 -- ---------------------------------------------------------------------------------------------------------------
+-- Phase 14: the Data Factory reads orders for the nightly export, and does nothing else. Its system-assigned
+--   identity has the factory's name: the deployment output dataFactoryName (adf-cloudmart-dev-xxxxxx).
+-- ---------------------------------------------------------------------------------------------------------------
+-- CREATE USER [adf-cloudmart-dev-xxxxxx] FROM EXTERNAL PROVIDER;
+-- ALTER ROLE db_datareader ADD MEMBER [adf-cloudmart-dev-xxxxxx];
+
+-- ---------------------------------------------------------------------------------------------------------------
 -- Phase 16: run this part against the "payments" database instead (switch database in the query editor, or
 --   sqlcmd ... -d payments). Database per service: the Payments identity is a user here and nowhere else, and the
 --   API and Functions identities are NOT users here: they reach payments only through the Payments API.

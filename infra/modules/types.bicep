@@ -26,6 +26,7 @@ var roles = {
   serviceBusDataSender: '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39'
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
   storageBlobDataOwner: 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+  storageBlobDataReader: '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
   storageBlobDelegator: 'db58b8e5-c6ad-4a2a-8342-4190687cbf4a'
   storageQueueDataContributor: '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
   storageTableDataContributor: '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'

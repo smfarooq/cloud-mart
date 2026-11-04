@@ -87,6 +87,13 @@ param deployFirewall = false
 // Service Bus Explorer and local runs.
 param adminIpAddresses = []
 
+// Phase 14 · Data integration and analytics: a Data Lake Gen2 account and a Data Factory export of the orders.
+// Needs deploySql. Data Factory bills per run (cents a month for one nightly copy).
+param deployAnalytics = false
+// Needs deployAnalytics and deployMessaging. COST: Event Hubs Capture is about $73/month while it is on. Unlike most
+// switches, setting it back to false and redeploying does turn it off.
+param enableClickstreamCapture = false
+
 // Phase 16 · Microservices (Payments + Shipping APIs, Durable Functions saga)
 param deployPayments = false
 param deployShipping = false

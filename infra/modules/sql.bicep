@@ -201,6 +201,7 @@ resource failoverGroup 'Microsoft.Sql/servers/failoverGroups@2023-08-01' = if (u
 }
 
 output serverName string = server.name
+output serverId string = server.id
 output fqdn string = server.properties.fullyQualifiedDomainName
 output databaseName string = database.name
 output paymentsDatabaseName string = paymentsDatabaseName

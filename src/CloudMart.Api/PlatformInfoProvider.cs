@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using CloudMart.Core;
+using CloudMart.Core.Analytics;
 using Microsoft.FeatureManagement;
 
 namespace CloudMart.Api;
@@ -17,6 +18,9 @@ public sealed record PlatformInfo(
     IReadOnlyDictionary<string, bool> Integrations,
     IReadOnlyDictionary<string, bool> Features,
     string? BannerMessage);
+
+/// <summary>Phase 14: the data lake's host name, and what has landed in it. All null = no lake configured.</summary>
+public sealed record AnalyticsInfo(string? DataLake, LakeFolderSummary? OrderExports, LakeFolderSummary? Clickstream);
 
 public static class FeatureFlags
 {
@@ -38,8 +42,11 @@ public sealed class PlatformInfoProvider(
     IConfiguration config,
     IWebHostEnvironment environment,
     CloudMartProviders providers,
+    CloudMartSettings settings,
+    TimeProvider time,
     IHttpClientFactory httpClients,
-    ILogger<PlatformInfoProvider> logger)
+    ILogger<PlatformInfoProvider> logger,
+    IDataLakeCatalog? lake = null)
 {
     private readonly Lazy<Task<HostingInfo>> _hosting = new(() => DetectHostingAsync(httpClients, logger));
 
@@ -66,6 +73,23 @@ public sealed class PlatformInfoProvider(
             },
             new Dictionary<string, bool> { [FeatureFlags.Trending] = await FeatureFlags.IsTrendingEnabledAsync(features, definitions) },
             config["CloudMart:BannerMessage"]);
+    }
+
+    /// <summary>
+    /// What Data Factory (one Parquet snapshot of the orders a night) and Event Hubs Capture (the click stream, an Avro
+    /// file per partition every 5 minutes) have written. Only today's click files: a year of them is a long listing.
+    /// </summary>
+    public async Task<AnalyticsInfo> GetAnalyticsAsync(CancellationToken ct)
+    {
+        if (lake is null || settings.DataLakeEndpoint is null)
+            return new AnalyticsInfo(null, null, null);
+
+        var orders = lake.SummarizeAsync(settings.OrderExportsContainer, null, ".parquet", ct);
+        var clicks = settings.ClickstreamCapture
+            ? lake.SummarizeAsync(settings.ClickstreamContainer, LakePaths.CaptureDayPrefix(time.GetUtcNow()), ".avro", ct)
+            : null;
+
+        return new AnalyticsInfo(new Uri(settings.DataLakeEndpoint).Host, await orders, clicks is null ? null : await clicks);
     }
 
     private static async Task<HostingInfo> DetectHostingAsync(IHttpClientFactory httpClients, ILogger logger)

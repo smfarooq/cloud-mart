@@ -1,6 +1,16 @@
 import { getAccessToken } from './auth';
 import { config } from './config';
-import type { HealthReport, Me, Order, PlatformInfo, Product, TelemetryEvent, TrendingProduct, UploadTarget } from './types';
+import type {
+  AnalyticsInfo,
+  HealthReport,
+  Me,
+  Order,
+  PlatformInfo,
+  Product,
+  TelemetryEvent,
+  TrendingProduct,
+  UploadTarget,
+} from './types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -42,6 +52,7 @@ const json = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.strin
 export const api = {
   me: () => request<Me>('/api/me'),
   platform: () => request<PlatformInfo>('/api/platform/info'),
+  analytics: () => request<AnalyticsInfo>('/api/platform/analytics'),
   health: async (): Promise<HealthReport> => (await fetch(apiUrl('/health/ready'))).json(),
 
   products: () => request<Product[]>('/api/products'),
