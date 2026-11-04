@@ -4,7 +4,7 @@
 using 'main.bicep'
 
 param appName = 'cloudmart'
-param environmentName = 'dev'
+param environmentName = 'dev' // 'dr' in the second-region copy's parameter file (phases 10 and 11)
 param location = 'eastus2'
 param staticWebAppLocation = 'eastus2'
 
