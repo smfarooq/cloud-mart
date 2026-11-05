@@ -477,21 +477,23 @@ private endpoint (≈ $7/month) and loses its public access. Service Bus Standar
 
 Below it is this matrix. Each row is an identity; each cell is the least it needs, and everything else is denied.
 
-| Identity | Key Vault | Storage | Cosmos DB ² | Azure SQL ³ | Service Bus | Event Hubs | Payments, Shipping ⁴ | Everything else |
-|---|---|---|---|---|---|---|---|---|
-| **API** (`id-…-api`) | Secrets User ¹ | Blob Data Contributor, Blob Delegator (SAS) | Data Contributor | `cloudmart`: read, write, ddladmin | Data Sender | Data Sender | Payments.Process, Shipments.Manage | AcrPull (phase 8), App Configuration Data Reader, Redis access policy (phase 12) |
-| **Functions** (`id-…-func`) | Secrets User ¹ | Blob Data Owner, Queue + Table Data Contributor | Data Contributor | `cloudmart`: read, write | Data Receiver | Data Receiver | Payments.Process, Shipments.Manage | — |
-| **Payments** (`id-…-pay`, phase 16) | Secrets User: the only reader | — | — | `payments`: read, write, ddladmin | — | — | — | — |
-| **Shipping** (`id-…-ship`, phase 16) | — | Table Data Contributor | — | — | — | — | — | — |
-| **You** (the deployer) | Secrets Officer | Blob Data Contributor, Blob Delegator | Data Contributor | Entra admin of the server(s) | Data Owner | Data Owner | — | Owner on the subscription; VM Administrator Login, Grafana Admin, AKS RBAC Cluster Admin, App Configuration Data Owner |
-| **Pipeline** (service connection) | — | — | — | — | — | — | — | Owner, or Contributor + Role Based Access Control Administrator, on the subscription |
-| **Event Grid system topic** | — | Blob Data Contributor, `eventgrid-deadletter` container only | — | — | — | — | — | — |
-| **Other system-assigned** | — | — | — | — | — | — | — | Grafana: Monitoring Reader; Policy remediation: Tag Contributor; AKS kubelet: AcrPull |
+| Identity | Key Vault | Storage | Cosmos DB ² | Azure SQL ³ | Service Bus | Event Hubs | Payments, Shipping ⁴ | Data lake (phase 14) | Everything else |
+|---|---|---|---|---|---|---|---|---|---|
+| **API** (`id-…-api`) | Secrets User ¹ | Blob Data Contributor, Blob Delegator (SAS) | Data Contributor | `cloudmart`: read, write, ddladmin | Data Sender | Data Sender | Payments.Process, Shipments.Manage | Blob Data Reader: `orders`, `clickstream` | AcrPull (phase 8), App Configuration Data Reader, Redis access policy (phase 12) |
+| **Functions** (`id-…-func`) | Secrets User ¹ | Blob Data Owner, Queue + Table Data Contributor | Data Contributor | `cloudmart`: read, write | Data Receiver | Data Receiver | Payments.Process, Shipments.Manage | — | — |
+| **Payments** (`id-…-pay`, phase 16) | Secrets User: the only reader | — | — | `payments`: read, write, ddladmin | — | — | — | — | — |
+| **Shipping** (`id-…-ship`, phase 16) | — | Table Data Contributor | — | — | — | — | — | — | — |
+| **You** (the deployer) | Secrets Officer | Blob Data Contributor, Blob Delegator | Data Contributor | Entra admin of the server(s) | Data Owner | Data Owner | — | Blob Data Contributor (the whole lake) | Owner on the subscription; VM Administrator Login, Grafana Admin, AKS RBAC Cluster Admin, App Configuration Data Owner |
+| **Pipeline** (service connection) | — | — | — | — | — | — | — | — | Owner, or Contributor + Role Based Access Control Administrator, on the subscription |
+| **Data Factory** (system-assigned, phase 14) | — | — | — | `cloudmart`: read (`db_datareader`) | — | — | — | Blob Data Contributor, `orders` container only | — |
+| **Event Hubs namespace** (system-assigned, with `enableClickstreamCapture`) | — | — | — | — | — | — | — | Blob Data Contributor, `clickstream` container only | — |
+| **Event Grid system topic** | — | Blob Data Contributor, `eventgrid-deadletter` container only | — | — | — | — | — | — | — |
+| **Other system-assigned** | — | — | — | — | — | — | — | — | Grafana: Monitoring Reader; Policy remediation: Tag Contributor; AKS kubelet: AcrPull |
 
 ¹ From phase 16, only the Payments identity can read the payment-gateway key.
 ² Cosmos DB data-plane RBAC (`sqlRoleAssignments`), not Azure RBAC: the *Access control (IAM)* blade doesn't show it.
-³ Contained database users from [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql), not Azure
-RBAC. `ddladmin` is only there because the apps create their own schema.
+³ Contained database users from [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql), including
+the phase 14 Data Factory's read-only user. Not Azure RBAC. `ddladmin` is only there because the apps create their own schema.
 ⁴ Entra app roles assigned through Microsoft Graph, not Azure RBAC.
 
 **Exercise:** open the resource group's *Access control (IAM) → Role assignments*, then find which rows of the table
