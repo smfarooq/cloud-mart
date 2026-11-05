@@ -479,15 +479,13 @@ Below it is this matrix. Each row is an identity; each cell is the least it need
 
 | Identity | Key Vault | Storage | Cosmos DB ² | Azure SQL ³ | Service Bus | Event Hubs | Payments, Shipping ⁴ | Everything else |
 |---|---|---|---|---|---|---|---|---|
-| **API** (`id-…-api`) | Secrets User ¹ | Blob Data Contributor, Blob Delegator (SAS); data lake: Blob Data Reader on `orders` and `clickstream` only (phase 14) | Data Contributor | `cloudmart`: read, write, ddladmin | Data Sender | Data Sender | Payments.Process, Shipments.Manage | AcrPull (phase 8), App Configuration Data Reader, Redis access policy (phase 12) |
+| **API** (`id-…-api`) | Secrets User ¹ | Blob Data Contributor, Blob Delegator (SAS) | Data Contributor | `cloudmart`: read, write, ddladmin | Data Sender | Data Sender | Payments.Process, Shipments.Manage | AcrPull (phase 8), App Configuration Data Reader, Redis access policy (phase 12) |
 | **Functions** (`id-…-func`) | Secrets User ¹ | Blob Data Owner, Queue + Table Data Contributor | Data Contributor | `cloudmart`: read, write | Data Receiver | Data Receiver | Payments.Process, Shipments.Manage | — |
 | **Payments** (`id-…-pay`, phase 16) | Secrets User: the only reader | — | — | `payments`: read, write, ddladmin | — | — | — | — |
 | **Shipping** (`id-…-ship`, phase 16) | — | Table Data Contributor | — | — | — | — | — | — |
-| **You** (the deployer) | Secrets Officer | Blob Data Contributor, Blob Delegator; data lake: Blob Data Contributor | Data Contributor | Entra admin of the server(s) | Data Owner | Data Owner | — | Owner on the subscription; VM Administrator Login, Grafana Admin, AKS RBAC Cluster Admin, App Configuration Data Owner |
+| **You** (the deployer) | Secrets Officer | Blob Data Contributor, Blob Delegator | Data Contributor | Entra admin of the server(s) | Data Owner | Data Owner | — | Owner on the subscription; VM Administrator Login, Grafana Admin, AKS RBAC Cluster Admin, App Configuration Data Owner |
 | **Pipeline** (service connection) | — | — | — | — | — | — | — | Owner, or Contributor + Role Based Access Control Administrator, on the subscription |
 | **Event Grid system topic** | — | Blob Data Contributor, `eventgrid-deadletter` container only | — | — | — | — | — | — |
-| **Data Factory** (`adf-…`, system-assigned, phase 14) | — | Data lake: Blob Data Contributor, `orders` container only | — | `cloudmart`: read | — | — | — | — |
-| **Event Hubs namespace** (system-assigned, phase 14 Capture) | — | Data lake: Blob Data Contributor, `clickstream` container only | — | — | — | — | — | — |
 | **Other system-assigned** | — | — | — | — | — | — | — | Grafana: Monitoring Reader; Policy remediation: Tag Contributor; AKS kubelet: AcrPull |
 
 ¹ From phase 16, only the Payments identity can read the payment-gateway key.
