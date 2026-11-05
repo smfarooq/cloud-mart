@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1881 1570" width="1881" height="1570" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1881 1730" width="1881" height="1730" role="img" aria-labelledby="title desc">
   <title id="title">CloudMart architecture diagram</title>
-  <desc id="desc">Browser and React SPA reach Static Web Apps and the App Service API through Front Door. The API publishes to Service Bus and Event Hubs; Event Grid relays Blob events; Azure Functions process all three, and run the order saga that charges through the Payments API, books through the Shipping API and refunds on failure. Service Bus Standard has no private endpoints, so it is reached on its public endpoint with Entra ID; Event Grid pushes to the Function App's public endpoint. The APIs and Functions send outbound traffic through VNet-integrated subnets to private endpoints for Azure SQL, Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs. Each subnet has a network security group. Optionally (phase 13), a hub VNet with Azure Firewall Basic is peered to this spoke, and a route table sends the app subnets' internet-bound traffic through the firewall, which allows only Service Bus, Entra ID and Azure Monitor; private endpoint traffic stays direct. Telemetry and diagnostic logs flow to Application Insights and Log Analytics, where log search and metric alerts (exceptions, dead letters, backlog, throttling, orders needing review) notify an action group.</desc>
+  <desc id="desc">Browser and React SPA reach Static Web Apps and the App Service API through Front Door. The API publishes to Service Bus and Event Hubs; Event Grid relays Blob events; Azure Functions process all three, and run the order saga that charges through the Payments API, books through the Shipping API and refunds on failure. Service Bus Standard has no private endpoints, so it is reached on its public endpoint with Entra ID; Event Grid pushes to the Function App's public endpoint. The APIs and Functions send outbound traffic through VNet-integrated subnets to private endpoints for Azure SQL, Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs. Each subnet has a network security group. Optionally (phase 13), a hub VNet with Azure Firewall Basic is peered to this spoke, and a route table sends the app subnets' internet-bound traffic through the firewall, which allows only Service Bus, Entra ID and Azure Monitor; private endpoint traffic stays direct. In phase 14 a Data Factory pipeline copies the orders from Azure SQL to a Data Lake Storage Gen2 account as Parquet every night, through managed private endpoints once the database is private, and Event Hubs Capture can write the click stream there too; the API reads the lake through a blob private endpoint. Telemetry and diagnostic logs flow to Application Insights and Log Analytics, where log search and metric alerts (exceptions, dead letters, backlog, throttling, orders needing review) notify an action group.</desc>
 
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -195,13 +195,26 @@
       <rect x="26" y="20" width="16" height="12" fill="#0078D4"/>
       <rect x="6" y="34" width="36" height="8" fill="#50A0E8"/>
     </symbol>
+    <symbol id="i-datafactory" viewBox="0 0 48 48">
+      <path d="M4 42 V24 L14 30 V24 L24 30 V24 L34 30 V8 H42 V42 Z" fill="#0078D4"/>
+      <rect x="9" y="34" width="5" height="4" fill="#ffffff"/>
+      <rect x="19" y="34" width="5" height="4" fill="#ffffff"/>
+      <rect x="29" y="34" width="5" height="4" fill="#ffffff"/>
+      <path d="M36 12 h4" stroke="#50A0E8" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-datalake" viewBox="0 0 48 48">
+      <rect x="4" y="10" width="40" height="30" rx="2" fill="#E6E6E6"/>
+      <rect x="4" y="10" width="40" height="8" fill="#0072C6"/>
+      <path d="M10 23 h9 l2 2 h9 v8 h-20 z" fill="#FFB900"/>
+      <path d="M24 33 v4 h12 M30 37 v-6 h8" stroke="#0072C6" stroke-width="2" fill="none"/>
+    </symbol>
     <symbol id="i-budget" viewBox="0 0 48 48">
       <circle cx="24" cy="24" r="19" fill="#5EA830"/>
       <text x="24" y="32" font-size="22" font-weight="700" fill="#ffffff" text-anchor="middle">$</text>
     </symbol>
   </defs>
 
-  <rect width="1881" height="1570" fill="#ffffff"/>
+  <rect width="1881" height="1730" fill="#ffffff"/>
 
   <!-- Title -->
   <rect x="30" y="24" width="430" height="66" fill="#4472C4"/>
@@ -233,7 +246,7 @@
   <text x="1663" y="88" class="notetext">Private endpoint</text>
 
   <!-- ============ Internet & global services ============ -->
-  <rect x="30" y="150" width="260" height="1140" rx="6" class="zone"/>
+  <rect x="30" y="150" width="260" height="1300" rx="6" class="zone"/>
   <text x="46" y="176" class="zonetitle">Internet &amp; global services</text>
 
   <rect x="65" y="195" width="150" height="96" class="svc"/>
@@ -281,7 +294,7 @@
   <text class="notetext"><tspan x="67" y="956">React SPA: signs in with</tspan><tspan x="67" y="974">MSAL, calls /api/* through</tspan><tspan x="67" y="992">Front Door, uploads images</tspan><tspan x="67" y="1010">with a SAS and sends page</tspan><tspan x="67" y="1028">views to App Insights.</tspan></text>
 
   <!-- ============ Azure region ============ -->
-  <rect x="310" y="150" width="1541" height="1140" rx="6" class="zone"/>
+  <rect x="310" y="150" width="1541" height="1300" rx="6" class="zone"/>
   <text x="326" y="176" class="zonetitle">Azure region (eastus2) · resource group rg-cloudmart-dev</text>
   <text x="1835" y="176" class="flowlabel" text-anchor="end">Second region, failover order and backups: docs/continuity.svg (phase 11)</text>
 
@@ -507,7 +520,37 @@
   <text x="1510" y="578" class="flowlabel" transform="rotate(-90 1510 578)">BlobCreated</text>
 
   <path d="M65 420 H42 V1172 H1491 V1050 H1468" class="flow dash"/>
-  <text x="600" y="1192" class="flowlabel" text-anchor="middle">the browser uploads the image straight to Blob Storage with a short-lived SAS (valet key)</text>
+  <!-- Between the two phase 14 arrows below, so neither crosses it -->
+  <text x="671" y="1192" class="flowlabel" text-anchor="middle">the browser uploads images straight to Blob Storage with a SAS (valet key)</text>
+
+  <!-- ============ Phase 14: Data Factory exports the orders to a data lake; Event Hubs Capture lands the clicks ============ -->
+  <rect x="330" y="1212" width="1166" height="213" rx="6" class="group"/>
+
+  <path d="M430 1122 V1238" class="flow"/>
+  <text x="436" y="1150" class="flowlabel">nightly copy</text>
+  <path d="M913 1122 V1238" class="flow"/>
+  <text x="907" y="1150" class="flowlabel" text-anchor="end">Capture (optional)</text>
+
+  <rect x="360" y="1240" width="140" height="96" class="svc"/>
+  <use href="#i-datafactory" x="408" y="1248" width="44" height="44"/>
+  <text x="430" y="1318" class="name">Data Factory</text>
+  <text x="420" y="1360" class="role">Nightly export</text>
+  <text x="420" y="1378" class="sub">managed VNet runtime</text>
+
+  <path d="M500 1288 H841" class="flow"/>
+  <text x="671" y="1280" class="flowlabel" text-anchor="middle">Parquet · orders/snapshot_date=…</text>
+  <text x="671" y="1306" class="flowlabel" text-anchor="middle">managed private endpoints</text>
+
+  <rect x="843" y="1240" width="140" height="96" class="svc"/>
+  <use href="#i-datalake" x="891" y="1248" width="44" height="44"/>
+  <text x="913" y="1318" class="name">Data Lake Gen2</text>
+  <text x="903" y="1360" class="role">Analytics files</text>
+  <text x="903" y="1378" class="sub">Parquet + Avro · LRS</text>
+
+  <rect x="1004" y="1240" width="462" height="110" class="note"/>
+  <text class="notetext"><tspan x="1016" y="1261">Data Factory copies every order line to the lake as Parquet</tspan><tspan x="1016" y="1279">each night, without customer names. With private endpoints</tspan><tspan x="1016" y="1297">it runs in a managed VNet, whose private endpoints to SQL and</tspan><tspan x="1016" y="1315">the lake need approval. The API lists the lake through a blob</tspan><tspan x="1016" y="1333">private endpoint for the Platform page's Analytics panel.</tspan></text>
+  <text x="1004" y="1390" class="zonetitle">Phase 14 · data integration and analytics</text>
+  <text x="1004" y="1407" class="itemdesc">deployAnalytics · Capture: enableClickstreamCapture (about $73/month)</text>
 
   <!-- ============ Network security panel ============ -->
   <rect x="1536" y="197" width="300" height="838" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
@@ -571,11 +614,12 @@
   <text x="1558" y="1242" class="tiletitle">AzureFirewallManagementSubnet</text>
   <text x="1558" y="1259" class="tiletext">10.0.0.64/26 · Basic's management NIC</text>
 
-  <!-- ============ Monitoring and logging ============ -->
+  <!-- ============ Monitoring and logging (moved down 160 for the phase 14 row) ============ -->
+  <g transform="translate(0 160)">
   <path d="M135 1290 V1341" class="log"/>
   <text x="143" y="1311" class="loglabel">SPA, APIs and Functions telemetry</text>
   <path d="M375 1290 V1341" class="log"/>
-  <text x="383" y="1311" class="loglabel">diagnostic settings: allLogs + AllMetrics from up to 15 resources</text>
+  <text x="383" y="1311" class="loglabel">diagnostic settings: allLogs + AllMetrics from up to 17 resources</text>
 
   <rect x="30" y="1315" width="1100" height="225" rx="6" class="band"/>
   <text x="46" y="1527" class="zonetitle">Monitoring and logging · on from day one; alerts and dashboards in phase 7</text>
@@ -595,7 +639,7 @@
   <rect x="540" y="1343" width="150" height="96" class="svc"/>
   <use href="#i-alert" x="593" y="1351" width="44" height="44"/>
   <text x="615" y="1421" class="name">Alert rules</text>
-  <text x="605" y="1463" class="role">Six alerts</text>
+  <text x="605" y="1463" class="role">Seven alerts</text>
   <text x="605" y="1481" class="sub">dead letters, 429s, refunds…</text>
 
   <rect x="780" y="1343" width="150" height="96" class="svc"/>
@@ -653,5 +697,6 @@
     <use href="#i-acr" x="1520" y="1484" width="26" height="26"/>
     <text x="1554" y="1499" class="itemname">Container Registry</text>
     <text x="1554" y="1515" class="itemdesc">Images for Container Apps, AKS</text>
+  </g>
   </g>
 </svg>
