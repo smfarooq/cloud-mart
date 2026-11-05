@@ -119,7 +119,7 @@ Redis (a cache). Each of those is also switched on by one setting; see [2.14](#2
 > product, and a lifecycle rule deletes it after a day. Locally, the API's stand-in endpoint attaches it at once.
 
 The app shows which version is active on its **Platform** page. The values come from the `CloudMartProviders` record
-that the startup code fills in ([CloudMartServiceCollectionExtensions.cs:198](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L198)).
+that the startup code fills in ([CloudMartServiceCollectionExtensions.cs:204](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L204)).
 
 ### 1.2 The Azure services CloudMart uses
 
@@ -154,7 +154,7 @@ The table lists each service, what it is in plain words, what CloudMart uses it 
 them (at most it detects them):
 
 - **Container Apps, AKS, Container Registry:** other places to host the same API container. The code only
-  *recognises* them, in [PlatformInfoProvider.cs](../src/CloudMart.Api/PlatformInfoProvider.cs#L71-L105).
+  *recognises* them, in [PlatformInfoProvider.cs](../src/CloudMart.Api/PlatformInfoProvider.cs#L95-L129).
 - **Virtual network, private endpoints, Azure Firewall, Bastion, jumpbox:** network isolation. The code is unchanged,
   except one setting that switches Service Bus to WebSockets so the firewall can allow it (phase 13).
 - **Application Gateway, API Management, Grafana, Azure Policy, budgets:** platform and governance features with no
@@ -299,7 +299,7 @@ sources winning:
 names can't contain `:` on Linux. So Azure app settings use `__` instead: the app setting `Cosmos__Endpoint` arrives
 as the key `Cosmos:Endpoint`. Bicep sets the `__` form; the code reads the `:` form.
 
-**One object for all of it.** [CloudMartSettings.From](../src/CloudMart.Core/CloudMartSettings.cs#L46-L74) reads
+**One object for all of it.** [CloudMartSettings.From](../src/CloudMart.Core/CloudMartSettings.cs#L54-L84) reads
 every key once:
 
 ```csharp
@@ -337,7 +337,7 @@ The settings that hold Azure endpoints are listed in [6.2](#62-how-the-app-is-co
 ### 2.4 One credential for everything: `DefaultAzureCredential`
 
 This is the most important piece of Azure code in CloudMart, and it is one line.
-[AddCloudMartCore](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L43-L47) creates a single credential and
+[AddCloudMartCore](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L44-L48) creates a single credential and
 hands it to every SDK client and both databases:
 
 ```csharp
@@ -376,7 +376,7 @@ create one. The Shipping API creates one for Table Storage
 
 ### 2.5 The switchboard: `AddCloudMartCore`
 
-[AddCloudMartCore](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L37-L200) runs at startup in both
+[AddCloudMartCore](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L38-L206) runs at startup in both
 the API and the Functions app. For each boundary it checks one setting and registers either the Azure class or the
 local one. The Cosmos DB branch shows the pattern:
 
@@ -416,14 +416,14 @@ The other branches follow the same shape:
 
 | Lines | Boundary | Azure client created |
 |---|---|---|
-| [61-79](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L61-L79) | Catalog | `CosmosClient` |
-| [82-114](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L82-L114) | Orders | `OrdersDbContext` on SQL Server or Npgsql |
-| [122-135](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L122-L135) | Images | `BlobServiceClient` |
-| [138-152](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L138-L152) | Order events | `ServiceBusClient` |
-| [155-165](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L155-L165) | Click stream | `EventHubProducerClient` for hub `telemetry` |
-| [168-196](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L168-L196) | Payments, Shipping | `HttpClient` with an Entra ID token handler |
+| [62-80](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L62-L80) | Catalog | `CosmosClient` |
+| [83-115](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L83-L115) | Orders | `OrdersDbContext` on SQL Server or Npgsql |
+| [123-136](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L123-L136) | Images | `BlobServiceClient` |
+| [139-153](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L139-L153) | Order events | `ServiceBusClient` |
+| [156-166](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L156-L166) | Click stream | `EventHubProducerClient` for hub `telemetry` |
+| [169-197](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L169-L197) | Payments, Shipping | `HttpClient` with an Entra ID token handler |
 
-**Seeding the catalog.** After startup, [InitializeCloudMartDataAsync](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L215-L252)
+**Seeding the catalog.** After startup, [InitializeCloudMartDataAsync](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L221-L258)
 does two things:
 
 1. It creates the orders tables (`EnsureCreatedAsync`, then the outbox table).
@@ -434,7 +434,7 @@ It never throws. If the database is unreachable, it logs the error and the app s
 show you what's wrong.
 
 > **Status.** Creating tables from the app is a lab shortcut. The comment at
-> [line 224](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L224) says production would run EF Core
+> [line 230](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L230) says production would run EF Core
 > migrations from the pipeline instead, so the app's identity would need only read/write rights. No migrations exist
 > in the repository (📝).
 
@@ -496,7 +496,7 @@ pattern:
 
 **Permissions.** The account has `disableLocalAuth: true`, so account keys don't work at all. Bicep gives the API
 identity, the Functions identity and you the built-in **Cosmos DB Built-in Data Contributor** role
-([main.bicep:415](../infra/main.bicep#L415)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
+([main.bicep:428](../infra/main.bicep#L428)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
 portal's *Access control (IAM)* blade.
 
 ### 2.7 Azure SQL and PostgreSQL: orders and the outbox
@@ -505,7 +505,7 @@ Orders need a *relational* database because one action must save two rows atomic
 announcing it (the **transactional outbox**, explained in [2.9](#29-service-bus-publishing-order-events-through-the-outbox)).
 CloudMart uses Entity Framework (EF) Core with one model and two engines.
 
-**Connecting without a password.** [The registration code](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L84-L106)
+**Connecting without a password.** [The registration code](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L85-L107)
 differs per engine:
 
 ```csharp
@@ -527,7 +527,7 @@ case "PostgreSql":
 ```
 
 - **SQL Server:** the SQL client library fetches the token itself. The connection string Bicep builds
-  ([main.bicep:532-533](../infra/main.bicep#L532-L533)) contains no password:
+  ([main.bicep:569-570](../infra/main.bicep#L569-L570)) contains no password:
   `Server=tcp:<server>.database.windows.net,1433;Database=cloudmart;Authentication=Active Directory Managed Identity;User Id=<identity client id>;Encrypt=True;Connect Timeout=30;`
 - **PostgreSQL:** Npgsql has no built-in Entra support, so the code asks `DefaultAzureCredential` for a token for
   `https://ossrdbms-aad.database.windows.net/.default` and passes it as the password. It renews it every 30 minutes.
@@ -628,7 +628,7 @@ to. Each **subscription** on a topic gets its own copy of every message. Unlike 
 several independent readers. A subscription can have a **filter**, and a message that keeps failing moves to a
 **dead-letter queue** instead of blocking the others.
 
-CloudMart has one topic, **`orders`**, with three subscriptions (see [messaging.bicep](../infra/modules/messaging.bicep#L68-L105)):
+CloudMart has one topic, **`orders`**, with three subscriptions (see [messaging.bicep](../infra/modules/messaging.bicep#L73-L110)):
 
 | Subscription | Filter | Tries before dead-letter | Read by Function |
 |---|---|---|---|
@@ -692,7 +692,7 @@ separate system from the database.
   Receiver**. The namespace has local (key) authentication disabled.
 - The client normally uses AMQP on port 5671. Behind the phase 13 firewall, the setting `ServiceBus__TransportType`
   switches it to AMQP over WebSockets on port 443
-  ([CloudMartServiceCollectionExtensions.cs:140-141](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L140-L141)).
+  ([CloudMartServiceCollectionExtensions.cs:141-142](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L141-L142)).
 
 ### 2.10 Event Hubs: the click stream
 
@@ -705,7 +705,7 @@ messages.
 CloudMart has hub **`telemetry`** (2 partitions, 24-hour retention) and consumer group **`functions`**.
 
 The browser batches product views and posts them to `POST /api/telemetry`
-([OrderEndpoints.cs:59-70](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L59-L70)). The endpoint accepts 1 to 100
+([OrderEndpoints.cs:60-71](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L60-L71)). The endpoint accepts 1 to 100
 events and drops malformed ones. [EventHubsTelemetryPublisher](../src/CloudMart.Core/Azure/Messaging.cs#L38-L56)
 then sends them:
 
@@ -774,7 +774,7 @@ public async Task FulfillOrder(
 ```
 
 **`Connection = "ServiceBus"` is a prefix, not a connection string.** The host looks for app settings that start with
-`ServiceBus__`. Bicep sets three ([main.bicep:604-609](../infra/main.bicep#L604-L609)):
+`ServiceBus__`. Bicep sets three ([main.bicep:644-649](../infra/main.bicep#L644-L649)):
 
 ```text
 ServiceBus__fullyQualifiedNamespace = <namespace>.servicebus.windows.net
@@ -785,7 +785,7 @@ ServiceBus__clientId                = <Functions identity client id>
 This is an **identity-based connection**: the host signs in to Service Bus as the managed identity. The Event Hubs
 trigger works the same way with the `EventHubs__` prefix. The host's own storage uses
 `AzureWebJobsStorage__accountName`, `__credential` and `__clientId`
-([main.bicep:592-595](../infra/main.bicep#L592-L595)) instead of the usual storage connection string.
+([main.bicep:632-635](../infra/main.bicep#L632-L635)) instead of the usual storage connection string.
 
 > **Watch the spelling.** The API reads `ServiceBus__FullyQualifiedNamespace` (capital F) through `CloudMartSettings`.
 > The Functions trigger reads `ServiceBus__fullyQualifiedNamespace` (lower-case f), the name the Functions host
@@ -800,7 +800,7 @@ trigger works the same way with the `EventHubs__` prefix. The host's own storage
 
 **Disabled until phase 5.** Until messaging is deployed there is nothing to listen to, so Bicep sets
 `AzureWebJobs.FulfillOrder.Disabled = true` and the same for the other three message triggers
-([main.bicep:612-616](../infra/main.bicep#L612-L616)). `DailyOrderReport` stays disabled until a database exists.
+([main.bicep:652-656](../infra/main.bicep#L652-L656)). `DailyOrderReport` stays disabled until a database exists.
 
 **Event Grid needs no connection setting.** The Event Grid *subscription* (Bicep) names the Function as its endpoint,
 and Azure delivers events straight to it. The function checks the event type and the container prefix and ignores
@@ -885,7 +885,7 @@ public sealed class EntraTokenHandler(TokenCredential credential, string scope) 
   creates the *CloudMart Payments* and *CloudMart Shipping* app registrations and gives the API and Functions
   identities their roles.
 
-[AddServiceClient](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L202-L212) also adds
+[AddServiceClient](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L208-L218) also adds
 `AddStandardResilienceHandler()`: a timeout per attempt, retries with exponential backoff for 5xx, 408, 429 and network
 errors, and a circuit breaker that fails fast while a service is down.
 
@@ -950,7 +950,7 @@ contain `:`, so `--` stands in for it. Needs the **Key Vault Secrets User** role
 CloudMart reads the same secret a second way: a **Key Vault reference**. The Functions app (before phase 16) and the
 Payments API get an app setting whose *value* is
 `@Microsoft.KeyVault(VaultName=<vault>;SecretName=PaymentGateway--ApiKey)`
-([main.bicep:557](../infra/main.bicep#L557)). App Service resolves it using the site's identity, and the code just
+([main.bicep:594](../infra/main.bicep#L594)). App Service resolves it using the site's identity, and the code just
 reads `PaymentGateway:ApiKey` like any other setting.
 
 | | Configuration provider (API) | Key Vault reference (Functions, Payments) |
@@ -960,7 +960,7 @@ reads `PaymentGateway:ApiKey` like any other setting.
 | Picking up a new secret version | Restart the app | Automatic, within about a day, or on restart |
 
 In phase 16 only the Payments API keeps access to the secret: Bicep removes `KeyVault__Uri` and the role from the API
-and Functions ([main.bicep:352-361](../infra/main.bicep#L352-L361)).
+and Functions ([main.bicep:365-374](../infra/main.bicep#L365-L374)).
 
 **App Configuration and feature flags** ([lines 29-38](../src/CloudMart.Api/Program.cs#L29-L38)):
 
@@ -975,7 +975,7 @@ config.AddAzureAppConfiguration(options => options
 - It loads keys starting with `CloudMart:` and checks for changes every 30 seconds. `app.UseAzureAppConfiguration()`
   ([line 149](../src/CloudMart.Api/Program.cs#L148-L149)) triggers that check as requests arrive.
 - Two values are used: `CloudMart:BannerMessage`, shown on the Platform page, and the `Trending` feature flag
-  ([PlatformInfoProvider.cs:29-30](../src/CloudMart.Api/PlatformInfoProvider.cs#L29-L30)).
+  ([PlatformInfoProvider.cs:33-34](../src/CloudMart.Api/PlatformInfoProvider.cs#L33-L34)).
 - Trending is **on until a flag named `Trending` exists**; then the flag decides.
 - The values are created by hand in phase 12 (🔧). Needs **App Configuration Data Reader**.
 
@@ -1052,7 +1052,7 @@ Every Azure probe in CloudMart uses `/health/live`: the App Service health check
 Application Gateway. A slow database therefore never takes the app out of rotation. `/health/ready` is for people: the
 SPA's Platform page shows it. The raw error messages are shown on purpose, as a learning aid.
 
-**The Platform page** ([PlatformInfoProvider.cs](../src/CloudMart.Api/PlatformInfoProvider.cs#L46-L105)) reports where
+**The Platform page** ([PlatformInfoProvider.cs](../src/CloudMart.Api/PlatformInfoProvider.cs#L53-L129)) reports where
 the API runs:
 
 - **App Service:** detected through `WEBSITE_SITE_NAME`.
@@ -1062,6 +1062,28 @@ the API runs:
   identity uses on a VM.
 
 It also reports which integrations are configured. It shows only *whether* a value is set, never the value itself.
+
+**The Analytics panel** (phase 14) has its own endpoint, `GET /api/platform/analytics`
+([OrderEndpoints.cs](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L80-L83)), so a slow data lake never holds up
+the rest of the page. It lists what Data Factory and Event Hubs Capture have written to the lake:
+
+- **[DataLakeCatalog.cs](../src/CloudMart.Core/Azure/DataLakeCatalog.cs)** lists one container through the lake's
+  *blob* endpoint with a `BlobServiceClient` and `DefaultAzureCredential`. A Data Lake Storage Gen2 account also has a
+  *dfs* endpoint, which Data Factory, Spark and Fabric use. The API's identity holds Storage Blob Data Reader on the
+  `orders` and `clickstream` containers and nothing else.
+- **[DataLake.cs](../src/CloudMart.Core/Analytics/DataLake.cs)** turns a listing into a summary: how many files with
+  one extension, their total size, and the newest. A hierarchical namespace lists its folders as empty blobs too, so
+  the extension filter matters.
+- **Only today's click files** are listed, under the `yyyy/MM/dd/` prefix that Capture writes (Capture puts the date
+  first in the path, see [messaging.bicep](../infra/modules/messaging.bicep)). A year of 5-minute files would be a long
+  listing.
+- **Cached for 30 seconds** with HybridCache: the endpoint is anonymous like `/api/platform/info`, and every uncached
+  call lists the lake.
+- **Errors stay short.** A 403 comes back as its status and error code (`AuthorizationPermissionMismatch`: no role;
+  `AuthorizationFailure`: the lake's firewall). A credential failure is logged in full but returned as one line,
+  because the full message lists local paths.
+
+Without `Analytics__DataLakeEndpoint`, nothing is registered and the panel says there is no data lake yet.
 
 ### 2.15 The React SPA
 
@@ -1108,11 +1130,11 @@ tokenProvider = async () => {
 - The token is for the scope `api://<API client id>/access_as_user`.
 - With no `clientId` in `config.json`, sign-in is off and the API's development bypass applies.
 
-**Calling the API** ([api.ts](../src/cloudmart-web/src/api.ts#L18-L29)): every request gets
+**Calling the API** ([api.ts](../src/cloudmart-web/src/api.ts#L28-L39)): every request gets
 `Authorization: Bearer <token>` when a token exists. Checkout also sends an `Idempotency-Key` header, the same value
-on every retry of one checkout ([lines 53-57](../src/cloudmart-web/src/api.ts#L53-L57)).
+on every retry of one checkout ([lines 64-68](../src/cloudmart-web/src/api.ts#L64-L68)).
 
-**Uploading straight to Blob Storage** ([api.ts:74-90](../src/cloudmart-web/src/api.ts#L74-L90)): the SPA asks the
+**Uploading straight to Blob Storage** ([api.ts:85-101](../src/cloudmart-web/src/api.ts#L85-L101)): the SPA asks the
 API for an upload target, then PUTs the file to the returned URL. In Azure that URL is Blob Storage with a SAS, and the
 code deliberately **doesn't** attach the bearer token there. Locally the URL starts with `/`, so it goes to the API's
 stand-in endpoint with the token.
@@ -1166,22 +1188,22 @@ a permission on the resource**. The table lists all of them. "Signs in as" names
 | API, Functions | Cosmos DB | HTTPS (443) | `CosmosClient` | `Cosmos:Endpoint` | `-api`, `-func` | Cosmos DB Built-in Data Contributor (data plane) | [cosmos.bicep](../infra/modules/cosmos.bicep) |
 | API, Functions | Azure SQL | TDS (1433) | EF Core + SqlClient | `ConnectionStrings:OrdersSql` | `-api`, `-func` | Database users: api = read, write, DDL; func = read, write | [grant script](../deploy/sql/grant-managed-identities.sql) (🔧) |
 | API, Functions | PostgreSQL | PostgreSQL (5432) | EF Core + Npgsql | `ConnectionStrings:OrdersPostgres` | `-api`, `-func` | Postgres roles from `pgaadauth_create_principal` | [grant script](../deploy/postgres/grant-managed-identities.sql) (🔧) |
-| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:383-384](../infra/main.bicep#L383-L384) |
-| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:387-389](../infra/main.bicep#L387-L389) |
-| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:479](../infra/main.bicep#L479) |
-| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:480](../infra/main.bicep#L480) |
-| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:484](../infra/main.bicep#L484) |
-| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:485](../infra/main.bicep#L485) |
+| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:396-397](../infra/main.bicep#L396-L397) |
+| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:400-402](../infra/main.bicep#L400-L402) |
+| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:516](../infra/main.bicep#L516) |
+| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:517](../infra/main.bicep#L517) |
+| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:521](../infra/main.bicep#L521) |
+| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:522](../infra/main.bicep#L522) |
 | Storage | Event Grid → Functions | HTTPS push | Event Grid subscription | Bicep, not app settings | Azure (system topic) | Dead letters: Storage Blob Data Contributor on `eventgrid-deadletter` | [eventgrid-subscription.bicep](../infra/modules/eventgrid-subscription.bicep) |
-| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:352-361](../infra/main.bicep#L352-L361) |
+| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:365-374](../infra/main.bicep#L365-L374) |
 | App Service platform | Key Vault (reference) | HTTPS | — (no code) | `@Microsoft.KeyVault(...)` app setting | `-func` before phase 16, `-pay` after | Key Vault Secrets User | same |
-| API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:502](../infra/main.bicep#L502) |
+| API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:539](../infra/main.bicep#L539) |
 | API | Azure Managed Redis | Redis over TLS (10000) | StackExchange.Redis | `Redis:Endpoint` | `-api` | A Redis *access policy assignment* (not RBAC) | [app-integration.bicep](../infra/modules/app-integration.bicep) |
 | All apps, browser | Application Insights | HTTPS | Azure Monitor exporter, JS SDK | `APPLICATIONINSIGHTS_CONNECTION_STRING`, `appInsightsConnectionString` | Not signed in: the connection string only allows *sending* | — | [monitoring.bicep](../infra/modules/monitoring.bicep) |
 | API, Functions | Payments API | HTTPS | `PaymentsApiClient` + `EntraTokenHandler` | `Payments:BaseUrl`, `Payments:Scope` | `-api`, `-func` | App role `Payments.Process` | [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh) (🔧) |
 | API, Functions | Shipping API | HTTPS | `ShippingApiClient` + `EntraTokenHandler` | `Shipping:BaseUrl`, `Shipping:Scope` | `-api`, `-func` | App role `Shipments.Manage` | same (🔧) |
 | Payments | Azure SQL (`payments`) | TDS (1433) | EF Core | `ConnectionStrings:PaymentsSql` | `-pay` | Database user (commented out in the script) | 🔧 |
-| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:395](../infra/main.bicep#L395) |
+| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:408](../infra/main.bicep#L408) |
 
 Least privilege shows in the details: the API may only *send* to Service Bus and the Functions app may only
 *receive*. Only whoever takes payments may read the gateway key. Payments and Shipping get no access to Cosmos DB,
@@ -1295,20 +1317,20 @@ from the innermost call outwards:
 | Layer | What can fail | What happens | Where |
 |---|---|---|---|
 | Azure SDK clients | Brief network errors, throttling | The clients retry on their own with backoff. Cosmos DB, for example, retries *429 Too Many Requests* | Built into the SDKs |
-| SQL connection | A transient error, a serverless database waking up | `EnableRetryOnFailure()` retries the operation | [CloudMartServiceCollectionExtensions.cs:87](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L87) |
+| SQL connection | A transient error, a serverless database waking up | `EnableRetryOnFailure()` retries the operation | [CloudMartServiceCollectionExtensions.cs:88](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L88) |
 | Publishing to Service Bus | Service Bus unreachable, no permission | The order is already saved. The outbox relay retries after 5 s, 10 s, 20 s, 40 s, then every minute, and stores the error in `LastError` | [OutboxRelay.cs](../src/CloudMart.Core/Outbox/OutboxRelay.cs#L42-L73) |
-| Duplicate messages | The relay crashes after sending but before marking a row sent | The same `MessageId` is sent again; duplicate detection drops it | [messaging.bicep](../infra/modules/messaging.bicep#L68-L76) |
-| Processing a message | `FulfillOrder` throws | Service Bus redelivers up to 3 times, then dead-letters it. An alert fires on any dead-lettered message | [OrderFunctions.cs](../src/CloudMart.Functions/OrderFunctions.cs#L19-L23), [messaging.bicep](../infra/modules/messaging.bicep#L130-L179) |
+| Duplicate messages | The relay crashes after sending but before marking a row sent | The same `MessageId` is sent again; duplicate detection drops it | [messaging.bicep](../infra/modules/messaging.bicep#L73-L81) |
+| Processing a message | `FulfillOrder` throws | Service Bus redelivers up to 3 times, then dead-letters it. An alert fires on any dead-lettered message | [OrderFunctions.cs](../src/CloudMart.Functions/OrderFunctions.cs#L19-L23), [messaging.bicep](../infra/modules/messaging.bicep#L135-L184) |
 | Redelivered messages | The same order arrives twice | Saga instance id = order id, so the second start is ignored. `PrepareOrder` skips orders that aren't *Pending* | [OrderFunctions.cs:35-40](../src/CloudMart.Functions/OrderFunctions.cs#L35-L40) |
 | A saga step | An activity throws | Durable retry: 3 attempts, 5 s then 10 s apart. It survives restarts | [OrderSagaFunctions.cs:50-51](../src/CloudMart.Functions/OrderSagaFunctions.cs#L50-L51) |
-| Calling Payments or Shipping | 5xx, 408, 429, timeouts, network | Standard resilience handler: per-attempt timeout, retries with jitter, circuit breaker. Safe because of the idempotency key and `PUT` | [CloudMartServiceCollectionExtensions.cs:211](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L211) |
+| Calling Payments or Shipping | 5xx, 408, 429, timeouts, network | Standard resilience handler: per-attempt timeout, retries with jitter, circuit breaker. Safe because of the idempotency key and `PUT` | [CloudMartServiceCollectionExtensions.cs:217](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L217) |
 | Business failure | Payment declined, too many items to ship, out of stock | Not retried. A declined payment rejects the order; a shipping failure **refunds** the payment | [OrderSaga.cs:53-106](../src/CloudMart.Core/Services/OrderSaga.cs#L53-L106) |
 | Unknown outcome | Payments down after all retries; the refund itself fails | The order is rejected with `ReviewRequired`, and an error log triggers the "needs manual review" alert | [OrderSaga.cs:61-66](../src/CloudMart.Core/Services/OrderSaga.cs#L61-L66), [monitoring.bicep:84-93](../infra/modules/monitoring.bicep#L84-L93) |
 | Image events | The function fails or is unreachable | Event Grid retries for up to 60 minutes (10 attempts), then writes the event to the `eventgrid-deadletter` container | [eventgrid-subscription.bicep](../infra/modules/eventgrid-subscription.bicep) |
 | Duplicate image events | Event Grid delivers twice | `PromoteUploadAsync` finds the upload already gone (404) and stops | [BlobImageStore.cs:73-76](../src/CloudMart.Core/Azure/BlobImageStore.cs#L73-L76) |
 | Click-stream batch | `AggregateProductViews` throws | The Event Hubs trigger moves on; that batch of counts is lost. Acceptable for view counters, which is why orders don't travel this way | [CatalogFunctions.cs:39-50](../src/CloudMart.Functions/CatalogFunctions.cs#L39-L50) |
-| Startup | Database or Cosmos DB unreachable, no permission yet | `InitializeCloudMartDataAsync` logs and carries on; `/health/ready` shows the error | [CloudMartServiceCollectionExtensions.cs:232-251](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L232-L251) |
-| API responses | Bad input, someone else's order, a reused idempotency key | Problem-details JSON with 400, 404, 409 or 422 | [OrderEndpoints.cs:41-53](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L41-L53) |
+| Startup | Database or Cosmos DB unreachable, no permission yet | `InitializeCloudMartDataAsync` logs and carries on; `/health/ready` shows the error | [CloudMartServiceCollectionExtensions.cs:238-257](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L238-L257) |
+| API responses | Bad input, someone else's order, a reused idempotency key | Problem-details JSON with 400, 404, 409 or 422 | [OrderEndpoints.cs:42-54](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L42-L54) |
 
 **Idempotency is what makes the retries safe.** Every retried step can run twice without harm:
 
@@ -1651,7 +1673,7 @@ named at the top are switched on; *Locally* says what happens instead on a lapto
 
 | # | What happens | Responsible | Code | Data passed |
 |---|---|---|---|---|
-| 1 | The SPA starts, fetches `/config.json`, then calls `GET /api/products` | SPA | [main.tsx](../src/cloudmart-web/src/main.tsx#L9-L21), [api.ts:47](../src/cloudmart-web/src/api.ts#L47) | None; reading products needs no sign-in |
+| 1 | The SPA starts, fetches `/config.json`, then calls `GET /api/products` | SPA | [main.tsx](../src/cloudmart-web/src/main.tsx#L9-L21), [api.ts:58](../src/cloudmart-web/src/api.ts#L58) | None; reading products needs no sign-in |
 | 2 | The endpoint asks `HybridCache` for key `products:all`: first the API's memory, then Redis | API | [CatalogEndpoints.cs:18-23](../src/CloudMart.Api/Endpoints/CatalogEndpoints.cs#L18-L23) | Cache key |
 | 3 | On a cache miss, `CosmosProductRepository.ListAsync(null)` queries the `products` container | API → Cosmos DB | [CosmosRepositories.cs:18-27](../src/CloudMart.Core/Azure/CosmosRepositories.cs#L18-L27) | `SELECT * FROM c ORDER BY c.name`, with an Entra token |
 | 4 | Cosmos DB returns the JSON documents, page by page; the result is cached for 30 s | Cosmos DB → API | `QueryAllAsync` | `Product[]` |
@@ -1669,13 +1691,13 @@ named at the top are switched on; *Locally* says what happens instead on a lapto
 
 | # | What happens | Responsible | Code | Data passed |
 |---|---|---|---|---|
-| 1-3 | `checkout()` calls `api.placeOrder`; `request()` gets an access token from MSAL | SPA | [Shop.tsx:65-82](../src/cloudmart-web/src/pages/Shop.tsx#L65-L82), [api.ts:18-29](../src/cloudmart-web/src/api.ts#L18-L29) | — |
-| 4 | `POST /api/orders` with `Authorization: Bearer …` and `Idempotency-Key: <uuid>`. The key stays the same if you click again after an error, and changes when the cart changes | SPA → API | [api.ts:53-57](../src/cloudmart-web/src/api.ts#L53-L57), [Shop.tsx:22](../src/cloudmart-web/src/pages/Shop.tsx#L22) | `{ lines: [{ productId, quantity }], simulateFailure }` |
-| 5 | Token validated; the `CloudMart.User` policy checks the `access_as_user` scope | API | [Program.cs:54-83](../src/CloudMart.Api/Program.cs#L54-L83), [OrderEndpoints.cs:14](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L14) | Claims: `oid`, `name`, `scp` |
+| 1-3 | `checkout()` calls `api.placeOrder`; `request()` gets an access token from MSAL | SPA | [Shop.tsx:65-82](../src/cloudmart-web/src/pages/Shop.tsx#L65-L82), [api.ts:28-39](../src/cloudmart-web/src/api.ts#L28-L39) | — |
+| 4 | `POST /api/orders` with `Authorization: Bearer …` and `Idempotency-Key: <uuid>`. The key stays the same if you click again after an error, and changes when the cart changes | SPA → API | [api.ts:64-68](../src/cloudmart-web/src/api.ts#L64-L68), [Shop.tsx:22](../src/cloudmart-web/src/pages/Shop.tsx#L22) | `{ lines: [{ productId, quantity }], simulateFailure }` |
+| 5 | Token validated; the `CloudMart.User` policy checks the `access_as_user` scope | API | [Program.cs:54-83](../src/CloudMart.Api/Program.cs#L54-L83), [OrderEndpoints.cs:15](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L15) | Claims: `oid`, `name`, `scp` |
 | 6 | `OrderService.PlaceOrderAsync` validates the lines and reads each product's **price from the catalog**, never from the browser | API → Cosmos DB | [OrderService.cs:23-45](../src/CloudMart.Core/Services/OrderService.cs#L23-L45) | Product ids |
 | 7 | The order id is computed from the customer and the idempotency key, so a retry finds the same order and returns it | API | [OrderService.cs:47-49](../src/CloudMart.Core/Services/OrderService.cs#L47-L49), [OrderIdFor](../src/CloudMart.Core/Services/OrderService.cs#L93-L99) | SHA-256 of customer id + key |
 | 8 | `EfOrderRepository.AddAsync` inserts the order, its lines and the outbox row in **one transaction** | API → Azure SQL | [OrderService.cs:68](../src/CloudMart.Core/Services/OrderService.cs#L68), [OrdersDb.cs:98-113](../src/CloudMart.Core/Azure/OrdersDb.cs#L98-L113) | Rows in `Orders`, `OrderLines`, `OutboxMessages` |
-| 9 | `relay.Wake()`, the `cloudmart.orders.placed` counter goes up, and the API answers **202 Accepted** with the *Pending* order | API → SPA | [OrderService.cs:82-86](../src/CloudMart.Core/Services/OrderService.cs#L82-L86), [OrderEndpoints.cs:43-44](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L43-L44) | `Order` JSON, `Location: /api/orders/{id}` |
+| 9 | `relay.Wake()`, the `cloudmart.orders.placed` counter goes up, and the API answers **202 Accepted** with the *Pending* order | API → SPA | [OrderService.cs:82-86](../src/CloudMart.Core/Services/OrderService.cs#L82-L86), [OrderEndpoints.cs:44-45](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L44-L45) | `Order` JSON, `Location: /api/orders/{id}` |
 
 **Part 2: publishing (background, in the API, usually under a second).**
 
@@ -1684,7 +1706,7 @@ named at the top are switched on; *Locally* says what happens instead on a lapto
 | 10 | `OutboxRelayWorker` wakes and runs `OutboxRelay.RunAsync`, which claims due rows with a 2-minute lease | API → Azure SQL | [OutboxRelay.cs:24-36](../src/CloudMart.Core/Outbox/OutboxRelay.cs#L24-L36), [OrdersDb.cs:193-227](../src/CloudMart.Core/Azure/OrdersDb.cs#L193-L227) | Up to 10 rows per claim |
 | 11 | Each row becomes an `OrderPlaced` message sent to topic `orders` | API → Service Bus | [Messaging.cs:16-32](../src/CloudMart.Core/Azure/Messaging.cs#L16-L32) | JSON body plus properties `total` and `itemCount` |
 | 12 | The row is marked sent (`SentUtc`) | API → Azure SQL | [OrdersDb.cs:229-234](../src/CloudMart.Core/Azure/OrdersDb.cs#L229-L234) | — |
-| 13 | Service Bus copies the message to `fulfillment` and `notifications`, and to `high-value` when `total > 500` | Service Bus | [messaging.bicep:78-105](../infra/modules/messaging.bicep#L78-L105) | — |
+| 13 | Service Bus copies the message to `fulfillment` and `notifications`, and to `high-value` when `total > 500` | Service Bus | [messaging.bicep:83-110](../infra/modules/messaging.bicep#L83-L110) | — |
 
 **Part 3: fulfilment (in the Functions app, about 2 seconds including the deliberate 1.5-second pause).**
 
@@ -1749,10 +1771,10 @@ sequenceDiagram
 
 | # | What happens | Code |
 |---|---|---|
-| 1-2 | The Admin page calls `api.uploadImage` | [Admin.tsx:61-70](../src/cloudmart-web/src/pages/Admin.tsx#L61-L70), [api.ts:74-90](../src/cloudmart-web/src/api.ts#L74-L90) |
+| 1-2 | The Admin page calls `api.uploadImage` | [Admin.tsx:61-70](../src/cloudmart-web/src/pages/Admin.tsx#L61-L70), [api.ts:85-101](../src/cloudmart-web/src/api.ts#L85-L101) |
 | 3 | Admin policy, product lookup, content-type check | [CatalogEndpoints.cs:73-81](../src/CloudMart.Api/Endpoints/CatalogEndpoints.cs#L73-L81) |
 | 4-5 | SAS built and signed with the user delegation key | [BlobImageStore.cs:26-50](../src/CloudMart.Core/Azure/BlobImageStore.cs#L26-L50) |
-| 6 | Browser PUTs straight to Blob Storage. The storage account's CORS rule allows it | [api.ts:80-88](../src/cloudmart-web/src/api.ts#L80-L88) |
+| 6 | Browser PUTs straight to Blob Storage. The storage account's CORS rule allows it | [api.ts:91-99](../src/cloudmart-web/src/api.ts#L91-L99) |
 | 7-8 | Event Grid filters on `Microsoft.Storage.BlobCreated` and the `product-uploads/` prefix | [eventgrid-subscription.bicep](../infra/modules/eventgrid-subscription.bicep) |
 | 9-10 | The function checks the subject, then `ProductImageProcessor` promotes the blob | [CatalogFunctions.cs:21-33](../src/CloudMart.Functions/CatalogFunctions.cs#L21-L33), [CatalogServices.cs:30-50](../src/CloudMart.Core/Services/CatalogServices.cs#L30-L50), [BlobImageStore.cs:65-95](../src/CloudMart.Core/Azure/BlobImageStore.cs#L65-L95) |
 | 11 | The product's `ImageUrl` is updated in Cosmos DB | [CatalogServices.cs:47](../src/CloudMart.Core/Services/CatalogServices.cs#L47) |
@@ -1785,8 +1807,8 @@ flowchart LR
 | # | What happens | Code |
 |---|---|---|
 | 1 | Opening *Details* records a view in Application Insights and in a buffer | [Shop.tsx:55-57](../src/cloudmart-web/src/pages/Shop.tsx#L55-L57), [telemetry.ts:32-42](../src/cloudmart-web/src/telemetry.ts#L32-L42) |
-| 2 | Two seconds after the last view, the buffer is posted (`keepalive`, so it survives closing the page) | [api.ts:62-68](../src/cloudmart-web/src/api.ts#L62-L68) |
-| 3 | The API validates the batch and sends it to Event Hubs in one call | [OrderEndpoints.cs:59-70](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L59-L70), [Messaging.cs:40-55](../src/CloudMart.Core/Azure/Messaging.cs#L40-L55) |
+| 2 | Two seconds after the last view, the buffer is posted (`keepalive`, so it survives closing the page) | [api.ts:73-79](../src/cloudmart-web/src/api.ts#L73-L79) |
+| 3 | The API validates the batch and sends it to Event Hubs in one call | [OrderEndpoints.cs:60-71](../src/CloudMart.Api/Endpoints/OrderEndpoints.cs#L60-L71), [Messaging.cs:40-55](../src/CloudMart.Core/Azure/Messaging.cs#L40-L55) |
 | 4 | The Functions host reads batches (up to 100 events, [host.json](../src/CloudMart.Functions/host.json#L29-L31)) and checkpoints its position | [CatalogFunctions.cs:39-50](../src/CloudMart.Functions/CatalogFunctions.cs#L39-L50) |
 | 5 | Views are counted per product and added with a Cosmos DB patch | [CatalogServices.cs:10-24](../src/CloudMart.Core/Services/CatalogServices.cs#L10-L24), [CosmosRepositories.cs:49-72](../src/CloudMart.Core/Azure/CosmosRepositories.cs#L49-L72) |
 | 6 | `GET /api/products/trending` checks the flag, reads the top counters, then looks each product up | [CatalogEndpoints.cs:25-38](../src/CloudMart.Api/Endpoints/CatalogEndpoints.cs#L25-L38) |
@@ -1831,7 +1853,7 @@ re-reads Key Vault references within 24 hours, or at once when you restart the a
 This example says Cosmos DB and Blob Storage work, but the API's identity has no database user yet. The fix is to run
 the grant script ([7.2](#72-symptoms-causes-and-fixes)).
 
-`GET /api/platform/info` ([PlatformInfoProvider.cs](../src/CloudMart.Api/PlatformInfoProvider.cs#L46-L69)) feeds the
+`GET /api/platform/info` ([PlatformInfoProvider.cs](../src/CloudMart.Api/PlatformInfoProvider.cs#L53-L76)) feeds the
 Platform page. It shows:
 
 - the hosting model, region and instance
@@ -1866,12 +1888,14 @@ last column says otherwise.
 | Shared cache | Azure Managed Redis | `deployRedis` | — |
 | Global entry and WAF | Front Door profile, endpoint, routes, WAF policy | `deployFrontDoor` | — |
 | Payments and Shipping services | Two more App Services, `payments` database, `shipments` table | `deployPayments`, `deployShipping` | Uncomment and run the `payments` part of the SQL grant script; run [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh); set `entraPaymentsClientId` and `entraShippingClientId` |
+| Orders exported to a data lake | Data Lake Storage Gen2 account (`orders`, `clickstream`), Data Factory with the `export-orders` pipeline; with private endpoints, a managed VNet and two managed private endpoints | `deployAnalytics` (needs `deploySql`) | Run the phase 14 part of the SQL grant script; approve the managed private endpoints; create and start the trigger from [nightly-export-trigger.json](../deploy/analytics/nightly-export-trigger.json) ([phase 14](learning-path.md#phase-14--data-integration-and-analytics-new-hands-on)) |
+| Click stream in the data lake | Event Hubs Capture on `telemetry`, the namespace's system-assigned identity and its role on `clickstream` | `enableClickstreamCapture` (needs `deployAnalytics`, `deployMessaging`; about $73/month) | — |
 
 ### 6.2 How the app is configured to connect
 
 Bicep writes **app settings** on each App Service and Function App. They become environment variables, and the
 `__` turns into `:` ([2.3](#23-settings-from-an-azure-app-setting-to-a-c-object)). The tables list every setting
-Bicep writes, from [main.bicep:538-661](../infra/main.bicep#L538-L661). "Always" means from phase 1.
+Bicep writes, from [main.bicep:575-701](../infra/main.bicep#L575-L701). "Always" means from phase 1.
 
 **API** (App Service; the same settings go to Container Apps when you set `containerImage`):
 
@@ -1897,6 +1921,8 @@ Bicep writes, from [main.bicep:538-661](../infra/main.bicep#L538-L661). "Always"
 | `FrontDoor__Id` | the Front Door profile's id | `deployFrontDoor` | Front Door check |
 | `Payments__BaseUrl`, `Payments__Scope` | `https://<payments app>.azurewebsites.net`, `api://<Payments client id>/.default` | Phase 16 | `AddServiceClient` |
 | `Shipping__BaseUrl`, `Shipping__Scope` | same pattern | Phase 16 | `AddServiceClient` |
+| `Analytics__DataLakeEndpoint` | `https://<lake>.blob.core.windows.net/` | `deployAnalytics` | `CloudMartSettings` → `DataLakeCatalog` |
+| `Analytics__ClickstreamCapture` | `true` | `enableClickstreamCapture` | `CloudMartSettings` → Platform page |
 
 **Function App:**
 
@@ -1935,7 +1961,7 @@ the app's own configuration instead.
 - `AzureAd__*`, once Entra is on
 
 **SPA:** `config.json`, written by the pipeline from the `spaConfig` output
-([main.bicep:876-885](../infra/main.bicep#L876-L885)).
+([main.bicep:918-927](../infra/main.bicep#L918-L927)).
 
 | Key | Value |
 |---|---|
@@ -1958,7 +1984,7 @@ the app's own configuration instead.
 | Functions host storage | `UseDevelopmentStorage=true` with the Azurite emulator | `AzureWebJobsStorage__*` with the managed identity |
 | Sign-in | Off: the development handler signs you in as an admin | On from phase 6 |
 
-The deployment output **`localDevelopmentSettings`** ([main.bicep:888-897](../infra/main.bicep#L888-L897)) gives you the
+The deployment output **`localDevelopmentSettings`** ([main.bicep:930-939](../infra/main.bicep#L930-L939)) gives you the
 API's values ready to paste:
 
 ```bash

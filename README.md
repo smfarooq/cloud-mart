@@ -61,8 +61,8 @@ phase 13 an optional **hub VNet** with **Azure Firewall** is peered to this one,
 subnets' internet-bound traffic through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
 is allowed out. In phase 14 a **Data Factory** pipeline copies the orders to a **Data Lake Storage Gen2** account as
 Parquet every night, through a managed virtual network once the database is private, and **Event Hubs Capture** can
-land the click stream there too (not in the diagram yet: see the Mermaid version below). For slides or documents, use
-the 2× PNG: [docs/architecture.png](docs/architecture.png).
+land the click stream there too. For slides or documents, use the 2× PNG:
+[docs/architecture.png](docs/architecture.png).
 
 **Identity and access** has its own diagram too, [docs/identity.svg](docs/identity.svg) ([PNG](docs/identity.png)).
 It shows how people, services, AKS and the pipeline get Entra ID tokens. Its matrix lists every Azure RBAC role,
