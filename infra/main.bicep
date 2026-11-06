@@ -146,6 +146,12 @@ param deployAnalytics bool = false
 @description('Requires deployAnalytics and deployMessaging. Event Hubs Capture writes the click stream to the lake. About $73/month: do the lab, then turn it off.')
 param enableClickstreamCapture bool = false
 
+// ------------------------------------------------------------------ Phase 15 · Migration
+@description('A simulated on-premises server in its own resource group (PostgreSQL, product photos, AzCopy), an Azure Migrate project, and access for the server\'s identity to the migration targets. Needs jumpboxSshPublicKey. About $10/month while the server exists: the lab ends by deleting its resource group.')
+param deployMigrationLab bool = false
+@description('Where Azure Migrate keeps the project\'s metadata: a region of a supported geography (United States: centralus or westus2).')
+param migrateProjectLocation string = 'centralus'
+
 // ------------------------------------------------------------------ Phase 16 · Microservices
 @description('Payments API on the App Service plan. Its ledger database needs deploySql; without it, payments are in memory.')
 param deployPayments bool = false
@@ -215,6 +221,10 @@ var names = {
   frontDoorEndpoint: 'fde-${prefix}-${short}'
   frontDoorWaf: 'waf${compact}${environmentName}'
   appGateway: 'agw-${prefix}'
+  legacyResourceGroup: 'rg-${prefix}-legacy'
+  legacyVnet: 'vnet-${prefix}-legacy'
+  legacyServer: 'vm-${take(compact, 6)}-legacy'
+  migrateProject: take('${compact}-${environmentName}', 13)
 }
 
 var usePrivateEndpoints = deployNetwork && enablePrivateEndpoints
@@ -259,7 +269,10 @@ module governance 'modules/governance.bicep' = if (deployGovernance) {
     // Every region this deployment may use, or the policy blocks the phase 11 secondaries.
     allowedLocations: union(
       [location, staticWebAppLocation],
-      filter([cosmosSecondaryLocation, sqlSecondaryLocation, eventHubsSecondaryLocation], l => !empty(l))
+      filter(
+        [cosmosSecondaryLocation, sqlSecondaryLocation, eventHubsSecondaryLocation, deployMigrationLab ? migrateProjectLocation : ''],
+        l => !empty(l)
+      )
     )
     budgetAmount: monthlyBudget
     budgetContactEmails: [ownerEmail]
@@ -906,6 +919,44 @@ module eventGridSubscription 'modules/eventgrid-subscription.bicep' = if (deploy
   }
 }
 
+// ==================================================================================================== phase 15: migration
+// The simulated on-premises datacentre gets its own resource group, so deleting it is the lab's "retire" step.
+var legacyTags = union(tags, { role: 'simulated-on-premises' })
+
+resource legacyRg 'Microsoft.Resources/resourceGroups@2024-03-01' = if (deployMigrationLab) {
+  name: names.legacyResourceGroup
+  location: location
+  tags: legacyTags
+}
+
+module legacyDatacentre 'modules/legacy-datacentre.bicep' = if (deployMigrationLab) {
+  scope: legacyRg
+  name: 'legacy-datacentre'
+  params: {
+    location: location
+    tags: legacyTags
+    vnetName: names.legacyVnet
+    serverName: names.legacyServer
+    sshPublicKey: jumpboxSshPublicKey
+  }
+}
+
+module migration 'modules/migration.bicep' = if (deployMigrationLab) {
+  scope: rg
+  name: 'migration'
+  params: {
+    projectName: names.migrateProject
+    projectLocation: migrateProjectLocation
+    legacyPrincipalId: legacyDatacentre!.outputs.principalId
+    legacyServerName: legacyDatacentre!.outputs.serverName
+    storageAccountName: storage.outputs.name
+    // From the module's output, so the new administrator waits for the server: it takes one operation at a time.
+    postgresServerName: deployPostgres ? postgres!.outputs.serverName : ''
+  }
+  // Phase 9's allowed-locations policy must list the project's region before the project is created.
+  dependsOn: [governance]
+}
+
 // ==================================================================================================== edge (late: needs the apps)
 module frontDoorRoutes 'modules/frontdoor-routes.bicep' = if (deployFrontDoor && deployAppService) {
   scope: rg
@@ -981,6 +1032,10 @@ output onPremVmName string = useOnPremSim ? onPremSim!.outputs.vmName : ''
 output dnsResolverInboundIp string = useDnsResolver ? dnsResolver!.outputs.inboundIp : ''
 output dataLakeName string = useAnalytics ? analytics!.outputs.lakeName : ''
 output dataFactoryName string = useAnalytics ? analytics!.outputs.factoryName : ''
+output postgresFqdn string = deployPostgres ? postgres!.outputs.fqdn : ''
+output legacyResourceGroupName string = deployMigrationLab ? names.legacyResourceGroup : ''
+output legacyServerName string = deployMigrationLab ? legacyDatacentre!.outputs.serverName : ''
+output migrateProjectName string = deployMigrationLab ? migration!.outputs.projectName : ''
 
 // Static Web Apps reads this from staticwebapp.config.json, not from ARM, so the pipeline writes it in at deploy time.
 // Front Door adds the X-Azure-FDID header itself; a request straight to *.azurestaticapps.net doesn't have it.

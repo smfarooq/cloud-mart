@@ -86,3 +86,11 @@ ADFActivityRun
 | where TimeGenerated > ago(7d) and Status == "Failed"
 | project TimeGenerated, PipelineName, ActivityName, EffectiveIntegrationRuntime, ErrorCode, ErrorMessage
 | order by TimeGenerated desc
+
+// 15. The photo migration (phase 15): what the upload pipeline did with each copied file. Attached = on its product;
+// rejected = wrong type or too big (deleted); orphaned = no such product (left in product-uploads for a day)
+AppTraces
+| where TimeGenerated > ago(1h)
+| where Message has_any ("now uses image", "Rejecting upload", "does not belong to a known product")
+| extend Outcome = case(Message has "now uses image", "attached", Message has "Rejecting upload", "rejected", "orphaned")
+| summarize Files = count(), Examples = make_set(Message, 3) by Outcome

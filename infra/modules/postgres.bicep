@@ -83,5 +83,6 @@ module privateEndpoint 'private-endpoint.bicep' = if (usePrivateEndpoint) {
   }
 }
 
+output serverName string = server.name
 output fqdn string = server.properties.fullyQualifiedDomainName
 output databaseName string = database.name

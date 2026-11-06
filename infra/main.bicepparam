@@ -102,6 +102,14 @@ param deployAnalytics = false
 // switches, setting it back to false and redeploying does turn it off.
 param enableClickstreamCapture = false
 
+// Phase 15 · Migration: a simulated on-premises server in its own resource group (rg-cloudmart-dev-legacy) with the
+// old shop's PostgreSQL database and product photos, an Azure Migrate project, and access for the server's identity
+// to Blob Storage and (with deployPostgres) PostgreSQL. Needs jumpboxSshPublicKey (any SSH public key).
+// COST: about $10/month while the server exists (it shuts down at 19:00 UTC); Azure Migrate is free. Setting it back
+// to false deletes nothing: the lab ends by deleting the legacy resource group.
+param deployMigrationLab = false
+param migrateProjectLocation = 'centralus' // Azure Migrate metadata: centralus or westus2 in the United States
+
 // Phase 16 · Microservices (Payments + Shipping APIs, Durable Functions saga)
 param deployPayments = false
 param deployShipping = false
