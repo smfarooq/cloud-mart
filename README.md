@@ -31,6 +31,7 @@ Each part of a shop needs a different Azure design decision:
 | Shipping (phase 16) | Shipping API → **Table Storage**, private endpoint | Key-value storage, idempotent PUT |
 | Charge, ship, refund on failure | **Durable Functions** saga | Orchestration, compensating transactions, app-role auth between services |
 | Sales analytics (phase 14) | Data Factory → **Data Lake Gen2** as Parquet; Event Hubs **Capture** for clicks | Data integration, lake layout, managed VNet integration runtime |
+| Leaving the old datacentre (phase 15) | **Azure Migrate** assessment; AzCopy → Blob; `pg_dump`/`pg_restore` → PostgreSQL | The Rs, offline cutover and downtime, a managed identity outside Azure |
 | Everything | Managed identities + data-plane RBAC | Identity-based access instead of connection strings |
 
 ## Frontend: React (recommended) or Angular?
@@ -61,7 +62,9 @@ phase 13 an optional **hub VNet** with **Azure Firewall** is peered to this one,
 subnets' internet-bound traffic through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
 is allowed out. In phase 14 a **Data Factory** pipeline copies the orders to a **Data Lake Storage Gen2** account as
 Parquet every night, through a managed virtual network once the database is private, and **Event Hubs Capture** can
-land the click stream there too. For slides or documents, use the 2× PNG:
+land the click stream there too. In phase 15 a simulated **legacy datacentre**, in its own resource group, hands its
+product photos (AzCopy) and order database (`pg_dump`/`pg_restore`) to CloudMart, signed in with the server's
+managed identity, after an **Azure Migrate** assessment. For slides or documents, use the 2× PNG:
 [docs/architecture.png](docs/architecture.png).
 
 **Identity and access** has its own diagram too, [docs/identity.svg](docs/identity.svg) ([PNG](docs/identity.png)).
@@ -118,6 +121,12 @@ flowchart LR
   adf[Data Factory<br/>phase 14, managed VNet] -- "managed PE: nightly copy" --> sql
   adf -- "managed PE: Parquet" --> lake
   eh -. "Capture, optional" .-> lake
+  subgraph legacy [Legacy datacentre 172.16.0.0/24: phase 15, own resource group]
+    old[Legacy server<br/>PostgreSQL + photos]
+  end
+  old -- "AzCopy, managed identity" --> blob
+  old -- "pg_dump / pg_restore, Entra token" --> sql
+  migrate[Azure Migrate<br/>CSV assessment] -. assesses .- legacy
   api & func -.-> ai[App Insights]
   ai -.-> law[Log Analytics]
   eg -. "dead letters" .-> blob
@@ -145,10 +154,10 @@ src/CloudMart.ServiceDefaults/ what every web service shares: telemetry, health,
 src/cloudmart-web/             React 19 + TypeScript + Vite SPA (MSAL, App Insights, runtime config.json)
 tests/CloudMart.Core.Tests     business rules, saga failure paths, payment and shipping idempotency
 infra/main.bicep               subscription-scoped entry point; one switch per phase
-infra/modules/                 28 modules + shared types: network, hub firewall, data, analytics, messaging, compute...
+infra/modules/                 30 modules + shared types: network, hub firewall, data, analytics, migration, compute...
 pipelines/                     Azure Pipelines: build → what-if/deploy infra → deploy apps
-deploy/                        SQL/PostgreSQL identity grants, Entra app roles, Data Factory trigger, Kubernetes
-                               manifest, LB lab script
+deploy/                        SQL/PostgreSQL identity grants, Entra app roles, Data Factory trigger, migration
+                               scripts and inventory, Kubernetes manifest, LB lab script
 docs/                          learning path, portal guide, gap analysis, KQL queries
 ```
 
@@ -209,6 +218,7 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 | 12 Integration | `deployAppConfig`, `deployRedis`, `deployApim` | Feature flags, Redis L2 cache |
 | 13 Hub-and-spoke | `deployFirewall` (needs `enablePrivateEndpoints`; **≈ $290/month**), `adminIpAddresses` | Order events **Service Bus (WebSockets)**; egress through Azure Firewall |
 | 14 Data integration | `deployAnalytics` (needs `deploySql`), `enableClickstreamCapture` (**≈ $73/month**) | **Analytics** panel: newest orders snapshot, today's captured clicks |
+| 15 Migration | `deployMigrationLab` (needs `jumpboxSshPublicKey`; **≈ $10/month** while the legacy server exists), `migrateProjectLocation` | Nothing on Platform: migrated product photos appear in Shop |
 | 16 Microservices | `deployPayments`, `deployShipping` (+ app registrations) | Payments **Payments API**, Shipping **Shipping API** |
 
 ## Cost guard rails
@@ -225,6 +235,9 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
   day.
 - `enableClickstreamCapture` (phase 14) bills Event Hubs Capture at **≈ $73/month** per throughput unit. Unlike the switches that create resources, `false` does undo it: Capture is a property of the
   event hub, so redeploying removes it.
+- `deployMigrationLab` (phase 15) costs **≈ $10/month** while the legacy server exists (it stops at 19:00 UTC each
+  day). It lives in its own resource group, `rg-cloudmart-dev-legacy`: the lab ends by deleting it, because `false`
+  doesn't.
 - `false` does not delete anything with `az deployment sub create`. Use a **deployment stack** (phase 8) so removed
   switches delete their resources, or delete the resource group:
   `az group delete -n rg-cloudmart-dev --yes`.
@@ -235,7 +248,9 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 
 All .NET projects build, the 44 unit tests pass, the SPA type-checks and builds, and every Bicep file compiles with
 zero warnings (Bicep 0.48). Phases 1–13 and 16 have switches and code; so does phase 14 (a data lake and a Data
-Factory export). Phase 15 (migration) is a design lab. Locally, the API, Payments API and Shipping API run together and the saga confirms,
+Factory export). Phase 15 (migration) has a switch and scripts but no app code: a simulated legacy datacentre, an
+Azure Migrate project, and the scripts that migrate its photos and database. Its SQL and dump/restore steps were
+tested against PostgreSQL 16 in a container; the rest is compile-checked only. Locally, the API, Payments API and Shipping API run together and the saga confirms,
 declines and refunds orders as described in phase 16. Nothing has been deployed to a real subscription from this repository yet, so treat the
 first deployment of each phase as part of the lab. `what-if` first, and read the error messages: they are usually
 exactly what the exam asks about.

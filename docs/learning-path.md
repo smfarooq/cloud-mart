@@ -487,6 +487,7 @@ Below it is this matrix. Each row is an identity; each cell is the least it need
 | **Pipeline** (service connection) | — | — | — | — | — | — | — | — | Owner, or Contributor + Role Based Access Control Administrator, on the subscription |
 | **Data Factory** (system-assigned, phase 14) | — | — | — | `cloudmart`: read (`db_datareader`) | — | — | — | Blob Data Contributor, `orders` container only | — |
 | **Event Hubs namespace** (system-assigned, with `enableClickstreamCapture`) | — | — | — | — | — | — | — | Blob Data Contributor, `clickstream` container only | — |
+| **Legacy server** (system-assigned, phase 15; stands in for Azure Arc) | — | Blob Data Contributor, `product-uploads` container only | — | — | — | — | — | — | PostgreSQL Entra administrator (a server setting, not Azure RBAC), until the cutover |
 | **Event Grid system topic** | — | Blob Data Contributor, `eventgrid-deadletter` container only | — | — | — | — | — | — | — |
 | **Other system-assigned** | — | — | — | — | — | — | — | — | Grafana: Monitoring Reader; Policy remediation: Tag Contributor; AKS kubelet: AcrPull |
 
@@ -1260,26 +1261,341 @@ public service, so the Bicep changes three things:
 
 ---
 
-## Phase 15 · Migration (new: design + small taste)
+## Phase 15 · Migration (new: hands-on)
 
-**Taste:** `azcopy login` (Entra ID) then `azcopy copy ./images "https://<account>.blob.core.windows.net/product-images" --recursive`.
-If you have Hyper-V, deploy the **Azure Migrate** appliance against a local VM and read the assessment and
-dependency map.
+CloudMart is the rebuild of an older shop that ran in its own datacentre. This phase builds a small copy of that
+datacentre, assesses the old estate with Azure Migrate, and migrates two of its workloads into CloudMart: the product
+photos and the order database. Then it shuts the datacentre down.
 
-Know the CAF **Migrate** flow (assess → migrate → optimise → secure and manage) and the **Rs**: rehost, refactor,
-rearchitect, rebuild, replace, retire/retain. CloudMart itself is a "rebuild" of a hypothetical on-premises shop:
-which tier would you **rehost** first to hit a datacentre-exit deadline?
+**Switches:** `deployMigrationLab = true`, with `jumpboxSshPublicKey` set. Any SSH public key will do: Azure needs one to
+create a Linux VM, even though nobody signs in with it. The two migration waves build on earlier phases:
+
+- **Product photos:** `deployCosmos` (phase 4), plus `deployMessaging` and `deployEventGridSubscription` (phase 5), with
+  the Functions code deployed. The photos go through the image pipeline. Without it, they wait in `product-uploads`
+  and nothing attaches them to products.
+- **The database:** `deployPostgres` (phase 4). The server must accept connections from the internet, so
+  `enablePrivateEndpoints = false`. The architect's questions explain why.
+
+`migrateProjectLocation` (default `centralus`) is where Azure Migrate keeps the project's metadata. It must be a region
+of a supported geography: in the United States, that's `centralus` or `westus2`. The switch adds it to phase 9's
+allowed-locations policy.
+
+**Cost:** about **$10/month while the legacy server exists**: a B2ats_v2 VM (≈ $7/month) and its disk (≈ $2.40/month).
+The VM shuts down at 19:00 UTC every day; while it's stopped you pay only for the disk. Start it again with
+`az vm start`. The rest costs nothing or is already paid for:
+
+- **Azure Migrate:** free, including the project, the imported inventory, assessments and business cases.
+- **AzCopy:** free, and data going into Azure isn't charged.
+- **PostgreSQL:** the phase 4 server (≈ $15/month).
+
+The last lab step deletes the legacy resource group. That's both the lab's *retire* step and the end of its cost.
+Setting the switch back to `false` deletes nothing.
+
+**What changes:**
+
+- **A legacy datacentre:** `rg-cloudmart-dev-legacy` is a separate resource group that plays the old shop's
+  datacentre. It holds `vnet-cloudmart-dev-legacy` (172.16.0.0/24), which isn't connected to CloudMart's network, and
+  `vm-cloudm-legacy`, an Ubuntu server with:
+  - **PostgreSQL 16** and the old shop's `legacyshop` database: seven years of trading (2,000 customers, 20,000
+    orders) in a schema with legacy habits. Statuses are one-letter codes, timestamps have no time zone, and old orders
+    include a gift card that CloudMart doesn't sell.
+  - **Product photos** in `/srv/legacy-shop/images/<product id>/`, the way the old file server kept them.
+  - **A cron job** that still takes an order a minute, so the database keeps changing until you cut over.
+  - **AzCopy.**
+
+  Read the seed in [deploy/migration/legacy-shop](../deploy/migration/legacy-shop) and the server in
+  [legacy-datacentre.bicep](../infra/modules/legacy-datacentre.bicep). Nothing reaches the server from the internet:
+  it has no public IP and no inbound rule. You drive it with **Run Command**, which goes through the VM agent.
+- **Azure Migrate:** the project `cloudmart-dev`, with its *Discovery and assessment* and *Migration and
+  modernization* tools ([migration.bicep](../infra/modules/migration.bicep)).
+- **A migration identity:** the server's system-assigned managed identity. It stands in for the identity **Azure
+  Arc** gives a real server outside Azure. It can write to the `product-uploads` container and is an Entra
+  administrator of the PostgreSQL server. It has no other access.
+- **Shop:** the migrated photos appear on the product cards. The Platform page doesn't change, and this phase adds no
+  application code: a migration happens around the application, not in it.
+
+**The scope.** The exam has five migration objectives. The lab covers each one with something you can run on a lab
+budget, and leaves the rest to the decision table:
+
+| Objective | Hands-on here | Design only, and why |
+|---|---|---|
+| Evaluate a migration with the **Cloud Adoption Framework** | The lab follows CAF's migrate steps: assess (step 2), migrate in waves (3–5), cut over and secure (7), retire (8). Phase 9's guard rails are the landing zone it lands in | Strategy and planning, apart from the business case in step 2 |
+| Evaluate on-premises servers, data and applications | **Azure Migrate**: import the old estate as CSV, assess it, build a business case, and choose an R for each server | Discovery with the Azure Migrate appliance. It needs a VMware or Hyper-V host, or a dedicated Windows server. The CSV gives the same sizing, without performance history or dependency maps |
+| Migrate workloads to IaaS and PaaS | Choosing an R for each server (step 2) | Replicating servers with Azure Migrate: imported servers can't be migrated |
+| Migrate databases | An **offline** migration to Azure Database for PostgreSQL with `pg_dump` and `pg_restore`, signed in with an Entra token. The script measures the downtime and validates the result | **Database Migration Service** for SQL Server: the source would be a Windows server running SQL Server, plus a self-hosted integration runtime. The PostgreSQL **migration service**: it asks for an administrator password on both servers, and CloudMart's server accepts Entra ID only |
+| Migrate unstructured data | **AzCopy** with a managed identity: a bulk copy, then a delta pass before the cutover | **Data Box** is a device that ships to you. **Storage Mover**'s agent runs on Hyper-V or VMware |
+
+**Why the photos go to `product-uploads`.** Copying straight into `product-images` would be faster. But then nothing
+would check the photos or attach them to products, and the migration identity could overwrite published images.
+Through the upload pipeline, a migrated photo is treated exactly like one uploaded in Admin: checked, published and
+attached. The catch is that the pipeline moves everything it receives out of `product-uploads`. That changes how the
+delta pass works (step 4 and "Break it").
+
+**Who can do what.** Nobody has a key or a password:
+
+| Identity | Role | On |
+|---|---|---|
+| Legacy server (system-assigned) | Storage Blob Data Contributor | the `product-uploads` container only |
+| Legacy server | Microsoft Entra administrator (a member of `azure_pg_admin`) | the PostgreSQL server, until the cutover (step 7) |
+| You | Owner on the subscription (already) | Azure Migrate needs Contributor or Owner; Run Command needs Virtual Machine Contributor or more |
+
+The source database has no Azure identity at all. The scripts reach it through the local socket, as the `postgres`
+operating-system user (*peer* authentication).
+
+### Lab
+
+1. **Deploy, and wait for the datacentre to boot.** Run `what-if`. It lists:
+   - the legacy resource group, with its VNet, NSG, VM and shutdown schedule;
+   - the Azure Migrate project and its three tools;
+   - the role assignment on `product-uploads`, and the PostgreSQL administrator;
+   - `centralus` added to the allowed-locations policy.
+
+   Deploy. If the project fails with `RequestDisallowedByPolicy`, the policy hasn't caught up with its new region yet:
+   deploy again in a few minutes.
+
+   The steps below use these names. `run` sends a script to the legacy server and prints what it wrote:
+
+   ```bash
+   rg=rg-cloudmart-dev
+   out() { az deployment sub show -n main --query "properties.outputs.$1.value" -o tsv; }
+   legacy_rg=$(out legacyResourceGroupName)
+   vm=$(out legacyServerName)
+   uploads="https://$(out storageAccountName).blob.core.windows.net/product-uploads"
+   pg=$(out postgresFqdn)
+   run() { az vm run-command invoke -g $legacy_rg -n $vm --command-id RunShellScript --query "value[0].message" -o tsv "$@"; }
+   ```
+
+   cloud-init needs a few minutes to install PostgreSQL, ImageMagick and AzCopy and to seed the shop. Wait for it, then
+   look around:
+
+   ```bash
+   run --scripts "cloud-init status --wait; sudo -u postgres psql -d legacyshop -c 'SELECT status, count(*) FROM shop.orders GROUP BY 1'; find /srv/legacy-shop/images -type f"
+   ```
+
+2. **Assess the estate** (Azure Migrate, free). The legacy server is one of eleven in the old shop's datacentre.
+   [legacy-estate.csv](../deploy/migration/legacy-estate.csv) describes all of them in the format of Azure Migrate's
+   import template: cores, memory, operating system, disks and utilisation.
+   1. In the portal, open **Azure Migrate** → **Servers, databases and web apps** and pick the project
+      `cloudmart-dev`. Choose **Discover** → **Import using CSV**, and upload the file. If the import rejects a column
+      name, download the template from the same page and paste the rows into it: the portal's template is the
+      reference.
+   2. Choose **Assess** → **Azure VM**. Keep *performance-based* sizing, which uses the CSV's utilisation columns. For
+      each server, read its readiness, the recommended VM size against the cores you declared, and the monthly
+      compute and storage cost. Three servers run Windows Server 2012 R2: what does Azure Migrate say about them?
+   3. **Build a business case:** on-premises cost against Azure, the payback, and what Azure Hybrid Benefit changes.
+   4. **Choose an R for each server.** The options: retire, rehost, replatform, refactor, rearchitect, rebuild,
+      replace, or retain. CAF's pages group them in slightly different ways (replatform is sometimes folded into
+      refactor); the decision is what matters. Write one line of reasoning for each server, then compare with the
+      answers below. The assessment only sizes VMs, and most of these decisions aren't about VMs.
+
+   <details>
+   <summary>One defensible set of answers</summary>
+
+   | Server | R | Why |
+   |---|---|---|
+   | `shop-web01`, `shop-web02` | **Rebuild** | The storefront was rewritten as CloudMart. With a datacentre-exit deadline before the rebuild was ready, you would **rehost** both VMs first and rebuild later. (Phase 16's split of checkout into services is what *rearchitect* looks like) |
+   | `shop-sql01` | **Replatform** | To Azure SQL Database with DMS, offline, in a weekend window. Choose Managed Instance (DMS online, or the Managed Instance link) if it uses SQL Agent jobs or cross-database queries |
+   | `shop-pg01` | **Replatform** | To Azure Database for PostgreSQL: the same engine as a managed service. This lab's wave 2 |
+   | `shop-files01` | **Replatform** | Product photos to Blob Storage (this lab's wave 1). Staff shares to Azure Files, with Azure File Sync if an office still needs a local copy |
+   | `shop-batch01` | **Refactor** | The nightly report becomes a timer-triggered Function: CloudMart's `DailyOrderReport` |
+   | `shop-ftp01` | **Rehost**, then **replace** | Suppliers can't change their EDI on your schedule. Rehost the VM now, then move them to SFTP for Azure Blob Storage |
+   | `shop-mail01` | **Replace** | Exchange Online (Microsoft 365) |
+   | `shop-dc01` | **Retain** | On-premises identity stays as long as anything on premises does. Entra Connect Sync or Cloud Sync connects it to Entra ID (phase 13) |
+   | `shop-reports01` | **Retire** | 1% CPU and no users. Power BI on phase 14's lake replaces it |
+   | `shop-erp01` | **Retain** | A physical server whose licence is tied to its hardware. Revisit when the vendor offers SaaS (replace). Meanwhile, Azure Arc lets you govern and patch it from Azure |
+
+   Windows Server 2012 R2 reached the end of support in October 2023, and its paid extended security updates ran for
+   three more years at most. "Rehost as is" isn't a safe plan for those three servers.
+
+   </details>
+
+   Servers imported from a CSV can be assessed but not migrated: replication needs the appliance, or an agent on each
+   server.
+3. **Wave 1: the product photos.** First see what would be sent, then copy it:
+
+   ```bash
+   run --scripts @deploy/migration/copy-images.sh --parameters "$uploads" dry-run
+   run --scripts @deploy/migration/copy-images.sh --parameters "$uploads" full
+   ```
+
+   [copy-images.sh](../deploy/migration/copy-images.sh) signs AzCopy in as the server's managed identity
+   (`AZCOPY_AUTO_LOGIN_TYPE=MSI`; typed by hand, `azcopy login --identity`), and prints the number of files, the bytes
+   and the final job status. Within a minute, open Shop: seven products have photos. Each photo went through phase 5's
+   pipeline: `BlobCreated` → Event Grid → `ProcessProductImage` → checked → `product-images` → Cosmos DB. Query 15 in
+   [cloudmart.kql](kql/cloudmart.kql) counts what the pipeline did with them:
+   - **Attached:** seven photos.
+   - **Rejected:** `fabrikam-studio-mic/scan.bmp`. BMP isn't an allowed format, so the function deleted it, and the mic
+     still has no photo.
+   - **Orphaned:** `legacy-gift-card/photo.png`. CloudMart has no such product, so the photo waits in `product-uploads`
+     until the lifecycle rule deletes it a day later.
+
+   An assessment should have found both of the last two before the copy. Real file shares are full of them.
+4. **The delta pass.** The business didn't stop for the migration: someone fixes the mic's photo on the old server.
+
+   ```bash
+   run --scripts "cd /srv/legacy-shop/images/fabrikam-studio-mic && convert scan.bmp scan.png"
+   run --scripts @deploy/migration/copy-images.sh --parameters "$uploads" delta
+   ```
+
+   The delta copies one file: `--include-after` picks only what changed since the last pass started. The mic gets its
+   photo. In a real migration the bulk copy runs days or weeks ahead, and each delta is smaller than the last, until the
+   final one fits in the cutover window.
+
+   **Online or Data Box?** `shop-files01` holds 2.2 TB (its row in the CSV), and the old shop has a 200 Mbps internet
+   link that the copy can use at 70%. How many days does the bulk copy take? What if it were 50 TB? Answers in the
+   architect's questions.
+5. **Wave 2: the database, offline.** Watch the shop take orders (run it twice, a minute apart), then migrate:
+
+   ```bash
+   run --scripts "sudo -u postgres psql -d legacyshop -Atc 'SELECT count(*), max(order_date) FROM shop.orders'"
+   run --scripts @deploy/migration/migrate-database.sh --parameters "$pg" "$vm"
+   ```
+
+   [migrate-database.sh](../deploy/migration/migrate-database.sh) reads like a cutover runbook:
+   1. It makes the source read-only and ends its sessions. **The downtime starts here:** from now on the shop's cron
+      job fails.
+   2. It dumps the whole database with `pg_dump`, in custom format: compressed, and restorable in parallel.
+   3. It asks the instance metadata service for a token for `https://ossrdbms-aad.database.windows.net`. That token is
+      the "password" that `psql` and `pg_restore` send. Nothing stores it, and it expires within about an hour.
+   4. It recreates `legacyshop` on the target and restores into it with two parallel jobs.
+   5. It compares row counts and totals on both sides, and prints how long the shop was closed.
+
+   Here the downtime is under a minute, for a few megabytes. The shop's failed writes are in the server's journal
+   (*cannot execute INSERT in a read-only transaction*):
+
+   ```bash
+   run --scripts "journalctl -t legacy-shop -n 3 --no-pager"
+   ```
+
+   Read the migrated data yourself, as an Entra administrator. Use Cloud Shell, or add your IP address to the server's
+   firewall first:
+
+   ```bash
+   export PGPASSWORD=$(az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv)
+   psql "host=$pg dbname=legacyshop user=<you@yourtenant.onmicrosoft.com> sslmode=require" \
+     -c "SELECT status, count(*), sum(total) FROM shop.orders GROUP BY 1"
+   ```
+
+   Now scale it up. This database is a few megabytes and took seconds. If the real one were 400 GB, how long would the
+   shop be closed? That's when you choose an **online** migration. The PostgreSQL migration service, or logical
+   replication you set up yourself, copies while the source stays writable, so the downtime shrinks to the final
+   switch-over.
+6. **Map the legacy data** (design exercise, 15 minutes). The order history is in Azure now, but not in CloudMart.
+   Before deciding how it gets there, list what doesn't match:
+   - status codes `N`, `P`, `S`, `X` against CloudMart's `Pending`, `Confirmed` and `Rejected`;
+   - `order_date` with no time zone against `CreatedUtc`;
+   - integer ids against GUIDs;
+   - customers identified by email against an Entra object id;
+   - gift-card lines for a product that no longer exists.
+
+   Then choose: transform it once into CloudMart's `Orders` tables; keep it as a read-only archive for support and the
+   accountants; or load it into phase 14's lake for reporting only. What does each choice cost in work now, and in
+   upkeep later?
+7. **Cut over, and take the access away.** The legacy database is read-only and validated. In a real cutover, the
+   applications would now switch their connection strings and DNS names. Then the migration identity loses its
+   access, because it only needed it for the migration window. Set `deployMigrationLab = false` first, or the next
+   deployment puts both back. Then:
+
+   ```bash
+   id=$(az vm show -g $legacy_rg -n $vm --query identity.principalId -o tsv)
+   az postgres flexible-server microsoft-entra-admin delete -g $rg -s ${pg%%.*} -i $id --yes
+   az role assignment delete --assignee $id --role "Storage Blob Data Contributor" \
+     --scope "$(az storage account show -g $rg -n $(out storageAccountName) --query id -o tsv)/blobServices/default/containers/product-uploads"
+   ```
+
+8. **Retire the datacentre.** This is the *retire* R for the old hardware, and the end of this phase's cost:
+
+   ```bash
+   az group delete -n $legacy_rg --yes
+   ```
+
+   The Azure Migrate project can stay as the record of the assessment, or you can delete it in the portal.
+
+### Break it
+
+Do these before step 7: the cutover removes the access they use, and step 8 deletes the server.
+
+- **Copy to the wrong container.** Send the photos straight to the published container:
+
+  ```bash
+  run --scripts @deploy/migration/copy-images.sh --parameters "${uploads%/*}/product-images" full
+  ```
+
+  Every transfer fails with `403 AuthorizationPermissionMismatch`, because the identity can write to `product-uploads`
+  only. That's least privilege at work: a migration tool with the run of the account could overwrite every published
+  image.
+- **Use `sync` for the delta.**
+
+  ```bash
+  run --scripts @deploy/migration/copy-images.sh --parameters "$uploads" sync
+  ```
+
+  AzCopy compares the folder with `product-uploads`. The pipeline has moved the photos out, so AzCopy finds them
+  missing and copies almost all of them again, and the pipeline publishes them all again. `sync` assumes the
+  destination keeps what it receives. When it doesn't, track what you've already sent yourself, as the delta pass does
+  with `--include-after`.
+- **An extension the target doesn't allow.** The old shop's developers once switched `email` to the `citext` type.
+  Do the same on the source (the first command reopens it), then migrate again:
+
+  ```bash
+  run --scripts "sudo -u postgres psql -d postgres -c 'ALTER DATABASE legacyshop RESET default_transaction_read_only'; sudo -u postgres psql -d legacyshop -c 'CREATE EXTENSION citext' -c 'ALTER TABLE shop.customers ALTER COLUMN email TYPE citext'"
+  run --scripts @deploy/migration/migrate-database.sh --parameters "$pg" "$vm"
+  ```
+
+  `pg_restore` stops at `CREATE EXTENSION citext`. Azure Database for PostgreSQL creates only the extensions on the
+  server's allow list, the `azure.extensions` parameter. **Fix it:** allow the extension, then migrate again. The value
+  is the whole list, so keep any extensions that are already on it:
+
+  ```bash
+  az postgres flexible-server parameter set -g $rg -s ${pg%%.*} --name azure.extensions --value CITEXT
+  ```
+
+  An assessment checks this before the cutover: compare `SELECT extname FROM pg_extension` on the source with what the
+  target allows.
+
+### Architect's questions
+
+- Why a separate resource group for the datacentre, rather than a subnet in CloudMart's VNet? Because it belongs to
+  someone else: different owners, a different lifecycle, and none of the landing zone's policies. Deleting it is the
+  *retire* step.
+- How did the legacy server reach PostgreSQL? Through the server's *Allow public access from any Azure service* rule.
+  The legacy server is an Azure VM, so its outbound address is an Azure address. A real datacentre's address would need
+  its own firewall rule. With `enablePrivateEndpoints`, the server refuses the internet altogether. The migration then
+  needs a private path: a site-to-site VPN or ExpressRoute into the hub (phase 13), on-premises DNS that resolves the
+  `privatelink` names (through a Private DNS Resolver inbound endpoint), and the private endpoints' NSG opened to the
+  datacentre's range. The PostgreSQL migration service has its own answer for private sources: a migration runtime
+  server inside the VNet.
+- Offline or online? Compare the downtime the business accepts with how long a copy of the database takes. An online
+  migration needs more from the source: for PostgreSQL, logical replication (`wal_level = logical`) and a primary key
+  on every table.
+- Why the server's own identity, and not your account (`azcopy login`)? Your account can do far more than copy photos,
+  and its token belongs to a person. The server's identity (Azure Arc's, for a real server) can be limited to one
+  container and removed at the cutover.
+- **The Data Box maths.** 2.2 TB × 8 bits ÷ (200 Mbps × 70%) ≈ 125,000 s, about **a day and a half**: copy it online.
+  50 TB takes about **33 days**, longer than a Data Box order takes to arrive, be filled, ship back and be uploaded.
+  The rule of thumb is to ship it when the online copy takes longer than the device's round trip, or when the copy
+  would crowd out the business's own traffic.
 
 | Requirement | Recommendation |
 |---|---|
-| Discover and assess servers, databases, web apps; business case | **Azure Migrate** |
+| A repeatable way to plan and run a migration | **Cloud Adoption Framework**: strategy → plan → ready (the landing zone) → adopt (migrate, modernise) → govern and manage |
+| Discover and assess servers, databases, web apps; business case | **Azure Migrate** (the appliance discovers agentlessly and records performance history and dependencies) |
+| A quick sizing and cost estimate without installing anything | **Azure Migrate import** (CSV or RVTools): assessments and a business case, but no performance history, no dependency map, and no migration |
+| Choose which servers move together | **Dependency analysis** in Azure Migrate, then **migration waves**: few dependencies first |
 | Rehost VMs with minimal downtime | Azure Migrate server migration (built on ASR replication) |
-| SQL Server → Azure SQL MI / DB, online with minimal downtime | **Azure Database Migration Service** (online mode) |
-| Open-source databases | DMS / native tools (`pg_dump`, replication) to flexible server |
-| Tens of TB, slow link | **Data Box** (offline; Data Box Heavy for petabytes) |
+| Rehost VMware workloads without changing them | **Azure VMware Solution** (VMware HCX moves the VMs) |
+| SQL Server → Azure SQL Managed Instance, minimal downtime | **Azure Database Migration Service** online mode, or the **Managed Instance link** for near-zero downtime |
+| SQL Server → Azure SQL Database | **Database Migration Service** (offline) |
+| Open-source databases | The **migration service in Azure Database for PostgreSQL** (offline, or online through logical replication), DMS for MySQL, or native tools (`pg_dump`/`pg_restore`, as in this lab) for small offline moves |
+| A database too big for the downtime window | An **online** migration: replication keeps the target in sync, and the downtime is the final switch-over |
+| Tens of TB, slow link | **Data Box** (offline: a device ships to you, you fill it, Microsoft uploads it) |
 | Ongoing file-server sync | **Azure File Sync** |
 | Large online copies, NAS shares | **AzCopy**, **Storage Mover** |
+| Copy files into Blob Storage without keys | **AzCopy** signed in with a **managed identity** (Azure Arc's, for a server outside Azure) and a role on the one container |
+| Catch up on changes before the cutover | Bulk copy early, then **delta passes**. `azcopy sync` if the destination keeps what it receives; otherwise copy only what changed (`--include-after`) |
 | Lots of legacy .NET web apps | App Service migration assistant / Azure Migrate web app assessment |
+| Servers that stay on premises | **Retain** them, and manage them from Azure with **Azure Arc** |
+| The datacentre after the last wave | **Retire** it: decommission the servers, and end the leases and support contracts |
 
 ---
 

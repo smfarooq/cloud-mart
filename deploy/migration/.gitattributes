@@ -1,0 +1,3 @@
+# These scripts run on Linux: Bicep embeds the legacy-shop files in the VM as they are on disk, and Run Command
+# sends the others as they are. Keep LF line endings even in a Windows checkout with core.autocrlf.
+* text eol=lf

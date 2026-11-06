@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1881 1730" width="1881" height="1730" role="img" aria-labelledby="title desc">
   <title id="title">CloudMart architecture diagram</title>
-  <desc id="desc">Browser and React SPA reach Static Web Apps and the App Service API through Front Door. The API publishes to Service Bus and Event Hubs; Event Grid relays Blob events; Azure Functions process all three, and run the order saga that charges through the Payments API, books through the Shipping API and refunds on failure. Service Bus Standard has no private endpoints, so it is reached on its public endpoint with Entra ID; Event Grid pushes to the Function App's public endpoint. The APIs and Functions send outbound traffic through VNet-integrated subnets to private endpoints for Azure SQL, Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs. Each subnet has a network security group. Optionally (phase 13), a hub VNet with Azure Firewall Basic is peered to this spoke, and a route table sends the app subnets' internet-bound traffic through the firewall, which allows only Service Bus, Entra ID and Azure Monitor; private endpoint traffic stays direct. In phase 14 a Data Factory pipeline copies the orders from Azure SQL to a Data Lake Storage Gen2 account as Parquet every night, through managed private endpoints once the database is private, and Event Hubs Capture can write the click stream there too; the API reads the lake through a blob private endpoint. Telemetry and diagnostic logs flow to Application Insights and Log Analytics, where log search and metric alerts (exceptions, dead letters, backlog, throttling, orders needing review) notify an action group.</desc>
+  <desc id="desc">Browser and React SPA reach Static Web Apps and the App Service API through Front Door. The API publishes to Service Bus and Event Hubs; Event Grid relays Blob events; Azure Functions process all three, and run the order saga that charges through the Payments API, books through the Shipping API and refunds on failure. Service Bus Standard has no private endpoints, so it is reached on its public endpoint with Entra ID; Event Grid pushes to the Function App's public endpoint. The APIs and Functions send outbound traffic through VNet-integrated subnets to private endpoints for Azure SQL, Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs. Each subnet has a network security group. Optionally (phase 13), a hub VNet with Azure Firewall Basic is peered to this spoke, and a route table sends the app subnets' internet-bound traffic through the firewall, which allows only Service Bus, Entra ID and Azure Monitor; private endpoint traffic stays direct. In phase 14 a Data Factory pipeline copies the orders from Azure SQL to a Data Lake Storage Gen2 account as Parquet every night, through managed private endpoints once the database is private, and Event Hubs Capture can write the click stream there too; the API reads the lake through a blob private endpoint. In phase 15 a simulated legacy datacentre, in its own resource group and not connected to CloudMart's network, hands over the old shop's product photos (AzCopy into the upload container, so the image pipeline attaches them) and its order database (pg_dump and pg_restore into Azure Database for PostgreSQL), signed in with the server's managed identity; Azure Migrate assesses the legacy estate from an imported CSV. Telemetry and diagnostic logs flow to Application Insights and Log Analytics, where log search and metric alerts (exceptions, dead letters, backlog, throttling, orders needing review) notify an action group.</desc>
 
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -208,6 +208,19 @@
       <path d="M10 23 h9 l2 2 h9 v8 h-20 z" fill="#FFB900"/>
       <path d="M24 33 v4 h12 M30 37 v-6 h8" stroke="#0072C6" stroke-width="2" fill="none"/>
     </symbol>
+    <symbol id="i-server" viewBox="0 0 48 48">
+      <rect x="10" y="3" width="28" height="42" rx="3" fill="#505050"/>
+      <rect x="14" y="8" width="20" height="6" rx="1" fill="#A6A6A6"/>
+      <rect x="14" y="17" width="20" height="6" rx="1" fill="#A6A6A6"/>
+      <rect x="14" y="26" width="20" height="6" rx="1" fill="#A6A6A6"/>
+      <circle cx="30" cy="38" r="2.5" fill="#5EA830"/>
+    </symbol>
+    <symbol id="i-migrate" viewBox="0 0 48 48">
+      <rect x="2" y="20" width="12" height="18" rx="2" fill="#505050"/>
+      <path d="M21 38 a8 8 0 0 1 0 -16 a11 11 0 0 1 21 3 a7 7 0 0 1 -1 13 z" fill="#0078D4"/>
+      <path d="M9 14 C14 6 24 6 29 13" stroke="#0078D4" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M24 9 l6 4 -6 3" stroke="#0078D4" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
     <symbol id="i-budget" viewBox="0 0 48 48">
       <circle cx="24" cy="24" r="19" fill="#5EA830"/>
       <text x="24" y="32" font-size="22" font-weight="700" fill="#ffffff" text-anchor="middle">$</text>
@@ -246,7 +259,7 @@
   <text x="1663" y="88" class="notetext">Private endpoint</text>
 
   <!-- ============ Internet & global services ============ -->
-  <rect x="30" y="150" width="260" height="1300" rx="6" class="zone"/>
+  <rect x="30" y="150" width="260" height="1005" rx="6" class="zone"/>
   <text x="46" y="176" class="zonetitle">Internet &amp; global services</text>
 
   <rect x="65" y="195" width="150" height="96" class="svc"/>
@@ -552,6 +565,34 @@
   <text x="1004" y="1390" class="zonetitle">Phase 14 · data integration and analytics</text>
   <text x="1004" y="1407" class="itemdesc">deployAnalytics · Capture: enableClickstreamCapture (about $73/month)</text>
 
+  <!-- ============ Phase 15: the legacy datacentre, outside CloudMart's resource group and network ============ -->
+  <rect x="30" y="1192" width="260" height="258" rx="6" class="zone"/>
+  <text x="46" y="1215" class="zonetitle">Legacy datacentre · phase 15</text>
+  <text x="46" y="1232" class="itemdesc">rg-cloudmart-dev-legacy · 172.16.0.0/24</text>
+
+  <rect x="65" y="1246" width="150" height="96" class="svc"/>
+  <use href="#i-server" x="118" y="1254" width="44" height="44"/>
+  <text x="140" y="1324" class="name">Legacy server</text>
+  <text x="130" y="1364" class="role">The old shop</text>
+  <text x="130" y="1382" class="sub">PostgreSQL 16 · photos · AzCopy</text>
+  <text class="smallnote"><tspan x="46" y="1406">Not connected to CloudMart's network:</tspan><tspan x="46" y="1422">Entra ID and TLS over the internet. Its</tspan><tspan x="46" y="1438">managed identity stands in for Azure Arc.</tspan></text>
+
+  <!-- Wave 1: the photos go into product-uploads, so the image pipeline checks and attaches them. The line runs just
+       inside the browser-upload line. -->
+  <path d="M215 1270 H300 V1164 H1483 V1062 H1468" class="flow"/>
+  <text x="246" y="1263" class="flowlabel">AzCopy</text>
+  <text x="671" y="1158" class="flowlabel" text-anchor="middle">photos → product-uploads (phase 15)</text>
+  <!-- Wave 2: the order database, hopping over both upload lines on its way up to the database box. -->
+  <path d="M215 1312 H322 V1181 a11 11 0 0 0 0 -22 V1000 H358" class="flow"/>
+  <text x="222" y="1305" class="flowlabel">pg_restore</text>
+  <text x="336" y="1150" class="flowlabel" transform="rotate(-90 336 1150)">Entra token · PostgreSQL</text>
+
+  <!-- Azure Migrate lives in rg-cloudmart-dev; its project metadata is stored in Central US. -->
+  <rect x="590" y="198" width="270" height="94" class="svc"/>
+  <use href="#i-migrate" x="602" y="214" width="40" height="40"/>
+  <text x="652" y="222" class="itemname">Azure Migrate · phase 15</text>
+  <text class="itemdesc"><tspan x="652" y="240">Assesses the legacy estate from a</tspan><tspan x="652" y="256">CSV: sizing, cost, business case.</tspan><tspan x="652" y="272">Free · metadata in Central US</tspan></text>
+
   <!-- ============ Network security panel ============ -->
   <rect x="1536" y="197" width="300" height="838" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
   <text x="1550" y="223" class="paneltitle">Network security</text>
@@ -616,8 +657,8 @@
 
   <!-- ============ Monitoring and logging (moved down 160 for the phase 14 row) ============ -->
   <g transform="translate(0 160)">
-  <path d="M135 1290 V1341" class="log"/>
-  <text x="143" y="1311" class="loglabel">SPA, APIs and Functions telemetry</text>
+  <path d="M330 1290 V1341" class="log"/>
+  <text x="322" y="1311" class="loglabel" text-anchor="end">SPA, APIs and Functions telemetry</text>
   <path d="M375 1290 V1341" class="log"/>
   <text x="383" y="1311" class="loglabel">diagnostic settings: allLogs + AllMetrics from up to 17 resources</text>
 
