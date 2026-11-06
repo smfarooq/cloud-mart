@@ -1030,6 +1030,8 @@ until phase 6 (`string(!enableEntraAuth)`).
 - `HybridCache` keeps product lists in memory for 10 seconds (L1). With `Redis:Endpoint` set, it also keeps them in
   Redis for 30 seconds (L2), shared by every API instance.
 - `ConfigureForAzureWithTokenCredentialAsync` signs in to Redis with the managed identity instead of an access key.
+- With private endpoints on, `Redis:Endpoint` keeps the same `<name>.<region>.redis.azure.net:10000` value. Inside the
+  VNet that name resolves to the endpoint's private IP, so the code doesn't change.
 - Saving a product clears the cache by tag ([CatalogEndpoints.cs:69](../src/CloudMart.Api/Endpoints/CatalogEndpoints.cs#L69)).
 
 **The Front Door lock** ([lines 132-143](../src/CloudMart.Api/Program.cs#L132-L143)): when `FrontDoor:Id` is set, any
@@ -1198,7 +1200,7 @@ a permission on the resource**. The table lists all of them. "Signs in as" names
 | API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:365-374](../infra/main.bicep#L365-L374) |
 | App Service platform | Key Vault (reference) | HTTPS | — (no code) | `@Microsoft.KeyVault(...)` app setting | `-func` before phase 16, `-pay` after | Key Vault Secrets User | same |
 | API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:539](../infra/main.bicep#L539) |
-| API | Azure Managed Redis | Redis over TLS (10000) | StackExchange.Redis | `Redis:Endpoint` | `-api` | A Redis *access policy assignment* (not RBAC) | [app-integration.bicep](../infra/modules/app-integration.bicep) |
+| API | Azure Managed Redis | Redis over TLS (10000, then 85XX to each shard) | StackExchange.Redis | `Redis:Endpoint` | `-api` | A Redis *access policy assignment* (not RBAC) | [app-integration.bicep](../infra/modules/app-integration.bicep) |
 | All apps, browser | Application Insights | HTTPS | Azure Monitor exporter, JS SDK | `APPLICATIONINSIGHTS_CONNECTION_STRING`, `appInsightsConnectionString` | Not signed in: the connection string only allows *sending* | — | [monitoring.bicep](../infra/modules/monitoring.bicep) |
 | API, Functions | Payments API | HTTPS | `PaymentsApiClient` + `EntraTokenHandler` | `Payments:BaseUrl`, `Payments:Scope` | `-api`, `-func` | App role `Payments.Process` | [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh) (🔧) |
 | API, Functions | Shipping API | HTTPS | `ShippingApiClient` + `EntraTokenHandler` | `Shipping:BaseUrl`, `Shipping:Scope` | `-api`, `-func` | App role `Shipments.Manage` | same (🔧) |

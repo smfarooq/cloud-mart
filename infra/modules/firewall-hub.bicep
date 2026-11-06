@@ -89,8 +89,8 @@ resource policy 'Microsoft.Network/firewallPolicies@2024-05-01' = {
 // neither is denied and logged ("No rule matched. Proceeding with default action"): there is no "deny all" to write.
 //
 // Not listed, because it never reaches the firewall: everything behind a private endpoint (Cosmos DB, SQL, PostgreSQL,
-// Key Vault, Event Hubs, the Payments and Shipping APIs, and Storage, which also holds the Functions host's state and
-// the Durable Functions task hub). Each endpoint's /32 route is more specific than the spoke's 0.0.0.0/0. Also not
+// Key Vault, Event Hubs, Azure Managed Redis, the Payments and Shipping APIs, and Storage, which also holds the
+// Functions host's state and the Durable Functions task hub). Each endpoint's /32 route is more specific than the spoke's 0.0.0.0/0. Also not
 // listed: Azure DNS (168.63.129.16) and the managed identity endpoints, which the platform answers without routing.
 //
 // Basic matches names only in application rules: HTTP(S) and SQL, by Host header or TLS SNI. Names in network rules
