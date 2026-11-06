@@ -59,7 +59,10 @@ Functions saga** takes over checkout: it charges through the **Payments API**, b
 refunds if shipping fails. Both APIs share the App Service plan and are reachable only through private endpoints. In
 phase 13 an optional **hub VNet** with **Azure Firewall** is peered to this one, and a route table sends the app
 subnets' internet-bound traffic through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
-is allowed out. In phase 14 a **Data Factory** pipeline copies the orders to a **Data Lake Storage Gen2** account as
+is allowed out. Phase 13's hybrid lab adds a **simulated on-premises site**, a VNet peered to nothing, connected to
+the hub by a **site-to-site VPN**. Gateway transit carries it on to the private endpoints, and a **DNS Private
+Resolver** in the hub lets the site resolve their names. The hub then exists with or without the firewall. In phase
+14 a **Data Factory** pipeline copies the orders to a **Data Lake Storage Gen2** account as
 Parquet every night, through a managed virtual network once the database is private, and **Event Hubs Capture** can
 land the click stream there too. For slides or documents, use the 2× PNG:
 [docs/architecture.png](docs/architecture.png).
@@ -99,8 +102,18 @@ flowchart LR
   end
   subgraph hub [Hub VNet 10.0.0.0/16: phase 13, optional]
     fw[Azure Firewall Basic<br/>allow-list policy]
+    vgw[VPN gateway VpnGw1AZ<br/>GatewaySubnet]
+    dnspr[DNS Private Resolver<br/>inbound endpoint 10.0.2.4]
   end
-  vnet -. "peering, both ways" .- hub
+  subgraph onprem [Simulated on-premises 192.168.0.0/16: phase 13, optional, peered to nothing]
+    server[Linux server<br/>dnsmasq conditional forwarders]
+    vgwsite[Basic VPN gateway<br/>plays the site's VPN device]
+  end
+  vnet -. "peering, both ways, gateway transit" .- hub
+  server --> vgwsite
+  vgwsite ==>|"site-to-site IPsec VPN"| vgw
+  vgw -- "gateway transit · pe-nsg: 443, 1433, 5432" --> pe
+  server -- "DNS for Azure's public zones, over the VPN" --> dnspr
   api -- outbound --> snetapp --> pe
   func -- "outbound: saga + data" --> snetfunc --> pe
   snetapp & snetfunc -- "UDR 0.0.0.0/0" --> fw
@@ -145,7 +158,7 @@ src/CloudMart.ServiceDefaults/ what every web service shares: telemetry, health,
 src/cloudmart-web/             React 19 + TypeScript + Vite SPA (MSAL, App Insights, runtime config.json)
 tests/CloudMart.Core.Tests     business rules, saga failure paths, payment and shipping idempotency
 infra/main.bicep               subscription-scoped entry point; one switch per phase
-infra/modules/                 28 modules + shared types: network, hub firewall, data, analytics, messaging, compute...
+infra/modules/                 31 modules + shared types: network, hub firewall, VPN, data, analytics, messaging, compute...
 pipelines/                     Azure Pipelines: build → what-if/deploy infra → deploy apps
 deploy/                        SQL/PostgreSQL identity grants, Entra app roles, Data Factory trigger, Kubernetes
                                manifest, LB lab script
@@ -208,6 +221,7 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 | 11 Continuity | `storageSku`, `cosmosSecondaryLocation`, `sqlBackupRedundancy`, `sqlSecondaryLocation`, `eventHubsSecondaryLocation`, `zoneRedundant` | Multi-region data; orders survive a SQL failover |
 | 12 Integration | `deployAppConfig`, `deployRedis`, `deployApim` | Feature flags, Redis L2 cache |
 | 13 Hub-and-spoke | `deployFirewall` (needs `enablePrivateEndpoints`; **≈ $290/month**), `adminIpAddresses` | Order events **Service Bus (WebSockets)**; egress through Azure Firewall |
+| 13 Hybrid | `deployOnPremSim` (needs `enablePrivateEndpoints`, `jumpboxSshPublicKey`), then `deployVpnGateway` (**≈ $187/month**) and `deployDnsResolver` (**≈ $180/month**) | Nothing in the app: a simulated on-premises server reaches Key Vault and SQL over the VPN |
 | 14 Data integration | `deployAnalytics` (needs `deploySql`), `enableClickstreamCapture` (**≈ $73/month**) | **Analytics** panel: newest orders snapshot, today's captured clicks |
 | 16 Microservices | `deployPayments`, `deployShipping` (+ app registrations) | Payments **Payments API**, Shipping **Shipping API** |
 
@@ -216,13 +230,17 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 - Defaults deploy only cheap or free tiers: B1 App Service, Flex Consumption, Static Web Apps Free, Cosmos DB free
   tier, serverless SQL that auto-pauses, Log Analytics with a 1 GB/day cap, and a **budget alert** at 50% / 80% /
   forecast 100% of `monthlyBudget`.
-- Expensive switches (AKS, Application Gateway, Grafana, Front Door Premium, Bastion Basic, Azure Firewall, the SQL
-  failover group, zone redundancy) are off by default and flagged in the learning path. Turn them on, learn, turn them
+- Expensive switches (AKS, Application Gateway, Grafana, Front Door Premium, Bastion Basic, Azure Firewall, the VPN
+  gateways, the DNS resolver, the SQL failover group, zone redundancy) are off by default and flagged in the learning path. Turn them on, learn, turn them
   off. The SQL failover group is the one people forget: geo-replicated serverless databases never auto-pause, so it
   costs about $750/month while it exists.
 - `deployFirewall` is one of the most expensive switches: Azure Firewall Basic is **≈ $290/month plus about $0.065
   per GB**, billed every hour it exists. It is off by default. Deploy it, do the phase 13 lab and delete it the same
   day.
+- Phase 13's hybrid lab is the other expensive one. `deployVpnGateway` creates two VPN gateways (**≈ $0.26/hour,
+  ≈ $187/month**) that take 30–45 minutes to create, and `deployDnsResolver` an inbound endpoint (**≈ $180/month**).
+  Both bill every hour they exist. Do the lab in one sitting (about $12), then delete them with the commands in its
+  clean-up step. The simulated site's VM (`deployOnPremSim`) is about $10/month and stops every evening.
 - `enableClickstreamCapture` (phase 14) bills Event Hubs Capture at **≈ $73/month** per throughput unit. Unlike the switches that create resources, `false` does undo it: Capture is a property of the
   event hub, so redeploying removes it.
 - `false` does not delete anything with `az deployment sub create`. Use a **deployment stack** (phase 8) so removed
@@ -234,8 +252,8 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 ## Status
 
 All .NET projects build, the 44 unit tests pass, the SPA type-checks and builds, and every Bicep file compiles with
-zero warnings (Bicep 0.48). Phases 1–13 and 16 have switches and code; so does phase 14 (a data lake and a Data
-Factory export). Phase 15 (migration) is a design lab. Locally, the API, Payments API and Shipping API run together and the saga confirms,
+zero warnings (Bicep 0.48). Phases 1–13 and 16 have switches and code, including phase 13's hybrid half (a
+simulated on-premises site, a VPN and a DNS resolver); so does phase 14 (a data lake and a Data Factory export). Phase 15 (migration) is a design lab. Locally, the API, Payments API and Shipping API run together and the saga confirms,
 declines and refunds orders as described in phase 16. Nothing has been deployed to a real subscription from this repository yet, so treat the
 first deployment of each phase as part of the lab. `what-if` first, and read the error messages: they are usually
 exactly what the exam asks about.

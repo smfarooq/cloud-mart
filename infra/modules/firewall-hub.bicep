@@ -4,6 +4,10 @@
 //
 // The hub deploys BEFORE the spoke. The spoke's route needs the firewall's private IP, which Azure assigns (and can
 // change if the firewall is stopped and started), so main.bicep reads it from this module instead of guessing .4.
+//
+// The hybrid lab (deployOnPremSim) needs the hub but not the firewall: with deployFirewall = false this module creates
+// only the VNet, so the VPN gateway (vpn.bicep) and the DNS Private Resolver (dns-resolver.bicep) don't cost an extra
+// $290/month. The firewall's own resources are the only ones that depend on the switch.
 
 param location string
 param tags object
@@ -11,6 +15,9 @@ param vnetName string
 param firewallName string
 param policyName string
 param workspaceId string
+
+@description('false = the hub VNet alone, for the hybrid lab without the firewall.')
+param deployFirewall bool = true
 
 @description('Must not overlap the spoke (10.20.0.0/16) or any network you connect later (on-premises, other spokes).')
 param addressPrefix string = '10.0.0.0/16'
@@ -33,16 +40,24 @@ param allowContainerApps bool = false
 @description('Container Apps runs your image from Azure Container Registry.')
 param allowContainerRegistry bool = false
 
-// Both subnet names are fixed and both need at least a /26. Basic always has a management NIC: Microsoft's management
-// traffic uses that subnet and its own public IP, so your rules can never cut the firewall off from its control plane.
-// The rest of the /16 is room for what a real hub also holds: GatewaySubnet (VPN/ExpressRoute), AzureBastionSubnet,
-// and the inbound and outbound subnets of a DNS Private Resolver.
+// Both firewall subnet names are fixed and both need at least a /26. Basic always has a management NIC: Microsoft's
+// management traffic uses that subnet and its own public IP, so your rules can never cut the firewall off from its
+// control plane. The rest of the /16 is room for what a real hub also holds: GatewaySubnet (VPN/ExpressRoute),
+// AzureBastionSubnet, and the inbound and outbound subnets of a DNS Private Resolver. The hybrid lab uses two of them.
 var subnetPrefixes = {
   firewall: cidrSubnet(addressPrefix, 26, 0) // 10.0.0.0/26
   firewallManagement: cidrSubnet(addressPrefix, 26, 1) // 10.0.0.64/26
+  gateway: cidrSubnet(addressPrefix, 27, 8) // 10.0.1.0/27: the name is fixed; /27 is the smallest Microsoft recommends
+  dnsInbound: cidrSubnet(addressPrefix, 28, 32) // 10.0.2.0/28: the resolver's inbound endpoint (/28 to /24, delegated)
 }
 
-// No NSGs: Azure Firewall doesn't support one on either subnet.
+// The address on-premises DNS servers forward to. Static, so their configuration never has to change. Azure keeps the
+// first four addresses of every subnet, so .4 is the first one it can hand out.
+var dnsInboundIp = cidrHost(subnetPrefixes.dnsInbound, 3) // 10.0.2.4
+
+// All four subnets always exist, even the ones a switch doesn't use yet: empty subnets are free, and a VNet deployment
+// that leaves out a subnet still holding a firewall, gateway or resolver fails instead of removing it.
+// No NSGs: Azure Firewall doesn't support one on either of its subnets, and neither does a VPN gateway's GatewaySubnet.
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: vnetName
   location: location
@@ -52,12 +67,20 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
     subnets: [
       { name: 'AzureFirewallSubnet', properties: { addressPrefix: subnetPrefixes.firewall } }
       { name: 'AzureFirewallManagementSubnet', properties: { addressPrefix: subnetPrefixes.firewallManagement } }
+      { name: 'GatewaySubnet', properties: { addressPrefix: subnetPrefixes.gateway } }
+      {
+        name: 'snet-dns-inbound'
+        properties: {
+          addressPrefix: subnetPrefixes.dnsInbound
+          delegations: [{ name: 'dnsResolvers', properties: { serviceName: 'Microsoft.Network/dnsResolvers' } }]
+        }
+      }
     ]
   }
 }
 
 // Every app's outbound connection now leaves Azure from this one address: the IP a partner would allow-list.
-resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
+resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = if (deployFirewall) {
   name: 'pip-${firewallName}'
   location: location
   tags: tags
@@ -65,7 +88,7 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
   properties: { publicIPAllocationMethod: 'Static' }
 }
 
-resource managementPublicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
+resource managementPublicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = if (deployFirewall) {
   name: 'pip-${firewallName}-mgmt'
   location: location
   tags: tags
@@ -75,7 +98,7 @@ resource managementPublicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
 
 // The rules live in a firewall policy, not on the firewall: Firewall Manager can then share one policy (or a parent
 // policy with per-spoke children) across many firewalls and regions.
-resource policy 'Microsoft.Network/firewallPolicies@2024-05-01' = {
+resource policy 'Microsoft.Network/firewallPolicies@2024-05-01' = if (deployFirewall) {
   name: policyName
   location: location
   tags: tags
@@ -172,7 +195,7 @@ var applicationRules = concat(
     : []
 )
 
-resource rules 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2024-05-01' = {
+resource rules 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2024-05-01' = if (deployFirewall) {
   parent: policy
   name: 'cloudmart-egress'
   properties: {
@@ -202,7 +225,7 @@ resource rules 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2024-05-
   }
 }
 
-resource firewall 'Microsoft.Network/azureFirewalls@2024-05-01' = {
+resource firewall 'Microsoft.Network/azureFirewalls@2024-05-01' = if (deployFirewall) {
   name: firewallName
   location: location
   tags: tags
@@ -230,7 +253,7 @@ resource firewall 'Microsoft.Network/azureFirewalls@2024-05-01' = {
   }
 }
 
-resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (deployFirewall) {
   name: 'to-log-analytics'
   scope: firewall
   properties: {
@@ -252,5 +275,10 @@ func subnetId(vnetName string, subnetName string) string =>
   resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName)
 
 output vnetName string = vnet.name
-output privateIp string = firewall.properties.ipConfigurations[0].properties.privateIPAddress
-output publicIp string = publicIp.properties.ipAddress
+output vnetId string = vnet.id
+output addressPrefix string = addressPrefix
+output privateIp string = deployFirewall ? firewall!.properties.ipConfigurations[0].properties.privateIPAddress : ''
+output publicIp string = deployFirewall ? publicIp!.properties.ipAddress : ''
+output gatewaySubnetId string = subnetId(vnet.name, 'GatewaySubnet')
+output dnsInboundSubnetId string = subnetId(vnet.name, 'snet-dns-inbound')
+output dnsInboundIp string = dnsInboundIp

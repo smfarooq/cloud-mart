@@ -91,7 +91,7 @@ between" decisions the exam actually tests.
 | Automated deployment | ✅ | Bicep, deployment stacks, template specs, GitHub Actions vs Azure Pipelines | Phase 8 |
 | **Migrations** (5 objectives) | ➕ | **Cloud Adoption Framework**, **Azure Migrate**, **Database Migration Service**, **Data Box** / AzCopy / Storage Mover, the 6 Rs | Phase 15 |
 | Connect to the internet | ✅ | Public IPs, NAT Gateway, Front Door, Application Gateway | Phases 2, 10 |
-| Connect to **on-premises** | ➕ | **VPN Gateway** (S2S/P2S), **ExpressRoute** (+ Global Reach, FastPath), **Virtual WAN** | Phase 13 |
+| Connect to **on-premises** | ➕ | **VPN Gateway** (built: site-to-site to a simulated site, with gateway transit to the spoke; P2S as a stretch step), **Azure DNS Private Resolver** (built: an inbound endpoint and conditional forwarders), **ExpressRoute** (+ Global Reach, FastPath), **Virtual WAN** | Phase 13 |
 | Optimise network performance | ➕ | Accelerated networking, proximity placement groups, ExpressRoute vs VPN, Front Door | Phases 10, 13 |
 | Optimise network security | ⚠️ | **Azure Firewall** (hands-on in phase 13: hub, UDRs, an allow-list policy), **DDoS Protection**, ASGs, **service endpoints vs private endpoints**, Bastion | Phases 2, 13 |
 | Load balancing and routing | ✅ | **Traffic Manager** (DNS) vs Front Door vs Application Gateway vs Load Balancer | Phases 2, 10 |
@@ -118,9 +118,11 @@ between" decisions the exam actually tests.
 | **14** | **Data integration + analytics** | (new) | **Data Factory**, **Fabric** / Synapse, Databricks, Stream Analytics, Purview |
 | **15** | **Migration** | (new) | **CAF Migrate**, **Azure Migrate**, **DMS**, **Data Box**, Storage Mover |
 
-Phases 11–12 are built into CloudMart (Bicep switches + code), and so is phase 13's hub firewall (`deployFirewall`).
+Phases 11–12 are built into CloudMart (Bicep switches + code), and so is most of phase 13: the hub firewall
+(`deployFirewall`), and a site-to-site VPN with a DNS Private Resolver that connects a simulated on-premises site to
+the private endpoints (`deployOnPremSim`, `deployVpnGateway`, `deployDnsResolver`).
 Phase 14 is built too: a Data Lake Storage Gen2 account, a Data Factory pipeline that exports the orders to it as
 Parquet (through a managed virtual network once the database is private), and optional Event Hubs Capture
 (`deployAnalytics`, `enableClickstreamCapture`). Fabric, Databricks and Synapse stay in the decision tables. The rest
-of phase 13 and phase 15 involve on-premises systems that are impractical or expensive to build for real, so they are
+of phase 13 (ExpressRoute, Virtual WAN and hybrid identity) and phase 15 involve on-premises systems that are impractical or expensive to build for real, so they are
 design labs: diagrams and decision tables, plus a cheap hands-on taste where one exists.
