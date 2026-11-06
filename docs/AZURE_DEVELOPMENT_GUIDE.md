@@ -505,7 +505,7 @@ pattern:
 
 **Permissions.** The account has `disableLocalAuth: true`, so account keys don't work at all. Bicep gives the API
 identity, the Functions identity and you the built-in **Cosmos DB Built-in Data Contributor** role
-([main.bicep:526](../infra/main.bicep#L526)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
+([main.bicep:513](../infra/main.bicep#L513)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
 portal's *Access control (IAM)* blade.
 
 ### 2.7 Azure SQL and PostgreSQL: orders and the outbox
@@ -969,7 +969,7 @@ reads `PaymentGateway:ApiKey` like any other setting.
 | Picking up a new secret version | Restart the app | Automatic, within about a day, or on restart |
 
 In phase 16 only the Payments API keeps access to the secret: Bicep removes `KeyVault__Uri` and the role from the API
-and Functions ([main.bicep:463-472](../infra/main.bicep#L463-L472)).
+and Functions ([main.bicep:450-459](../infra/main.bicep#L450-L459)).
 
 **App Configuration and feature flags** ([lines 29-38](../src/CloudMart.Api/Program.cs#L29-L38)):
 
@@ -1202,14 +1202,14 @@ a permission on the resource**. The table lists all of them. "Signs in as" names
 | API, Functions | Cosmos DB | HTTPS (443) | `CosmosClient` | `Cosmos:Endpoint` | `-api`, `-func` | Cosmos DB Built-in Data Contributor (data plane) | [cosmos.bicep](../infra/modules/cosmos.bicep) |
 | API, Functions | Azure SQL | TDS (1433) | EF Core + SqlClient | `ConnectionStrings:OrdersSql` | `-api`, `-func` | Database users: api = read, write, DDL; func = read, write | [grant script](../deploy/sql/grant-managed-identities.sql) (🔧) |
 | API, Functions | PostgreSQL | PostgreSQL (5432) | EF Core + Npgsql | `ConnectionStrings:OrdersPostgres` | `-api`, `-func` | Postgres roles from `pgaadauth_create_principal` | [grant script](../deploy/postgres/grant-managed-identities.sql) (🔧) |
-| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:494-495](../infra/main.bicep#L494-L495) |
-| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:498-500](../infra/main.bicep#L498-L500) |
-| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:614](../infra/main.bicep#L614) |
-| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:615](../infra/main.bicep#L615) |
-| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:619](../infra/main.bicep#L619) |
-| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:620](../infra/main.bicep#L620) |
+| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:481-482](../infra/main.bicep#L481-L482) |
+| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:485-487](../infra/main.bicep#L485-L487) |
+| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:601](../infra/main.bicep#L601) |
+| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:602](../infra/main.bicep#L602) |
+| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:606](../infra/main.bicep#L606) |
+| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:607](../infra/main.bicep#L607) |
 | Storage | Event Grid → Functions | HTTPS push | Event Grid subscription | Bicep, not app settings | Azure (system topic) | Dead letters: Storage Blob Data Contributor on `eventgrid-deadletter` | [eventgrid-subscription.bicep](../infra/modules/eventgrid-subscription.bicep) |
-| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:463-472](../infra/main.bicep#L463-L472) |
+| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:450-459](../infra/main.bicep#L450-L459) |
 | App Service platform | Key Vault (reference) | HTTPS | — (no code) | `@Microsoft.KeyVault(...)` app setting | `-func` before phase 16, `-pay` after | Key Vault Secrets User | same |
 | API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:624](../infra/main.bicep#L624) |
 | API | Azure Managed Redis | Redis over TLS (10000, then 85XX to each shard) | StackExchange.Redis | `Redis:Endpoint` | `-api` | A Redis *access policy assignment* (not RBAC) | [app-integration.bicep](../infra/modules/app-integration.bicep) |
@@ -1217,7 +1217,7 @@ a permission on the resource**. The table lists all of them. "Signs in as" names
 | API, Functions | Payments API | HTTPS | `PaymentsApiClient` + `EntraTokenHandler` | `Payments:BaseUrl`, `Payments:Scope` | `-api`, `-func` | App role `Payments.Process` | [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh) (🔧) |
 | API, Functions | Shipping API | HTTPS | `ShippingApiClient` + `EntraTokenHandler` | `Shipping:BaseUrl`, `Shipping:Scope` | `-api`, `-func` | App role `Shipments.Manage` | same (🔧) |
 | Payments | Azure SQL (`payments`) | TDS (1433) | EF Core | `ConnectionStrings:PaymentsSql` | `-pay` | Database user (commented out in the script) | 🔧 |
-| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:506](../infra/main.bicep#L506) |
+| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:493](../infra/main.bicep#L493) |
 
 Least privilege shows in the details: the API may only *send* to Service Bus and the Functions app may only
 *receive*. Only whoever takes payments may read the gateway key. Payments and Shipping get no access to Cosmos DB,
