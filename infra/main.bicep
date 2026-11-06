@@ -132,7 +132,7 @@ param deployFirewall bool = false
 param adminIpAddresses string[] = []
 @description('Requires deployNetwork, enablePrivateEndpoints and jumpboxSshPublicKey. A simulated on-premises site: a VNet (192.168.0.0/16) peered to nothing, with a small Linux VM behind a free Bastion Developer. About $10/month. Also creates the hub VNet, without the firewall unless deployFirewall is on.')
 param deployOnPremSim bool = false
-@description('Requires deployOnPremSim. A site-to-site VPN between the hub (VpnGw1AZ) and the simulated site (Basic), with gateway transit so on-premises reaches the spoke\'s private endpoints. About $0.26/hour (≈ $185/month); 30-45 minutes to create. Deploy, do the lab, delete it.')
+@description('Requires deployOnPremSim. A site-to-site VPN between the hub (VpnGw1AZ) and the simulated site (Basic), with gateway transit so on-premises reaches the spoke\'s private endpoints. About $0.26/hour (≈ $187/month); 30-45 minutes to create. Deploy, do the lab, delete it.')
 param deployVpnGateway bool = false
 @secure()
 @description('The VPN\'s pre-shared key. Generated on every deployment unless you pass one; both connections always get the same value.')

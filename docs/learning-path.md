@@ -1181,6 +1181,7 @@ gets a deliberate decision:
    EOF
    sudo dnsmasq --conf-file=/etc/onprem-dns.conf
    sudo resolvectl dns eth0 $site_dns   # this server now uses the site's DNS, like every other client there
+   sudo resolvectl flush-caches         # forget step 4's public answer
    nslookup $kv.vault.azure.net
    az keyvault secret list --vault-name $kv -o table
    ```
@@ -1209,9 +1210,11 @@ gets a deliberate decision:
    a landing-zone hub inspects traffic between on-premises and Azure.
 9. **Stretch: point-to-site from your laptop.** On `vgw-cloudmart-dev-hub`, open **Point-to-site configuration**:
    address pool 172.16.201.0/24, tunnel type OpenVPN, and *Microsoft Entra ID* authentication (follow Microsoft's
-   "Configure P2S for Microsoft Entra ID authentication"). Import the profile into the Azure VPN Client, and your
-   laptop reaches the private endpoints the way the site does. Basic can't do this. The next deployment removes the
-   configuration, because the Bicep doesn't declare it: that is declarative infrastructure at work.
+   "Configure P2S for Microsoft Entra ID authentication"). Import the profile into the Azure VPN Client: your laptop
+   now gets routes to the hub and, through gateway transit, the spoke. To reach the private endpoints it needs what
+   the site got: a `pe-nsg` rule for 172.16.201.0/24, and the resolver as its DNS server (a `<dnsservers>` entry with
+   10.0.2.4 in the profile's XML). Basic can't do any of this. The next deployment removes the configuration, because
+   the Bicep doesn't declare it: that is declarative infrastructure at work.
 10. **Clean up.** First set `deployVpnGateway = false` and `deployDnsResolver = false`, and redeploy. The peerings
     stop using the gateway before it goes, as the firewall lab removes its route before the firewall. Then delete
     what bills:
