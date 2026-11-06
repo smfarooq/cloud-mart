@@ -51,7 +51,8 @@ Each part of a shop needs a different Azure design decision:
 
 Every arrow to a data or messaging service authenticates with a **managed identity**: there are no keys or
 connection-string secrets. From phase 2, the API and Functions send their outbound traffic through VNet-integrated
-subnets, and the data stores and Event Hubs are reachable only through **private endpoints**. Service Bus Standard
+subnets, and the data stores, Event Hubs and (phase 12) Azure Managed Redis are reachable only through **private
+endpoints**. Service Bus Standard
 can't have one, so it stays public but accepts only Entra ID (Premium is the tier with private endpoints). Each subnet
 has its own **NSG**, and
 every service sends its logs to one **Log Analytics** workspace through diagnostic settings. In phase 16 a **Durable
@@ -127,6 +128,7 @@ flowchart LR
   pe --> sql[(Azure SQL / PostgreSQL<br/>orders + payments ledger)]
   pe --> blob[(Storage<br/>images + shipments table)]
   pe --> kv[(Key Vault)]
+  pe -- "pe-redis: API's shared L2 cache" --> redis[(Azure Managed Redis<br/>phase 12)]
   pe -- "pe-dls: Platform page reads" --> lake[(Data Lake Gen2<br/>orders Parquet + click Avro)]
   adf[Data Factory<br/>phase 14, managed VNet] -- "managed PE: nightly copy" --> sql
   adf -- "managed PE: Parquet" --> lake

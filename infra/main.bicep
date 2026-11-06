@@ -47,7 +47,7 @@ param paymentGatewayApiKey string = newGuid()
 
 // ------------------------------------------------------------------ Phase 2 · Networking
 param deployNetwork bool = false
-@description('Requires deployNetwork. Moves Key Vault, Storage, Cosmos DB, SQL and PostgreSQL behind private endpoints.')
+@description('Requires deployNetwork. Moves Key Vault, Storage, Cosmos DB, SQL, PostgreSQL, Event Hubs, Azure Managed Redis, the data lake and the Payments and Shipping APIs behind private endpoints.')
 param enablePrivateEndpoints bool = false
 param deployJumpbox bool = false
 param jumpboxSshPublicKey string = ''
@@ -614,6 +614,9 @@ module appIntegration 'modules/app-integration.bicep' = if (deployAppConfig || d
     deployRedis: deployRedis
     redisName: names.redis
     redisPrincipalIds: [identity.outputs.apiPrincipalId, deployerPrincipalId]
+    privateEndpointSubnetId: peSubnetId
+    redisPrivateDnsZoneId: dnsZones.?redis ?? ''
+    redisAsgId: usePrivateEndpoints ? network!.outputs.redisAsgId : ''
     deployApim: deployApim
     apimName: names.apim
     apimPublisherEmail: ownerEmail

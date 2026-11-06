@@ -86,7 +86,7 @@ between" decisions the exam actually tests.
 | Event-driven architecture | ✅ | Event Grid vs Event Hubs vs Service Bus; Event Grid namespaces (MQTT/pull) | Phase 5 |
 | **API integration** | ➕ | **API Management**: tiers, policies, products, self-hosted gateway | Phase 12 |
 | Service-to-service integration | ➕ | **Saga** with compensation, idempotent APIs, managed identity + **app roles**, private endpoints for App Service, resilience | Phase 16 |
-| **Caching** | ➕ | **Azure Managed Redis**, cache-aside, Front Door/CDN edge caching | Phase 12 |
+| **Caching** | ➕ | **Azure Managed Redis** (behind a private endpoint), cache-aside, Front Door/CDN edge caching | Phase 12 |
 | **Application configuration management** | ➕ | **App Configuration**, feature flags, Key Vault references | Phase 12 |
 | Automated deployment | ✅ | Bicep, deployment stacks, template specs, GitHub Actions vs Azure Pipelines | Phase 8 |
 | **Migrations** (5 objectives) | ➕ | **Cloud Adoption Framework**, **Azure Migrate**, **Database Migration Service**, **Data Box** / AzCopy / Storage Mover, the 6 Rs | Phase 15 |
