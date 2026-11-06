@@ -505,7 +505,7 @@ pattern:
 
 **Permissions.** The account has `disableLocalAuth: true`, so account keys don't work at all. Bicep gives the API
 identity, the Functions identity and you the built-in **Cosmos DB Built-in Data Contributor** role
-([main.bicep:513](../infra/main.bicep#L513)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
+([main.bicep:526](../infra/main.bicep#L526)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
 portal's *Access control (IAM)* blade.
 
 ### 2.7 Azure SQL and PostgreSQL: orders and the outbox
@@ -536,7 +536,7 @@ case "PostgreSql":
 ```
 
 - **SQL Server:** the SQL client library fetches the token itself. The connection string Bicep builds
-  ([main.bicep:654-655](../infra/main.bicep#L654-L655)) contains no password:
+  ([main.bicep:657-658](../infra/main.bicep#L657-L658)) contains no password:
   `Server=tcp:<server>.database.windows.net,1433;Database=cloudmart;Authentication=Active Directory Managed Identity;User Id=<identity client id>;Encrypt=True;Connect Timeout=30;`
 - **PostgreSQL:** Npgsql has no built-in Entra support, so the code asks `DefaultAzureCredential` for a token for
   `https://ossrdbms-aad.database.windows.net/.default` and passes it as the password. It renews it every 30 minutes.
@@ -783,7 +783,7 @@ public async Task FulfillOrder(
 ```
 
 **`Connection = "ServiceBus"` is a prefix, not a connection string.** The host looks for app settings that start with
-`ServiceBus__`. Bicep sets three ([main.bicep:729-734](../infra/main.bicep#L729-L734)):
+`ServiceBus__`. Bicep sets three ([main.bicep:732-737](../infra/main.bicep#L732-L737)):
 
 ```text
 ServiceBus__fullyQualifiedNamespace = <namespace>.servicebus.windows.net
@@ -794,7 +794,7 @@ ServiceBus__clientId                = <Functions identity client id>
 This is an **identity-based connection**: the host signs in to Service Bus as the managed identity. The Event Hubs
 trigger works the same way with the `EventHubs__` prefix. The host's own storage uses
 `AzureWebJobsStorage__accountName`, `__credential` and `__clientId`
-([main.bicep:717-720](../infra/main.bicep#L717-L720)) instead of the usual storage connection string.
+([main.bicep:720-723](../infra/main.bicep#L720-L723)) instead of the usual storage connection string.
 
 > **Watch the spelling.** The API reads `ServiceBus__FullyQualifiedNamespace` (capital F) through `CloudMartSettings`.
 > The Functions trigger reads `ServiceBus__fullyQualifiedNamespace` (lower-case f), the name the Functions host
@@ -809,7 +809,7 @@ trigger works the same way with the `EventHubs__` prefix. The host's own storage
 
 **Disabled until phase 5.** Until messaging is deployed there is nothing to listen to, so Bicep sets
 `AzureWebJobs.FulfillOrder.Disabled = true` and the same for the other three message triggers
-([main.bicep:737-741](../infra/main.bicep#L737-L741)). `DailyOrderReport` stays disabled until a database exists.
+([main.bicep:740-744](../infra/main.bicep#L740-L744)). `DailyOrderReport` stays disabled until a database exists.
 
 **Event Grid needs no connection setting.** The Event Grid *subscription* (Bicep) names the Function as its endpoint,
 and Azure delivers events straight to it. The function checks the event type and the container prefix and ignores
@@ -959,7 +959,7 @@ contain `:`, so `--` stands in for it. Needs the **Key Vault Secrets User** role
 CloudMart reads the same secret a second way: a **Key Vault reference**. The Functions app (before phase 16) and the
 Payments API get an app setting whose *value* is
 `@Microsoft.KeyVault(VaultName=<vault>;SecretName=PaymentGateway--ApiKey)`
-([main.bicep:679](../infra/main.bicep#L679)). App Service resolves it using the site's identity, and the code just
+([main.bicep:682](../infra/main.bicep#L682)). App Service resolves it using the site's identity, and the code just
 reads `PaymentGateway:ApiKey` like any other setting.
 
 | | Configuration provider (API) | Key Vault reference (Functions, Payments) |
@@ -969,7 +969,7 @@ reads `PaymentGateway:ApiKey` like any other setting.
 | Picking up a new secret version | Restart the app | Automatic, within about a day, or on restart |
 
 In phase 16 only the Payments API keeps access to the secret: Bicep removes `KeyVault__Uri` and the role from the API
-and Functions ([main.bicep:450-459](../infra/main.bicep#L450-L459)).
+and Functions ([main.bicep:463-472](../infra/main.bicep#L463-L472)).
 
 **App Configuration and feature flags** ([lines 29-38](../src/CloudMart.Api/Program.cs#L29-L38)):
 
@@ -1039,6 +1039,8 @@ until phase 6 (`string(!enableEntraAuth)`).
 - `HybridCache` keeps product lists in memory for 10 seconds (L1). With `Redis:Endpoint` set, it also keeps them in
   Redis for 30 seconds (L2), shared by every API instance.
 - `ConfigureForAzureWithTokenCredentialAsync` signs in to Redis with the managed identity instead of an access key.
+- With private endpoints on, `Redis:Endpoint` keeps the same `<name>.<region>.redis.azure.net:10000` value. Inside the
+  VNet that name resolves to the endpoint's private IP, so the code doesn't change.
 - Saving a product clears the cache by tag ([CatalogEndpoints.cs:69](../src/CloudMart.Api/Endpoints/CatalogEndpoints.cs#L69)).
 
 **The Front Door lock** ([lines 132-143](../src/CloudMart.Api/Program.cs#L132-L143)): when `FrontDoor:Id` is set, any
@@ -1200,22 +1202,22 @@ a permission on the resource**. The table lists all of them. "Signs in as" names
 | API, Functions | Cosmos DB | HTTPS (443) | `CosmosClient` | `Cosmos:Endpoint` | `-api`, `-func` | Cosmos DB Built-in Data Contributor (data plane) | [cosmos.bicep](../infra/modules/cosmos.bicep) |
 | API, Functions | Azure SQL | TDS (1433) | EF Core + SqlClient | `ConnectionStrings:OrdersSql` | `-api`, `-func` | Database users: api = read, write, DDL; func = read, write | [grant script](../deploy/sql/grant-managed-identities.sql) (🔧) |
 | API, Functions | PostgreSQL | PostgreSQL (5432) | EF Core + Npgsql | `ConnectionStrings:OrdersPostgres` | `-api`, `-func` | Postgres roles from `pgaadauth_create_principal` | [grant script](../deploy/postgres/grant-managed-identities.sql) (🔧) |
-| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:481-482](../infra/main.bicep#L481-L482) |
-| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:485-487](../infra/main.bicep#L485-L487) |
-| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:601](../infra/main.bicep#L601) |
-| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:602](../infra/main.bicep#L602) |
-| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:606](../infra/main.bicep#L606) |
-| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:607](../infra/main.bicep#L607) |
+| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:494-495](../infra/main.bicep#L494-L495) |
+| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:498-500](../infra/main.bicep#L498-L500) |
+| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:614](../infra/main.bicep#L614) |
+| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:615](../infra/main.bicep#L615) |
+| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:619](../infra/main.bicep#L619) |
+| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:620](../infra/main.bicep#L620) |
 | Storage | Event Grid → Functions | HTTPS push | Event Grid subscription | Bicep, not app settings | Azure (system topic) | Dead letters: Storage Blob Data Contributor on `eventgrid-deadletter` | [eventgrid-subscription.bicep](../infra/modules/eventgrid-subscription.bicep) |
-| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:450-459](../infra/main.bicep#L450-L459) |
+| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:463-472](../infra/main.bicep#L463-L472) |
 | App Service platform | Key Vault (reference) | HTTPS | — (no code) | `@Microsoft.KeyVault(...)` app setting | `-func` before phase 16, `-pay` after | Key Vault Secrets User | same |
 | API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:624](../infra/main.bicep#L624) |
-| API | Azure Managed Redis | Redis over TLS (10000) | StackExchange.Redis | `Redis:Endpoint` | `-api` | A Redis *access policy assignment* (not RBAC) | [app-integration.bicep](../infra/modules/app-integration.bicep) |
+| API | Azure Managed Redis | Redis over TLS (10000, then 85XX to each shard) | StackExchange.Redis | `Redis:Endpoint` | `-api` | A Redis *access policy assignment* (not RBAC) | [app-integration.bicep](../infra/modules/app-integration.bicep) |
 | All apps, browser | Application Insights | HTTPS | Azure Monitor exporter, JS SDK | `APPLICATIONINSIGHTS_CONNECTION_STRING`, `appInsightsConnectionString` | Not signed in: the connection string only allows *sending* | — | [monitoring.bicep](../infra/modules/monitoring.bicep) |
 | API, Functions | Payments API | HTTPS | `PaymentsApiClient` + `EntraTokenHandler` | `Payments:BaseUrl`, `Payments:Scope` | `-api`, `-func` | App role `Payments.Process` | [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh) (🔧) |
 | API, Functions | Shipping API | HTTPS | `ShippingApiClient` + `EntraTokenHandler` | `Shipping:BaseUrl`, `Shipping:Scope` | `-api`, `-func` | App role `Shipments.Manage` | same (🔧) |
 | Payments | Azure SQL (`payments`) | TDS (1433) | EF Core | `ConnectionStrings:PaymentsSql` | `-pay` | Database user (commented out in the script) | 🔧 |
-| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:493](../infra/main.bicep#L493) |
+| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:506](../infra/main.bicep#L506) |
 
 Least privilege shows in the details: the API may only *send* to Service Bus and the Functions app may only
 *receive*. Only whoever takes payments may read the gateway key. Payments and Shipping get no access to Cosmos DB,
@@ -1909,7 +1911,7 @@ last column says otherwise.
 
 Bicep writes **app settings** on each App Service and Function App. They become environment variables, and the
 `__` turns into `:` ([2.3](#23-settings-from-an-azure-app-setting-to-a-c-object)). The tables list every setting
-Bicep writes, from [main.bicep:660-786](../infra/main.bicep#L660-L786). "Always" means from phase 1. Phase 15 adds none:
+Bicep writes, from [main.bicep:663-789](../infra/main.bicep#L663-L789). "Always" means from phase 1. Phase 15 adds none:
 its scripts get their targets as Run Command parameters.
 
 **API** (App Service; the same settings go to Container Apps when you set `containerImage`):
@@ -1976,7 +1978,7 @@ the app's own configuration instead.
 - `AzureAd__*`, once Entra is on
 
 **SPA:** `config.json`, written by the pipeline from the `spaConfig` output
-([main.bicep:1048-1057](../infra/main.bicep#L1048-L1057)).
+([main.bicep:1051-1060](../infra/main.bicep#L1051-L1060)).
 
 | Key | Value |
 |---|---|
@@ -1999,7 +2001,7 @@ the app's own configuration instead.
 | Functions host storage | `UseDevelopmentStorage=true` with the Azurite emulator | `AzureWebJobsStorage__*` with the managed identity |
 | Sign-in | Off: the development handler signs you in as an admin | On from phase 6 |
 
-The deployment output **`localDevelopmentSettings`** ([main.bicep:1060-1069](../infra/main.bicep#L1060-L1069)) gives you the
+The deployment output **`localDevelopmentSettings`** ([main.bicep:1063-1072](../infra/main.bicep#L1063-L1072)) gives you the
 API's values ready to paste:
 
 ```bash

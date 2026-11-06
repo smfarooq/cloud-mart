@@ -286,12 +286,14 @@ PostgreSQL B1ms is ≈ $15/month. Private endpoints are ≈ $7/month each (this 
    - From your laptop, Cosmos Data Explorer and the SQL query editor are blocked (public access is off). Use the jumpbox.
    - The app keeps working, through VNet integration → private endpoint → private DNS.
    - `pe-nsg` lets in only the app subnets (443, 1433, 5432, 5671-5672) and the jumpbox (admin ports), and denies the
-     rest. Two services needed more thought ([network.bicep](../infra/modules/network.bicep)):
+     rest. Three services needed more thought ([network.bicep](../infra/modules/network.bicep)):
      - **SQL** uses the **Proxy** connection policy, so every connection stays on 1433. Redirect would be faster, but it
        needs 1433-65535 open to the endpoint.
      - **Cosmos DB's** SDK defaults to *direct* mode, which reaches replicas on ports anywhere in 0-65535 through a
        private endpoint. Its endpoint sits in an **application security group**, and one rule opens every port to that
        group only.
+     - **Azure Managed Redis** (phase 12) is reached on 10000. Its OSS clustering policy then sends clients to each
+       shard on an 85XX port that can change, so Redis's endpoint gets its own application security group and rule.
    - Storage keeps public access **on**, because the browser uploads to it directly. Discuss: is a short-lived,
      write-only, single-blob SAS acceptable, or should uploads go through the API (or Front Door Premium + Private Link)?
 
@@ -846,6 +848,8 @@ hub-and-spoke DNS problem.
 ## Phase 12 · Application integration (new)
 
 **Switches:** `deployAppConfig = true`, `deployRedis = true` (≈ $15+/month), `deployApim = true` (Consumption tier).
+With `enablePrivateEndpoints` on from phase 4, Redis also gets a private endpoint (≈ $7/month) and loses its public
+access. App Configuration's free tier can't have one, so it stays public with Entra ID only.
 
 ### Lab
 
@@ -863,6 +867,14 @@ hub-and-spoke DNS problem.
 2. **Azure Managed Redis.** With `Redis__Endpoint` set, HybridCache uses Redis as a shared L2 cache behind each
    instance's in-memory L1. Look at the cache-hit metrics; scale the API to three instances and reason about why
    L2 matters there. Compare three cache layers: in-process, Redis, and the Front Door edge.
+   - **Private, with private endpoints on.** From the jumpbox, `nslookup <redis>.<region>.redis.azure.net` returns a
+     **10.20.6.x** address through the `privatelink.redis.azure.net` zone. From your laptop the cache no longer
+     answers. `Redis__Endpoint` didn't change: the same name simply resolves privately inside the VNet.
+   - **Read the plumbing** in [app-integration.bicep](../infra/modules/app-integration.bicep). The private endpoint
+     uses the `redisEnterprise` sub-resource. `publicNetworkAccess` is set to `Disabled` separately: since API version
+     2025-07-01 the two are independent, so a private endpoint no longer closes the public entrance by itself.
+     `pe-nsg`'s `AllowAppsToRedis` rule opens 10000 and the 85XX shard ports to Redis's application security group
+     only.
 3. **API Management.** Import the API from its OpenAPI document:
 
    ```bash
@@ -882,6 +894,7 @@ hub-and-spoke DNS problem.
 |---|---|
 | Publish, secure, throttle and version APIs for partners | **API Management** (Consumption: serverless; v2 tiers: production with VNet integration; Premium: multi-region, full VNet injection) |
 | Shared, low-latency cache across instances | **Azure Managed Redis** |
+| A cache reachable only from your VNet | Azure Managed Redis with a **private endpoint** and `publicNetworkAccess` `Disabled` (separate settings since API 2025-07-01) |
 | Cache static or semi-static HTTP responses near users | **Front Door** caching |
 | Central settings and feature flags, dynamic refresh | **App Configuration** (secrets stay in Key Vault, referenced from App Configuration) |
 | Integration workflows with SaaS connectors | **Logic Apps** |
@@ -931,14 +944,16 @@ allows only what the apps call on public endpoints. Everything else is denied an
 Some traffic never reaches the firewall:
 
 - **Private endpoints.** Each private endpoint adds a `/32` route, which is more specific than `0.0.0.0/0`. So SQL,
-  Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs are reached directly, and so is the
-  Durable Functions task hub, which lives in Storage.
+  Cosmos DB, Key Vault, Event Hubs, Storage, Azure Managed Redis and the Payments and Shipping APIs are reached
+  directly, and so is the Durable Functions task hub, which lives in Storage.
 - **Platform endpoints.** Azure DNS (168.63.129.16) and the managed identity endpoints are answered by the platform
   and aren't routed.
 - **Inbound traffic.** Front Door → App Service and Event Grid → Functions never enter the VNet, so the firewall
   doesn't see them and can't route them asymmetrically.
-- **Azure Managed Redis (phase 12).** Its port 10000 is TLS but not HTTPS, so Basic can't allow it by name. Give it
-  a private endpoint, or use Standard with DNS proxy.
+- **Why Redis needs its private endpoint.** Azure Managed Redis (phase 12) speaks its own protocol over TLS on port
+  10000 and the 85XX shard ports. That isn't HTTPS, so Basic can't allow it by name, only by an IP address that can
+  change. Behind its private endpoint, Redis traffic never reaches the firewall at all. The other way out, Standard
+  with DNS proxy and an FQDN network rule, costs about three times as much.
 
 ### Lab
 

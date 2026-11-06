@@ -43,6 +43,8 @@ var privateDnsZoneNames = {
   // Event Hubs (any tier from Standard) and Service Bus Premium share this zone. A Service Bus Standard namespace has
   // no private endpoint, so its name never points into the zone and keeps resolving to its public address.
   serviceBus: 'privatelink.servicebus.windows.net'
+  // Phase 12: Azure Managed Redis. (Azure Cache for Redis, its predecessor, uses privatelink.redis.cache.windows.net.)
+  redis: 'privatelink.redis.azure.net'
 }
 
 // Only subnets whose code calls a private endpoint are allowed in. Bastion, Application Gateway and the phase 13 hub
@@ -53,6 +55,12 @@ var appSubnets = [subnetPrefixes.appService, subnetPrefixes.functions, subnetPre
 // an IP address that changes when the endpoint is recreated.
 resource asgCosmos 'Microsoft.Network/applicationSecurityGroups@2024-05-01' = {
   name: '${vnetName}-asg-cosmos'
+  location: location
+  tags: tags
+}
+
+resource asgRedis 'Microsoft.Network/applicationSecurityGroups@2024-05-01' = {
+  name: '${vnetName}-asg-redis'
   location: location
   tags: tags
 }
@@ -91,6 +99,21 @@ resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2024-05-01
           // endpoint. Allowing only 443 gives 503s. The ASG keeps that wide rule on Cosmos DB's endpoint alone.
           destinationApplicationSecurityGroups: [{ id: asgCosmos.id }]
           destinationPortRange: '*'
+        }
+      }
+      {
+        name: 'AllowAppsToRedis'
+        properties: {
+          priority: 115
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefixes: appSubnets
+          sourcePortRange: '*'
+          // Azure Managed Redis (phase 12): clients connect on 10000, then the OSS clustering policy sends them to each
+          // shard on an 85XX port. Those ports can change, so the whole range is open, to Redis's endpoint alone.
+          destinationApplicationSecurityGroups: [{ id: asgRedis.id }]
+          destinationPortRanges: ['10000', '8500-8599']
         }
       }
       {
@@ -363,6 +386,7 @@ func subnetId(vnetName string, subnetName string) string =>
 output vnetId string = vnet.id
 output addressPrefix string = addressPrefix
 output cosmosAsgId string = asgCosmos.id
+output redisAsgId string = asgRedis.id
 output vnetName string = vnet.name
 output appServiceSubnetId string = subnetId(vnet.name, 'snet-appservice')
 output functionsSubnetId string = subnetId(vnet.name, 'snet-functions')
