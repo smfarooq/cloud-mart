@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1881 1730" width="1881" height="1730" role="img" aria-labelledby="title desc">
   <title id="title">CloudMart architecture diagram</title>
-  <desc id="desc">Browser and React SPA reach Static Web Apps and the App Service API through Front Door. The API publishes to Service Bus and Event Hubs; Event Grid relays Blob events; Azure Functions process all three, and run the order saga that charges through the Payments API, books through the Shipping API and refunds on failure. Service Bus Standard has no private endpoints, so it is reached on its public endpoint with Entra ID; Event Grid pushes to the Function App's public endpoint. The APIs and Functions send outbound traffic through VNet-integrated subnets to private endpoints for Azure SQL, Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs, and, when phase 12's cache is on, Azure Managed Redis. Each subnet has a network security group. Optionally (phase 13), a hub VNet with Azure Firewall Basic is peered to this spoke, and a route table sends the app subnets' internet-bound traffic through the firewall, which allows only Service Bus, Entra ID and Azure Monitor; private endpoint traffic stays direct. In phase 14 a Data Factory pipeline copies the orders from Azure SQL to a Data Lake Storage Gen2 account as Parquet every night, through managed private endpoints once the database is private, and Event Hubs Capture can write the click stream there too; the API reads the lake through a blob private endpoint. Telemetry and diagnostic logs flow to Application Insights and Log Analytics, where log search and metric alerts (exceptions, dead letters, backlog, throttling, orders needing review) notify an action group.</desc>
+  <desc id="desc">Browser and React SPA reach Static Web Apps and the App Service API through Front Door. The API publishes to Service Bus and Event Hubs; Event Grid relays Blob events; Azure Functions process all three, and run the order saga that charges through the Payments API, books through the Shipping API and refunds on failure. Service Bus Standard has no private endpoints, so it is reached on its public endpoint with Entra ID; Event Grid pushes to the Function App's public endpoint. The APIs and Functions send outbound traffic through VNet-integrated subnets to private endpoints for Azure SQL, Cosmos DB, Key Vault, Event Hubs, Storage and the Payments and Shipping APIs, and, when phase 12's cache is on, Azure Managed Redis. Each subnet has a network security group. Optionally (phase 13), a hub VNet with Azure Firewall Basic is peered to this spoke, and a route table sends the app subnets' internet-bound traffic through the firewall, which allows only Service Bus, Entra ID and Azure Monitor; private endpoint traffic stays direct. Phase 13 also has a hybrid lab: a simulated on-premises VNet, peered to nothing, connects to the hub through a site-to-site VPN; gateway transit carries its traffic on to the private endpoints, and a DNS Private Resolver in the hub answers its queries for their names. The hub then exists with or without the firewall. In phase 14 a Data Factory pipeline copies the orders from Azure SQL to a Data Lake Storage Gen2 account as Parquet every night, through managed private endpoints once the database is private, and Event Hubs Capture can write the click stream there too; the API reads the lake through a blob private endpoint. Telemetry and diagnostic logs flow to Application Insights and Log Analytics, where log search and metric alerts (exceptions, dead letters, backlog, throttling, orders needing review) notify an action group.</desc>
 
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -422,7 +422,7 @@
   <rect x="345" y="800" width="1136" height="125" rx="3" class="subnet"/>
   <text x="355" y="819" class="tiletitle">snet-private-endpoints · 10.20.6.0/24</text>
   <use href="#i-nsg" x="1453" y="806" width="20" height="20"/>
-  <text x="355" y="837" class="tiletext"><tspan font-weight="700">NSG: pe-nsg</tspan> allows the app subnets on 443, 1433, 5432, 5671-5672, any port to Cosmos DB's ASG and 10000 + 85XX to Redis's ASG; jumpbox for admin.</text>
+  <text x="355" y="837" class="tiletext"><tspan font-weight="700">NSG: pe-nsg</tspan> allows the app subnets on 443, 1433, 5432, 5671-5672, any port to Cosmos DB's ASG, 10000 + 85XX to Redis's; jumpbox, on-prem: admin.</text>
 
   <!-- Phase 12 (optional): Azure Managed Redis gets its own endpoint, so the hub firewall never sees Redis traffic -->
   <g opacity="0.5">
@@ -570,7 +570,7 @@
 
   <use href="#i-nsg" x="1550" y="303" width="24" height="24"/>
   <text x="1582" y="318" class="itemname">pe-nsg · private endpoints</text>
-  <text class="itemdesc"><tspan x="1582" y="335">Apps: 443, 1433, 5432, 5671-2; ASGs:</tspan><tspan x="1582" y="351">Cosmos any port, Redis 10000 + 85XX.</tspan></text>
+  <text class="itemdesc"><tspan x="1582" y="335">Apps: 443, 1433, 5432, 5671-2; ASGs:</tspan><tspan x="1582" y="351">Cosmos, Redis; jumpbox, on-prem: admin.</tspan></text>
 
   <use href="#i-nsg" x="1550" y="367" width="24" height="24"/>
   <text x="1582" y="382" class="itemname">vm-nsg · jumpbox</text>
@@ -606,21 +606,69 @@
   <path d="M1496 930 H1510 a6 6 0 0 1 12 0 H1526 V1150 H1534" class="peer"/>
   <text x="1519" y="1128" class="flowlabel" transform="rotate(-90 1519 1128)">peering</text>
 
-  <rect x="1536" y="1048" width="300" height="232" rx="4" class="vnet"/>
-  <use href="#i-vnet" x="1544" y="1054" width="26" height="26"/>
-  <text x="1576" y="1068" font-size="14" font-weight="700" fill="#1F3864">Hub VNet · phase 13</text>
-  <text x="1576" y="1084" class="tiletext">10.0.0.0/16 · peered both ways · optional</text>
+  <!-- Phase 13 hybrid: the hub also holds the VPN gateway and the DNS resolver, and exists without the firewall.
+       Local glyphs, so this block doesn't touch the shared defs. -->
+  <defs>
+    <symbol id="i-vpngw" viewBox="0 0 48 48">
+      <rect x="3" y="6" width="42" height="36" rx="5" fill="#0078D4"/>
+      <path d="M17 22 V17 a7 7 0 0 1 14 0 V22" stroke="#ffffff" stroke-width="3" fill="none"/>
+      <rect x="13" y="21" width="22" height="15" rx="2" fill="#ffffff"/>
+      <circle cx="24" cy="27" r="2.6" fill="#0078D4"/>
+      <path d="M24 28 V32" stroke="#0078D4" stroke-width="2.4"/>
+    </symbol>
+    <symbol id="i-server" viewBox="0 0 48 48">
+      <rect x="8" y="5" width="32" height="11" rx="2" fill="#505050"/>
+      <rect x="8" y="18.5" width="32" height="11" rx="2" fill="#505050"/>
+      <rect x="8" y="32" width="32" height="11" rx="2" fill="#505050"/>
+      <circle cx="34" cy="10.5" r="2" fill="#7FBA00"/>
+      <circle cx="34" cy="24" r="2" fill="#7FBA00"/>
+      <circle cx="34" cy="37.5" r="2" fill="#7FBA00"/>
+      <path d="M13 10.5 H26 M13 24 H26 M13 37.5 H26" stroke="#BFBFBF" stroke-width="2"/>
+    </symbol>
+  </defs>
 
-  <rect x="1548" y="1094" width="276" height="122" rx="3" class="subnet"/>
-  <text x="1558" y="1112" class="tiletitle">AzureFirewallSubnet · 10.0.0.0/26</text>
-  <use href="#i-firewall" x="1558" y="1120" width="36" height="36"/>
-  <text x="1602" y="1137" class="itemname">Azure Firewall Basic</text>
-  <text x="1602" y="1153" class="itemdesc">allow-list policy, denies the rest</text>
-  <text class="tiletext"><tspan x="1558" y="1176">Allows Service Bus by name (HTTPS),</tspan><tspan x="1558" y="1192">Entra ID and Azure Monitor by tag.</tspan><tspan x="1558" y="1208">Logs: AZFWApplicationRule, NetworkRule</tspan></text>
+  <rect x="1536" y="1048" width="300" height="257" rx="4" class="vnet"/>
+  <use href="#i-vnet" x="1544" y="1052" width="26" height="26"/>
+  <text x="1576" y="1066" font-size="14" font-weight="700" fill="#1F3864">Hub VNet · phase 13</text>
+  <text x="1576" y="1081" class="tiletext">10.0.0.0/16 · peered both ways · optional</text>
 
-  <rect x="1548" y="1224" width="276" height="46" rx="3" class="subnet"/>
-  <text x="1558" y="1242" class="tiletitle">AzureFirewallManagementSubnet</text>
-  <text x="1558" y="1259" class="tiletext">10.0.0.64/26 · Basic's management NIC</text>
+  <rect x="1548" y="1089" width="276" height="84" rx="3" class="subnet"/>
+  <text x="1558" y="1105" class="tiletitle">Firewall subnets · 10.0.0.0/26, .64/26</text>
+  <use href="#i-firewall" x="1558" y="1111" width="34" height="34"/>
+  <text x="1600" y="1126" class="itemname">Azure Firewall Basic</text>
+  <text x="1600" y="1141" class="itemdesc">deployFirewall · allow-list policy</text>
+  <text x="1558" y="1164" class="tiletext">Service Bus by FQDN; Entra, Monitor by tag</text>
+
+  <rect x="1548" y="1179" width="276" height="56" rx="3" class="subnet"/>
+  <text x="1558" y="1195" class="tiletitle">snet-dns-inbound · 10.0.2.0/28</text>
+  <use href="#i-dns" x="1558" y="1201" width="26" height="26"/>
+  <text x="1592" y="1213" class="itemname">DNS Private Resolver</text>
+  <text x="1592" y="1228" class="itemdesc">inbound endpoint 10.0.2.4</text>
+
+  <rect x="1548" y="1241" width="276" height="56" rx="3" class="subnet"/>
+  <text x="1558" y="1257" class="tiletitle">GatewaySubnet · 10.0.1.0/27</text>
+  <use href="#i-vpngw" x="1558" y="1263" width="26" height="26"/>
+  <text x="1592" y="1275" class="itemname">VPN gateway · VpnGw1AZ</text>
+  <text x="1592" y="1290" class="itemdesc">gateway transit to the spoke</text>
+
+  <!-- Site-to-site VPN: the only private path between the simulated site and Azure -->
+  <path d="M1576 1297 V1325" stroke="#7030A0" stroke-width="3" fill="none"/>
+  <path d="M1582 1297 V1325" stroke="#7030A0" stroke-width="3" fill="none"/>
+  <text x="1592" y="1319" class="flowlabel" fill="#7030A0">site-to-site IPsec VPN · shared key</text>
+
+  <!-- ============ Phase 13 (optional): a simulated on-premises site, peered to nothing ============ -->
+  <rect x="1536" y="1325" width="300" height="118" rx="4" fill="#FFFFFF" stroke="#7F7F7F" stroke-width="2" stroke-dasharray="8 4"/>
+  <use href="#i-server" x="1544" y="1329" width="26" height="26"/>
+  <text x="1576" y="1343" font-size="14" font-weight="700" fill="#404040">Simulated on-premises</text>
+  <text x="1576" y="1358" class="tiletext">192.168.0.0/16 · peered to nothing · phase 13</text>
+
+  <use href="#i-vpngw" x="1548" y="1367" width="24" height="24"/>
+  <text x="1580" y="1380" class="itemname">Basic VPN gateway</text>
+  <text x="1580" y="1394" class="itemdesc">plays the site's VPN device</text>
+
+  <use href="#i-server" x="1548" y="1404" width="24" height="24"/>
+  <text x="1580" y="1417" class="itemname">Linux server + dnsmasq</text>
+  <text x="1580" y="1431" class="itemdesc">forwards Azure's zones to 10.0.2.4</text>
 
   <!-- ============ Monitoring and logging (moved down 160 for the phase 14 row) ============ -->
   <g transform="translate(0 160)">

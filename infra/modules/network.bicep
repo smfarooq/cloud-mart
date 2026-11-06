@@ -1,5 +1,6 @@
 // Phase 2: a single spoke VNet with purpose-built subnets, NSGs and private DNS zones.
 // Phase 13 (optional) adds the hub: firewall-hub.bicep, peered to this VNet, with the app subnets' egress routed to it.
+// Its hybrid half reaches the private endpoints from a simulated on-premises site, through the hub's VPN gateway.
 
 param location string
 param tags object
@@ -8,6 +9,12 @@ param addressPrefix string = '10.20.0.0/16'
 
 @description('Phase 13: the hub firewall\'s private IP. Set = the app subnets send their internet-bound traffic to it.')
 param egressFirewallIp string = ''
+
+@description('Phase 13 hybrid: the (simulated) on-premises address range. Set = pe-nsg lets it reach the private endpoints.')
+param onPremisesAddressPrefix string = ''
+
+@description('Phase 13 hybrid: the VNet of a DNS Private Resolver (the hub). Set = the private DNS zones are linked to it too.')
+param resolverVnetId string = ''
 
 // Exported so the hub's firewall rules can name these subnets as sources.
 @export()
@@ -122,6 +129,26 @@ resource nsgPrivateEndpoints 'Microsoft.Network/networkSecurityGroups@2024-05-01
           destinationPortRanges: ['443', '1433', '5432'] // curl, sqlcmd, psql: what the labs run from the jumpbox
         }
       }
+      // Phase 13 hybrid: on-premises arrives through the hub's VPN gateway. "VirtualNetwork" would already include it
+      // (the tag grows to cover every range a gateway connects), so name the range: on-premises gets what the jumpbox
+      // gets, not the apps' AMQP ports or Cosmos DB's direct-mode range.
+      ...(empty(onPremisesAddressPrefix)
+        ? []
+        : [
+            {
+              name: 'AllowOnPremisesToPrivateEndpoints'
+              properties: {
+                priority: 130
+                direction: 'Inbound'
+                access: 'Allow'
+                protocol: 'Tcp'
+                sourceAddressPrefix: onPremisesAddressPrefix
+                sourcePortRange: '*'
+                destinationAddressPrefix: subnetPrefixes.privateEndpoints
+                destinationPortRanges: ['443', '1433', '5432']
+              }
+            }
+          ])
       {
         name: 'DenyEverythingElse'
         properties: {
@@ -338,10 +365,26 @@ resource zoneLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-0
   }
 ]
 
+// Phase 13 hybrid: a DNS Private Resolver answers from the zones linked to its own VNet, the hub, not this one. Without
+// these links its inbound endpoint returns the public addresses, as if private endpoints didn't exist.
+resource resolverZoneLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = [
+  for (zone, i) in items(privateDnsZoneNames): if (!empty(resolverVnetId)) {
+    parent: zones[i]
+    name: '${last(split(resolverVnetId, '/'))}-link'
+    location: 'global'
+    tags: tags
+    properties: {
+      virtualNetwork: { id: resolverVnetId }
+      registrationEnabled: false
+    }
+  }
+]
+
 func subnetId(vnetName string, subnetName string) string =>
   resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, subnetName)
 
 output vnetId string = vnet.id
+output addressPrefix string = addressPrefix
 output cosmosAsgId string = asgCosmos.id
 output redisAsgId string = asgRedis.id
 output vnetName string = vnet.name

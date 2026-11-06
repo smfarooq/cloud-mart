@@ -157,6 +157,8 @@ them (at most it detects them):
   *recognises* them, in [PlatformInfoProvider.cs](../src/CloudMart.Api/PlatformInfoProvider.cs#L95-L129).
 - **Virtual network, private endpoints, Azure Firewall, Bastion, jumpbox:** network isolation. The code is unchanged,
   except one setting that switches Service Bus to WebSockets so the firewall can allow it (phase 13).
+- **VPN gateways, DNS Private Resolver, the simulated on-premises site:** phase 13's hybrid lab. A server in another
+  network reaches the private endpoints over a VPN; nothing in the code changes.
 - **Application Gateway, API Management, Grafana, Azure Policy, budgets:** platform and governance features with no
   code at all. API Management and Logic Apps are 📝 lab exercises.
 
@@ -185,7 +187,9 @@ Storage). The saga calls them over HTTPS with Entra ID tokens instead of calling
 The switches live in [infra/main.bicepparam](../infra/main.bicepparam). Each one makes Bicep create a resource
 *and* set the app settings that make the code use it. The table shows the switches that change what the
 application code does; the full list, including network and governance switches, is in the
-[README](../README.md#deploy-to-azure).
+[README](../README.md#deploy-to-azure). Phase 13's hybrid switches (`deployOnPremSim`, `deployVpnGateway`,
+`deployDnsResolver`) are among those: a VPN to on-premises needs no code, because a server on the other side reaches
+the same private endpoints the apps use.
 
 | Phase | Switch (default) | Azure resources created | What the code starts doing |
 |---|---|---|---|
@@ -496,7 +500,7 @@ pattern:
 
 **Permissions.** The account has `disableLocalAuth: true`, so account keys don't work at all. Bicep gives the API
 identity, the Functions identity and you the built-in **Cosmos DB Built-in Data Contributor** role
-([main.bicep:428](../infra/main.bicep#L428)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
+([main.bicep:500](../infra/main.bicep#L500)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
 portal's *Access control (IAM)* blade.
 
 ### 2.7 Azure SQL and PostgreSQL: orders and the outbox
@@ -527,7 +531,7 @@ case "PostgreSql":
 ```
 
 - **SQL Server:** the SQL client library fetches the token itself. The connection string Bicep builds
-  ([main.bicep:569-570](../infra/main.bicep#L569-L570)) contains no password:
+  ([main.bicep:644-645](../infra/main.bicep#L644-L645)) contains no password:
   `Server=tcp:<server>.database.windows.net,1433;Database=cloudmart;Authentication=Active Directory Managed Identity;User Id=<identity client id>;Encrypt=True;Connect Timeout=30;`
 - **PostgreSQL:** Npgsql has no built-in Entra support, so the code asks `DefaultAzureCredential` for a token for
   `https://ossrdbms-aad.database.windows.net/.default` and passes it as the password. It renews it every 30 minutes.
@@ -774,7 +778,7 @@ public async Task FulfillOrder(
 ```
 
 **`Connection = "ServiceBus"` is a prefix, not a connection string.** The host looks for app settings that start with
-`ServiceBus__`. Bicep sets three ([main.bicep:644-649](../infra/main.bicep#L644-L649)):
+`ServiceBus__`. Bicep sets three ([main.bicep:719-724](../infra/main.bicep#L719-L724)):
 
 ```text
 ServiceBus__fullyQualifiedNamespace = <namespace>.servicebus.windows.net
@@ -785,7 +789,7 @@ ServiceBus__clientId                = <Functions identity client id>
 This is an **identity-based connection**: the host signs in to Service Bus as the managed identity. The Event Hubs
 trigger works the same way with the `EventHubs__` prefix. The host's own storage uses
 `AzureWebJobsStorage__accountName`, `__credential` and `__clientId`
-([main.bicep:632-635](../infra/main.bicep#L632-L635)) instead of the usual storage connection string.
+([main.bicep:707-710](../infra/main.bicep#L707-L710)) instead of the usual storage connection string.
 
 > **Watch the spelling.** The API reads `ServiceBus__FullyQualifiedNamespace` (capital F) through `CloudMartSettings`.
 > The Functions trigger reads `ServiceBus__fullyQualifiedNamespace` (lower-case f), the name the Functions host
@@ -800,7 +804,7 @@ trigger works the same way with the `EventHubs__` prefix. The host's own storage
 
 **Disabled until phase 5.** Until messaging is deployed there is nothing to listen to, so Bicep sets
 `AzureWebJobs.FulfillOrder.Disabled = true` and the same for the other three message triggers
-([main.bicep:652-656](../infra/main.bicep#L652-L656)). `DailyOrderReport` stays disabled until a database exists.
+([main.bicep:727-731](../infra/main.bicep#L727-L731)). `DailyOrderReport` stays disabled until a database exists.
 
 **Event Grid needs no connection setting.** The Event Grid *subscription* (Bicep) names the Function as its endpoint,
 and Azure delivers events straight to it. The function checks the event type and the container prefix and ignores
@@ -950,7 +954,7 @@ contain `:`, so `--` stands in for it. Needs the **Key Vault Secrets User** role
 CloudMart reads the same secret a second way: a **Key Vault reference**. The Functions app (before phase 16) and the
 Payments API get an app setting whose *value* is
 `@Microsoft.KeyVault(VaultName=<vault>;SecretName=PaymentGateway--ApiKey)`
-([main.bicep:594](../infra/main.bicep#L594)). App Service resolves it using the site's identity, and the code just
+([main.bicep:669](../infra/main.bicep#L669)). App Service resolves it using the site's identity, and the code just
 reads `PaymentGateway:ApiKey` like any other setting.
 
 | | Configuration provider (API) | Key Vault reference (Functions, Payments) |
@@ -960,7 +964,7 @@ reads `PaymentGateway:ApiKey` like any other setting.
 | Picking up a new secret version | Restart the app | Automatic, within about a day, or on restart |
 
 In phase 16 only the Payments API keeps access to the secret: Bicep removes `KeyVault__Uri` and the role from the API
-and Functions ([main.bicep:365-374](../infra/main.bicep#L365-L374)).
+and Functions ([main.bicep:437-446](../infra/main.bicep#L437-L446)).
 
 **App Configuration and feature flags** ([lines 29-38](../src/CloudMart.Api/Program.cs#L29-L38)):
 
@@ -1160,6 +1164,8 @@ Everything below is in the repository today, unless marked otherwise.
 | App registrations and app roles for Payments and Shipping | 🔧 | `deploy/entra/setup-service-auth.sh` |
 | App Configuration values and the `Trending` flag | 🔧 | Created with `az appconfig` commands in phase 12 |
 | Data Factory database user, managed private endpoint approvals and nightly trigger | 🔧 | Phase 14 lab: the grant script, `az network private-endpoint-connection approve`, and `az datafactory trigger create` from [nightly-export-trigger.json](../deploy/analytics/nightly-export-trigger.json) |
+| Hybrid network: simulated on-premises site, site-to-site VPN, DNS Private Resolver | 🔧 | Bicep builds all of it (phase 13). The site's conditional forwarders are set up by hand on its server, in the lab |
+| ExpressRoute, Virtual WAN, hybrid identity (Entra Connect / Cloud Sync, Application Proxy, Arc) | 📝 | Phase 13 design questions |
 | Order saga with Durable Functions | ✅ | |
 | Customer notifications | 📝 | `NotifyCustomer` only writes a log line |
 | Daily order report | Partial | `DailyOrderReport` computes the summary and logs it; it isn't emailed or stored |
@@ -1190,22 +1196,22 @@ a permission on the resource**. The table lists all of them. "Signs in as" names
 | API, Functions | Cosmos DB | HTTPS (443) | `CosmosClient` | `Cosmos:Endpoint` | `-api`, `-func` | Cosmos DB Built-in Data Contributor (data plane) | [cosmos.bicep](../infra/modules/cosmos.bicep) |
 | API, Functions | Azure SQL | TDS (1433) | EF Core + SqlClient | `ConnectionStrings:OrdersSql` | `-api`, `-func` | Database users: api = read, write, DDL; func = read, write | [grant script](../deploy/sql/grant-managed-identities.sql) (🔧) |
 | API, Functions | PostgreSQL | PostgreSQL (5432) | EF Core + Npgsql | `ConnectionStrings:OrdersPostgres` | `-api`, `-func` | Postgres roles from `pgaadauth_create_principal` | [grant script](../deploy/postgres/grant-managed-identities.sql) (🔧) |
-| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:396-397](../infra/main.bicep#L396-L397) |
-| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:400-402](../infra/main.bicep#L400-L402) |
-| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:516](../infra/main.bicep#L516) |
-| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:517](../infra/main.bicep#L517) |
-| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:521](../infra/main.bicep#L521) |
-| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:522](../infra/main.bicep#L522) |
+| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:468-469](../infra/main.bicep#L468-L469) |
+| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:472-474](../infra/main.bicep#L472-L474) |
+| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:588](../infra/main.bicep#L588) |
+| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:589](../infra/main.bicep#L589) |
+| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:593](../infra/main.bicep#L593) |
+| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:594](../infra/main.bicep#L594) |
 | Storage | Event Grid → Functions | HTTPS push | Event Grid subscription | Bicep, not app settings | Azure (system topic) | Dead letters: Storage Blob Data Contributor on `eventgrid-deadletter` | [eventgrid-subscription.bicep](../infra/modules/eventgrid-subscription.bicep) |
-| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:365-374](../infra/main.bicep#L365-L374) |
+| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:437-446](../infra/main.bicep#L437-L446) |
 | App Service platform | Key Vault (reference) | HTTPS | — (no code) | `@Microsoft.KeyVault(...)` app setting | `-func` before phase 16, `-pay` after | Key Vault Secrets User | same |
-| API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:539](../infra/main.bicep#L539) |
+| API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:611](../infra/main.bicep#L611) |
 | API | Azure Managed Redis | Redis over TLS (10000, then 85XX to each shard) | StackExchange.Redis | `Redis:Endpoint` | `-api` | A Redis *access policy assignment* (not RBAC) | [app-integration.bicep](../infra/modules/app-integration.bicep) |
 | All apps, browser | Application Insights | HTTPS | Azure Monitor exporter, JS SDK | `APPLICATIONINSIGHTS_CONNECTION_STRING`, `appInsightsConnectionString` | Not signed in: the connection string only allows *sending* | — | [monitoring.bicep](../infra/modules/monitoring.bicep) |
 | API, Functions | Payments API | HTTPS | `PaymentsApiClient` + `EntraTokenHandler` | `Payments:BaseUrl`, `Payments:Scope` | `-api`, `-func` | App role `Payments.Process` | [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh) (🔧) |
 | API, Functions | Shipping API | HTTPS | `ShippingApiClient` + `EntraTokenHandler` | `Shipping:BaseUrl`, `Shipping:Scope` | `-api`, `-func` | App role `Shipments.Manage` | same (🔧) |
 | Payments | Azure SQL (`payments`) | TDS (1433) | EF Core | `ConnectionStrings:PaymentsSql` | `-pay` | Database user (commented out in the script) | 🔧 |
-| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:408](../infra/main.bicep#L408) |
+| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:480](../infra/main.bicep#L480) |
 
 Least privilege shows in the details: the API may only *send* to Service Bus and the Functions app may only
 *receive*. Only whoever takes payments may read the gateway key. Payments and Shipping get no access to Cosmos DB,
@@ -1892,12 +1898,13 @@ last column says otherwise.
 | Payments and Shipping services | Two more App Services, `payments` database, `shipments` table | `deployPayments`, `deployShipping` | Uncomment and run the `payments` part of the SQL grant script; run [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh); set `entraPaymentsClientId` and `entraShippingClientId` |
 | Orders exported to a data lake | Data Lake Storage Gen2 account (`orders`, `clickstream`), Data Factory with the `export-orders` pipeline; with private endpoints, a managed VNet and two managed private endpoints | `deployAnalytics` (needs `deploySql`) | Run the phase 14 part of the SQL grant script; approve the managed private endpoints; create and start the trigger from [nightly-export-trigger.json](../deploy/analytics/nightly-export-trigger.json) ([phase 14](learning-path.md#phase-14--data-integration-and-analytics-new-hands-on)) |
 | Click stream in the data lake | Event Hubs Capture on `telemetry`, the namespace's system-assigned identity and its role on `clickstream` | `enableClickstreamCapture` (needs `deployAnalytics`, `deployMessaging`; about $73/month) | — |
+| On-premises reaching the private endpoints (lab) | The hub VNet; a simulated site (VNet, VM, Bastion Developer); two VPN gateways with public IPs, two local network gateways and two connections; gateway transit on the peering; a DNS Private Resolver inbound endpoint and zone links to the hub; a `pe-nsg` rule for 192.168.0.0/16 | `deployOnPremSim`, `deployVpnGateway` (about $187/month), `deployDnsResolver` (about $180/month); all need `enablePrivateEndpoints` | Set up the site's conditional forwarders; delete the gateways and the resolver after the lab ([phase 13](learning-path.md#hybrid-lab-on-premises-over-a-vpn)) |
 
 ### 6.2 How the app is configured to connect
 
 Bicep writes **app settings** on each App Service and Function App. They become environment variables, and the
 `__` turns into `:` ([2.3](#23-settings-from-an-azure-app-setting-to-a-c-object)). The tables list every setting
-Bicep writes, from [main.bicep:575-701](../infra/main.bicep#L575-L701). "Always" means from phase 1.
+Bicep writes, from [main.bicep:650-776](../infra/main.bicep#L650-L776). "Always" means from phase 1.
 
 **API** (App Service; the same settings go to Container Apps when you set `containerImage`):
 
@@ -1963,7 +1970,7 @@ the app's own configuration instead.
 - `AzureAd__*`, once Entra is on
 
 **SPA:** `config.json`, written by the pipeline from the `spaConfig` output
-([main.bicep:918-927](../infra/main.bicep#L918-L927)).
+([main.bicep:996-1005](../infra/main.bicep#L996-L1005)).
 
 | Key | Value |
 |---|---|
@@ -1986,7 +1993,7 @@ the app's own configuration instead.
 | Functions host storage | `UseDevelopmentStorage=true` with the Azurite emulator | `AzureWebJobsStorage__*` with the managed identity |
 | Sign-in | Off: the development handler signs you in as an admin | On from phase 6 |
 
-The deployment output **`localDevelopmentSettings`** ([main.bicep:930-939](../infra/main.bicep#L930-L939)) gives you the
+The deployment output **`localDevelopmentSettings`** ([main.bicep:1008-1017](../infra/main.bicep#L1008-L1017)) gives you the
 API's values ready to paste:
 
 ```bash

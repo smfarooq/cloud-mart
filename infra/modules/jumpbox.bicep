@@ -1,5 +1,6 @@
 // Phase 2/3: a small Linux VM with no public IP, reached through Azure Bastion, signing in with Entra ID.
 // Once private endpoints are on, this is how you reach the data services (nslookup them from here!).
+// Phase 13 reuses it as the simulated on-premises server (onprem-sim.bicep), with its own Bastion Developer.
 
 import { roles } from 'types.bicep'
 

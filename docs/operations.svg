@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1880 2050" width="1880" height="2050" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1880 2220" width="1880" height="2220" role="img" aria-labelledby="title desc">
   <title id="title">CloudMart deployment and operations diagram</title>
-  <desc id="desc">How CloudMart is built, deployed and run. An Azure Pipelines run builds once (tests, four app packages, the SPA, Bicep lint), then deploys infrastructure (what-if, then a subscription deployment) and the applications (zip deploys to App Service and Functions, the Payments and Shipping APIs, the SPA through the Static Web Apps CLI with a per-environment config.json, and a container image through ACR Tasks), through a workload identity federation service connection and an optional approval check. Also: parameter files and environments, how deployment outputs become app settings and config.json, deployment stacks, policy and budget, managed identities and Key Vault, schema delivery with EnsureCreated versus an EF migration bundle, rollback per service, and the alerts and health checks used after a deploy.</desc>
+  <desc id="desc">How CloudMart is built, deployed and run. An Azure Pipelines run builds once (tests, four app packages, the SPA, Bicep lint), then deploys infrastructure (what-if, then a subscription deployment) and the applications (zip deploys to App Service and Functions, the Payments and Shipping APIs, the SPA through the Static Web Apps CLI with a per-environment config.json, and a container image through ACR Tasks), through a workload identity federation service connection and an optional approval check. Also: parameter files and environments, how deployment outputs become app settings and config.json, deployment stacks, policy and budget, managed identities and Key Vault, schema delivery with EnsureCreated versus an EF migration bundle, rollback per service, and the alerts and health checks used after a deploy. Phase 14: stage 2 deploys the Data Factory, its linked services, datasets, export pipeline and alert, while the nightly trigger is created and started once with the CLI, because ARM cannot update a started trigger.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#404040"/>
@@ -136,7 +136,7 @@
     </symbol>
   </defs>
 
-  <rect width="1880" height="2050" fill="#ffffff"/>
+  <rect width="1880" height="2220" fill="#ffffff"/>
   <!-- Title -->
   <rect x="30" y="24" width="430" height="66" fill="#4472C4"/>
   <text x="245" y="69" font-size="34" fill="#ffffff" text-anchor="middle">Deployment &amp; Operations</text>
@@ -544,4 +544,25 @@
   <text x="1364" y="1950" class="itemname">Smoke test after stage 3 (not in the pipeline yet)</text>
   <text x="1364" y="1968" class="itemdesc">Call /health/ready and fail the run, so the pipeline catches a bad</text>
   <text x="1364" y="1984" class="itemdesc">deploy before users do.</text>
+  <!-- ============ Phase 14: Data Factory ============ -->
+  <rect x="30" y="2040" width="1820" height="150" class="zone" rx="6"/>
+  <text x="46" y="2064" class="zonetitle">Phase 14 · Data Factory: what stage 2 deploys, and the one part it doesn't</text>
+  <rect x="46" y="2078" width="580" height="96" class="svc"/>
+  <use href="#i-template" x="56" y="2096" width="36" height="36"/>
+  <text x="102" y="2099" class="itemname">Stage 2 deploys the factory with everything else</text>
+  <text x="102" y="2117" class="itemdesc">Linked services (SQL through the failover-group listener, and the lake), datasets,</text>
+  <text x="102" y="2133" class="itemdesc">the export-orders pipeline, managed private endpoints and the failed-run alert,</text>
+  <text x="102" y="2149" class="itemdesc">all from infra/modules/analytics.bicep. No keys: the factory's own identity.</text>
+  <rect x="640" y="2078" width="600" height="96" class="note"/>
+  <use href="#i-pipelines" x="650" y="2096" width="36" height="36"/>
+  <text x="696" y="2099" class="itemname">You create and start the nightly trigger once (lab 14.5)</text>
+  <text x="696" y="2117" class="mono">az datafactory trigger create --properties @…/nightly-export-trigger.json</text>
+  <text x="696" y="2133" class="mono">az datafactory trigger start --name nightly-export</text>
+  <text x="696" y="2149" class="warn">not in Bicep: ARM can't update a started trigger, so every later deploy would fail</text>
+  <rect x="1254" y="2078" width="580" height="96" class="optnote"/>
+  <use href="#i-approval" x="1264" y="2096" width="36" height="36"/>
+  <text x="1310" y="2099" class="itemname">If the pipeline owned the trigger (not done yet)</text>
+  <text x="1310" y="2117" class="itemdesc">Stop the trigger before stage 2 and start it again after: the usual</text>
+  <text x="1310" y="2133" class="itemdesc">Data Factory CI/CD pattern. Rollback is the same as for Bicep: revert</text>
+  <text x="1310" y="2149" class="itemdesc">the commit, and the pipeline JSON goes back with it.</text>
 </svg>

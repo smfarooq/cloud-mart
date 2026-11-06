@@ -86,6 +86,14 @@ param deployFirewall = false
 // With the firewall, Service Bus accepts only its egress IP and these: add yours (curl ifconfig.me) for the portal's
 // Service Bus Explorer and local runs.
 param adminIpAddresses = []
+// Phase 13 · Hybrid: a simulated on-premises site (VNet + VM), a site-to-site VPN into the hub, and a DNS Private
+// Resolver. Needs deployNetwork, enablePrivateEndpoints and jumpboxSshPublicKey; deployFirewall is optional (the hub
+// is created without it). COST: the site ≈ $10/month; the VPN ≈ $0.26/hour (≈ $187/month) and takes 30-45 minutes to
+// create; the resolver ≈ $0.25/hour (≈ $180/month). Do the lab in one day, then delete them (see the lab's clean-up).
+param deployOnPremSim = false
+param deployVpnGateway = false
+param deployDnsResolver = false
+// vpnSharedKey: leave it out. A new key is generated on every deployment and both ends get it; it is never in the repo.
 
 // Phase 14 · Data integration and analytics: a Data Lake Gen2 account and a Data Factory export of the orders.
 // Needs deploySql. Data Factory bills per run (cents a month for one nightly copy).
