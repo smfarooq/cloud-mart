@@ -782,8 +782,8 @@ reach an app that can't write.
 | Step | Action | Check |
 |---|---|---|
 | 1 Declare | One named person decides to fail over. The RTO clock started at the outage, not at the decision. | Service Health shows a regional incident, not just a problem in your app |
-| 2 Data | **SQL:** `az sql failover-group set-primary` on `<server>-dr`, with `--allow-data-loss` if the primary is unreachable. **Cosmos DB:** service-managed failover. **Storage:** customer-initiated account failover. **Event Hubs:** `georecovery-alias fail-over`. | Each service reports the second region as primary |
-| 3 Compute | The phase 10 second copy is already deployed with `deploySql = false` and `sharedSqlListenerFqdn` set to the listener. Scale it out, and delete the Event Hubs checkpoints. | `/health/ready` is green in the second region |
+| 2 Data | **SQL:** `az sql failover-group set-primary` on `<server>-dr`, with `--allow-data-loss` if the primary is unreachable. **Cosmos DB:** service-managed failover. **Storage:** customer-initiated account failover. **Event Hubs:** `georecovery-alias fail-over`. With phase 14's Capture on, give the new primary namespace a system-assigned identity and **Storage Blob Data Contributor** on the lake's `clickstream` container: the pairing copies Capture's settings, not its role, so Capture stays stopped until you do. | Each service reports the second region as primary |
+| 3 Compute | The phase 10 second copy is already deployed with `deploySql = false` and `sharedSqlListenerFqdn` set to the listener. Scale it out, and delete the Event Hubs checkpoints. Phase 14's Data Factory isn't in the second copy (it needs `deploySql`), so the nightly export waits for the primary region. | `/health/ready` is green in the second region |
 | 4 Traffic | Front Door's probes have already moved traffic to priority 2. Disable the primary origin so traffic can't flap back while it's half healthy. | The Platform page shows the second region |
 | 5 Verify | Place an order and follow its trace; watch the phase 7 alerts. | The order confirms, with no dead letters |
 | 6 Fail back | Once the primary region is healthy, do the same in reverse. **SQL** and **Cosmos DB:** switch primary and write region back. **Storage:** turn geo-redundancy on again, because an account failover leaves it LRS. **Event Hubs:** pair again. | The same checks, in the first region |
@@ -806,6 +806,13 @@ reach an app that can't write.
   storage account fails over, or when the primary region returns.
 - **Event Hubs:** events nobody had read yet in the primary namespace. The click stream is best effort, so that's
   accepted.
+- **The phase 14 data lake:** it's LRS on purpose, so it's unavailable with its region and can be lost with it.
+  - **Order snapshots:** run `export-orders` again once the factory is back. The data comes from SQL, which survived.
+  - **Captured clicks:** these can't be rebuilt beyond Event Hubs' one-day retention. If that history matters, move
+    the lake up the storage ladder to ZRS or GZRS (`analytics.bicep`).
+  - **SQL failover with private endpoints on:** the factory's managed private endpoint points at the primary server
+    only. If SQL fails over while the factory is still up, add and approve one for `<server>-dr`, or the export
+    can't reach the listener.
 
 **The second copy's identities.** The second copy's managed identities are different principals. Before the drill, run
 [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql) once more on the **primary** server, with
