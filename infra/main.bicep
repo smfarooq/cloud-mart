@@ -11,6 +11,7 @@ targetScope = 'subscription'
 
 import { roles } from 'modules/types.bicep'
 import { subnetPrefixes as spokeSubnets } from 'modules/network.bicep'
+import { addressSpace as onPremAddressSpace } from 'modules/onprem-sim.bicep'
 
 @minLength(3)
 @maxLength(10)
@@ -129,6 +130,15 @@ param deployApim bool = false
 param deployFirewall bool = false
 @description('Your public IP addresses (curl ifconfig.me). With the firewall, Service Bus accepts only its egress IP and these, so the portal\'s Service Bus Explorer and local runs keep working. With private endpoints, the phase 14 data lake accepts these too.')
 param adminIpAddresses string[] = []
+@description('Requires deployNetwork, enablePrivateEndpoints and jumpboxSshPublicKey. A simulated on-premises site: a VNet (192.168.0.0/16) peered to nothing, with a small Linux VM behind a free Bastion Developer. About $10/month. Also creates the hub VNet, without the firewall unless deployFirewall is on.')
+param deployOnPremSim bool = false
+@description('Requires deployOnPremSim. A site-to-site VPN between the hub (VpnGw1AZ) and the simulated site (Basic), with gateway transit so on-premises reaches the spoke\'s private endpoints. About $0.26/hour (≈ $187/month); 30-45 minutes to create. Deploy, do the lab, delete it.')
+param deployVpnGateway bool = false
+@secure()
+@description('The VPN\'s pre-shared key. Generated on every deployment unless you pass one; both connections always get the same value.')
+param vpnSharedKey string = newGuid()
+@description('Requires deployOnPremSim. An Azure DNS Private Resolver inbound endpoint in the hub, so on-premises can resolve private endpoint names. About $0.25/hour (≈ $180/month). Deploy, do the lab, delete it.')
+param deployDnsResolver bool = false
 
 // ------------------------------------------------------------------ Phase 14 · Data integration and analytics
 @description('Requires deploySql. A Data Lake Storage Gen2 account and a Data Factory pipeline that copies the orders to it as Parquet. Pay per run: cents a month.')
@@ -176,6 +186,11 @@ var names = {
   hubVnet: 'vnet-${prefix}-hub'
   firewall: 'afw-${prefix}'
   firewallPolicy: 'afwp-${prefix}'
+  hubGateway: 'vgw-${prefix}-hub'
+  onPremVnet: 'vnet-${prefix}-onprem'
+  onPremGateway: 'vgw-${prefix}-onprem'
+  onPremVm: 'vm-${take(compact, 6)}-onprem'
+  dnsResolver: 'dnspr-${prefix}'
   keyVault: 'kv-${compact}-${take(suffix, 8)}'
   storage: take('st${compact}${suffix}', 24)
   dataLake: take('dls${compact}${suffix}', 24)
@@ -216,6 +231,11 @@ var usePrivateEndpoints = deployNetwork && enablePrivateEndpoints
 // Phase 13 needs private endpoints: the firewall only allows the few public services the apps use, so without them
 // every data store would be blocked.
 var useFirewall = deployFirewall && usePrivateEndpoints
+// Phase 13 hybrid: the simulated site exists to reach the private endpoints. It needs the hub, but not the firewall.
+var useOnPremSim = deployOnPremSim && usePrivateEndpoints
+var useHub = useFirewall || useOnPremSim
+var useVpn = deployVpnGateway && useOnPremSim
+var useDnsResolver = deployDnsResolver && useOnPremSim
 var lockSpa = lockStaticWebAppToFrontDoor && deployFrontDoor && deployStaticWebApp
 var needAcr = deployAcr || deployAks || (deployContainerApps && !empty(containerImage))
 
@@ -288,8 +308,9 @@ module identity 'modules/identity.bicep' = {
 }
 
 // Phase 13: the hub goes first. The spoke's route table needs the firewall's private IP, which Azure assigns when it
-// creates the firewall, so the spoke waits for the hub, and the peering waits for both.
-module firewallHub 'modules/firewall-hub.bicep' = if (useFirewall) {
+// creates the firewall, so the spoke waits for the hub, and the peering waits for both. The hybrid lab needs the hub
+// too, but not the firewall.
+module firewallHub 'modules/firewall-hub.bicep' = if (useHub) {
   scope: rg
   name: 'firewall-hub'
   params: {
@@ -298,6 +319,7 @@ module firewallHub 'modules/firewall-hub.bicep' = if (useFirewall) {
     vnetName: names.hubVnet
     firewallName: names.firewall
     policyName: names.firewallPolicy
+    deployFirewall: useFirewall
     workspaceId: monitoring.outputs.workspaceId
     appSubnetPrefixes: [spokeSubnets.appService, spokeSubnets.functions, spokeSubnets.containerApps]
     containerAppsSubnetPrefix: spokeSubnets.containerApps
@@ -318,16 +340,66 @@ module network 'modules/network.bicep' = if (deployNetwork) {
     tags: tags
     vnetName: names.vnet
     egressFirewallIp: useFirewall ? firewallHub!.outputs.privateIp : ''
+    // Phase 13 hybrid: pe-nsg admits the simulated site's range; the resolver's VNet (the hub) gets the DNS zones.
+    onPremisesAddressPrefix: useOnPremSim ? onPremAddressSpace : ''
+    resolverVnetId: useDnsResolver ? firewallHub!.outputs.vnetId : ''
   }
 }
 
-module hubPeering 'modules/vnet-peering.bicep' = if (useFirewall) {
+// Phase 13 hybrid: the simulated on-premises site, the VPN between it and the hub, and the hub's DNS resolver.
+module onPremSim 'modules/onprem-sim.bicep' = if (useOnPremSim) {
+  scope: rg
+  name: 'onprem-sim'
+  params: {
+    location: location
+    tags: tags
+    vnetName: names.onPremVnet
+    vmName: names.onPremVm
+    sshPublicKey: jumpboxSshPublicKey
+    loginPrincipalId: deployerPrincipalId
+  }
+}
+
+module vpn 'modules/vpn.bicep' = if (useVpn) {
+  scope: rg
+  name: 'vpn'
+  params: {
+    location: location
+    tags: tags
+    workspaceId: monitoring.outputs.workspaceId
+    hubGatewayName: names.hubGateway
+    onPremGatewayName: names.onPremGateway
+    hubGatewaySubnetId: firewallHub!.outputs.gatewaySubnetId
+    onPremGatewaySubnetId: onPremSim!.outputs.gatewaySubnetId
+    azureAddressPrefixes: [firewallHub!.outputs.addressPrefix, network!.outputs.addressPrefix]
+    onPremAddressPrefixes: [onPremAddressSpace]
+    sharedKey: vpnSharedKey
+  }
+}
+
+module dnsResolver 'modules/dns-resolver.bicep' = if (useDnsResolver) {
+  scope: rg
+  name: 'dns-resolver'
+  params: {
+    name: names.dnsResolver
+    location: location
+    tags: tags
+    vnetId: firewallHub!.outputs.vnetId
+    inboundSubnetId: firewallHub!.outputs.dnsInboundSubnetId
+    inboundIp: firewallHub!.outputs.dnsInboundIp
+  }
+}
+
+module hubPeering 'modules/vnet-peering.bicep' = if (useHub) {
   scope: rg
   name: 'hub-spoke-peering'
   params: {
     hubVnetName: firewallHub!.outputs.vnetName
     spokeVnetName: network!.outputs.vnetName
+    // Azure refuses useRemoteGateways until the hub has a gateway, so with the VPN the peering waits for it.
+    useGatewayTransit: useVpn
   }
+  dependsOn: [vpn]
 }
 
 var peSubnetId = usePrivateEndpoints ? network!.outputs.privateEndpointSubnetId : ''
@@ -952,6 +1024,9 @@ output shippingIdentityName string = identity.outputs.shippingName
 output appGatewayUrl string = (deployAppGateway && deployNetwork && deployAppService) ? 'http://${appGateway!.outputs.publicHostName}' : ''
 output grafanaUrl string = deployGrafana ? grafana!.outputs.url : ''
 output firewallPublicIp string = useFirewall ? firewallHub!.outputs.publicIp : ''
+output onPremVmName string = useOnPremSim ? onPremSim!.outputs.vmName : ''
+@description('Phase 13 hybrid: where on-premises DNS forwards Azure\'s zones.')
+output dnsResolverInboundIp string = useDnsResolver ? dnsResolver!.outputs.inboundIp : ''
 output dataLakeName string = useAnalytics ? analytics!.outputs.lakeName : ''
 output dataFactoryName string = useAnalytics ? analytics!.outputs.factoryName : ''
 output postgresFqdn string = deployPostgres ? postgres!.outputs.fqdn : ''

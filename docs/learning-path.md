@@ -783,8 +783,8 @@ reach an app that can't write.
 | Step | Action | Check |
 |---|---|---|
 | 1 Declare | One named person decides to fail over. The RTO clock started at the outage, not at the decision. | Service Health shows a regional incident, not just a problem in your app |
-| 2 Data | **SQL:** `az sql failover-group set-primary` on `<server>-dr`, with `--allow-data-loss` if the primary is unreachable. **Cosmos DB:** service-managed failover. **Storage:** customer-initiated account failover. **Event Hubs:** `georecovery-alias fail-over`. | Each service reports the second region as primary |
-| 3 Compute | The phase 10 second copy is already deployed with `deploySql = false` and `sharedSqlListenerFqdn` set to the listener. Scale it out, and delete the Event Hubs checkpoints. | `/health/ready` is green in the second region |
+| 2 Data | **SQL:** `az sql failover-group set-primary` on `<server>-dr`, with `--allow-data-loss` if the primary is unreachable. **Cosmos DB:** service-managed failover. **Storage:** customer-initiated account failover. **Event Hubs:** `georecovery-alias fail-over`. With phase 14's Capture on, give the new primary namespace a system-assigned identity and **Storage Blob Data Contributor** on the lake's `clickstream` container: the pairing copies Capture's settings, not its role, so Capture stays stopped until you do. | Each service reports the second region as primary |
+| 3 Compute | The phase 10 second copy is already deployed with `deploySql = false` and `sharedSqlListenerFqdn` set to the listener. Scale it out, and delete the Event Hubs checkpoints. Phase 14's Data Factory isn't in the second copy (it needs `deploySql`), so the nightly export waits for the primary region. | `/health/ready` is green in the second region |
 | 4 Traffic | Front Door's probes have already moved traffic to priority 2. Disable the primary origin so traffic can't flap back while it's half healthy. | The Platform page shows the second region |
 | 5 Verify | Place an order and follow its trace; watch the phase 7 alerts. | The order confirms, with no dead letters |
 | 6 Fail back | Once the primary region is healthy, do the same in reverse. **SQL** and **Cosmos DB:** switch primary and write region back. **Storage:** turn geo-redundancy on again, because an account failover leaves it LRS. **Event Hubs:** pair again. | The same checks, in the first region |
@@ -807,6 +807,13 @@ reach an app that can't write.
   storage account fails over, or when the primary region returns.
 - **Event Hubs:** events nobody had read yet in the primary namespace. The click stream is best effort, so that's
   accepted.
+- **The phase 14 data lake:** it's LRS on purpose, so it's unavailable with its region and can be lost with it.
+  - **Order snapshots:** run `export-orders` again once the factory is back. The data comes from SQL, which survived.
+  - **Captured clicks:** these can't be rebuilt beyond Event Hubs' one-day retention. If that history matters, move
+    the lake up the storage ladder to ZRS or GZRS (`analytics.bicep`).
+  - **SQL failover with private endpoints on:** the factory's managed private endpoint points at the primary server
+    only. If SQL fails over while the factory is still up, add and approve one for `<server>-dr`, or the export
+    can't reach the listener.
 
 **The second copy's identities.** The second copy's managed identities are different principals. Before the drill, run
 [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql) once more on the **primary** server, with
@@ -882,9 +889,13 @@ hub-and-spoke DNS problem.
 
 ---
 
-## Phase 13 · Hybrid networking and identity (new: hub-and-spoke lab, then design)
+## Phase 13 · Hybrid networking and identity (new: hub-and-spoke and VPN labs, then design)
 
-**Switches:** `deployFirewall = true`. It needs `deployNetwork` and `enablePrivateEndpoints` (phases 2 and 4): the
+Two hands-on labs share one hub VNet: **Azure Firewall** for the spoke's outbound traffic, then a **site-to-site VPN**
+and a **DNS Private Resolver** to a simulated on-premises site ([hybrid lab](#hybrid-lab-on-premises-over-a-vpn)). Do
+either one alone, or both. ExpressRoute, Virtual WAN and hybrid identity stay design-only: see the architect's questions.
+
+**Switches (firewall lab):** `deployFirewall = true`. It needs `deployNetwork` and `enablePrivateEndpoints` (phases 2 and 4): the
 firewall allows only the few public services the apps use, so the data stores must already be private. Keep
 `deployMessaging` (phase 5) on for the break-it step.
 
@@ -1016,15 +1027,277 @@ Some traffic never reaches the firewall:
 - **Leave your IP out.** Deploy with `adminIpAddresses = []` and open Service Bus Explorer in the portal: the
   namespace rejects your IP. Orders still confirm, because the apps' traffic comes from the firewall's IP.
 
+### Hybrid lab: on-premises over a VPN
+
+**Switches:** `deployOnPremSim = true`, `deployVpnGateway = true` and `deployDnsResolver = true`. All three need
+`deployNetwork` and `enablePrivateEndpoints` (phases 2 and 4), and the simulated server needs `jumpboxSshPublicKey`
+(phase 2). `deployFirewall` is optional: without it the hub is just a VNet. With `deploySql` you get a second target.
+
+**Cost** (eastus2, pay-as-you-go, from the Azure Retail Prices API in November 2026):
+
+| Switch | What bills | About |
+|---|---|---|
+| `deployOnPremSim` | A `Standard_B2ats_v2` VM at $0.0094/hour, stopped at 19:00 UTC every day, and its 30 GB Standard SSD at $2.40/month. Bastion Developer, the VNets and the NSG are free; peering is $0.01/GB each way | $10/month |
+| `deployVpnGateway` | The hub's `VpnGw1AZ` gateway at $0.21/hour, the site's `Basic` gateway at $0.036/hour, and two Standard public IPs at $0.005/hour each. Each gateway's first 10 site-to-site tunnels are included | $0.26/hour: **$6/day, $187/month** |
+| `deployDnsResolver` | The inbound endpoint at $180/month (about $0.25/hour), plus $0.40 per million queries | **$6/day, $180/month** |
+
+The gateways take **30–45 minutes** to create and bill every hour they exist, so do the lab in one sitting and clean
+up the same day: about $12, plus about $10 if the firewall is on too. Setting the switches back to `false` doesn't
+delete anything: see step 10.
+
+**Why this scope.** A real site needs a VPN device with a public IP, so a VNet stands in for the datacenter:
+
+- **The site is a VNet peered to nothing.** `vnet-cloudmart-dev-onprem` (192.168.0.0/16) can reach Azure's private
+  addresses only through the VPN, like a real datacenter. Its DNS is Azure-provided DNS, which, like an on-premises
+  DNS server, knows nothing about Azure's private zones.
+- **Site-to-site, not VNet-to-VNet.** The connections are `IPsec`, with a **local network gateway** on each side: the
+  objects you would create for a real device. They make you list each side's address ranges yourself.
+- **One gateway, in the hub, shared through gateway transit.** The spoke has no gateway of its own. The hub's peering
+  allows gateway transit and the spoke's uses remote gateways, as a second spoke's would. Gateway transit works with
+  every SKU except Basic, and new gateways must be AZ SKUs since November 2025, so the hub's is `VpnGw1AZ`.
+- **A Basic gateway plays the customer's VPN device.** It needs no transit and costs a sixth as much. Basic has no
+  BGP, no zone redundancy, 10 tunnels and about 100 Mbps: fine for a lab device, not for production.
+- **The hub no longer needs the firewall.** `deployFirewall` still creates exactly what it did. Without it the hub is
+  a free VNet, so the VPN lab doesn't pay $290/month for a firewall that on-premises traffic doesn't cross anyway
+  (see "Network rules" below).
+- **Only an inbound resolver endpoint.** On-premises resolving Azure's private endpoints is what this lab needs. The
+  other direction, Azure resolving `corp.contoso.com`, needs an outbound endpoint (another $180/month) and a
+  forwarding ruleset. It stays in the questions.
+- **Not built:** ExpressRoute (it needs a provider circuit), Virtual WAN, point-to-site (a stretch step), and hybrid
+  identity (Entra Connect or Cloud Sync, Application Proxy, Arc), which needs an on-premises Active Directory or
+  servers.
+
+**What changes:**
+
+- **Hub:** `vnet-cloudmart-dev-hub` exists even without the firewall, and now has `GatewaySubnet` (10.0.1.0/27) and
+  `snet-dns-inbound` (10.0.2.0/28, delegated to `Microsoft.Network/dnsResolvers`) next to the firewall's two subnets.
+  All four always exist: empty subnets are free, and a deployment that left out a subnet still in use would fail.
+- **Simulated site:** `vnet-cloudmart-dev-onprem` has `snet-servers` (192.168.1.0/24, with an NSG that allows SSH
+  from Bastion) and its own `GatewaySubnet`. The server, `vm-cloudm-onprem`, comes from the jumpbox module: Entra ID
+  sign-in, `dig`, `psql`, the Azure CLI and the evening shutdown. You reach it through `bas-vm-cloudm-onprem`
+  (Developer).
+- **VPN:** read it in [vpn.bicep](../infra/modules/vpn.bicep). Each side has a gateway, a local network gateway that
+  describes the *other* side, and a connection:
+
+  | Object | Side | What it says |
+  |---|---|---|
+  | `vgw-cloudmart-dev-hub` (`VpnGw1AZ`) | Hub | The tunnel's Azure end, at public IP `pip-vgw-cloudmart-dev-hub` |
+  | `lgw-cloudmart-dev-onprem` | Hub | On-premises is at the site gateway's public IP, with 192.168.0.0/16 behind it |
+  | `con-cloudmart-dev-hub-to-onprem` | Hub | The hub's gateway, that local network gateway and the pre-shared key |
+  | `vgw-cloudmart-dev-onprem` (`Basic`) | Site | The site's "VPN device", at public IP `pip-vgw-cloudmart-dev-onprem` |
+  | `lgw-cloudmart-dev-hub` | Site | Azure is at the hub gateway's public IP, with 10.0.0.0/16 **and** 10.20.0.0/16 behind it |
+  | `con-cloudmart-dev-onprem-to-hub` | Site | The same key: both ends must match |
+
+  The pre-shared key is the `@secure()` parameter `vpnSharedKey`. Like `paymentGatewayApiKey`, it is generated on each
+  deployment, and it is in neither the repository nor the deployment history. Each deployment gives both connections
+  a new key, so the tunnel drops for a moment while they change. Pass your own value to keep one.
+- **Peering:** the hub's side gets `allowGatewayTransit` and the spoke's `useRemoteGateways`. The spoke's subnets learn
+  192.168.0.0/16, with the hub's gateway as the next hop.
+- **`pe-nsg`:** a new rule, `AllowOnPremisesToPrivateEndpoints` (priority 130), lets 192.168.0.0/16 reach
+  `snet-private-endpoints` on 443, 1433 and 5432.
+- **DNS:** `dnspr-cloudmart-dev` has one inbound endpoint at the static address **10.0.2.4**. Every `privatelink.*`
+  zone gets a second link, to the hub, because the resolver answers from the zones linked to its own VNet.
+- **Outputs:** `onPremVmName` and `dnsResolverInboundIp`.
+
+**Network rules, on purpose.** The rules so far were written for the apps. On-premises is a new source, so each layer
+gets a deliberate decision:
+
+- **`pe-nsg`** admitted only the app subnets and the jumpbox, then denied everything at priority 4000. On-premises
+  gets the jumpbox's admin ports (HTTPS, SQL and PostgreSQL), not the apps' AMQP ports and not Cosmos DB's direct-mode
+  range. The rule names the range rather than using the `VirtualNetwork` tag, because once a gateway is connected,
+  that tag silently grows to include every on-premises range. Phase 2's `vm-nsg` rule `AllowSshFromVnet` now admits
+  192.168.0.0/16 too: step 2 shows it.
+- **The firewall**, when it's on, doesn't see on-premises traffic. `GatewaySubnet` has no route table, so the gateway
+  sends packets straight across the peering, and the private endpoints reply the same way. The app subnets' route
+  table has BGP propagation off, so the apps don't learn the on-premises routes: anything they sent there would go
+  to the firewall and be denied. That's right here, because nothing in CloudMart calls on-premises. Inspecting
+  hybrid traffic is a stretch step.
+
+**Lab:**
+
+1. **Deploy.** Set the three switches. `what-if` lists the site's VNet, NSG, VM (with its NIC, disk, Entra sign-in
+   extension, role assignment and shutdown schedule) and Bastion; two more subnets in the hub; two public IPs, two
+   gateways, two local network gateways, two connections and their diagnostic settings; the resolver and its inbound
+   endpoint; nine zone links; the new `pe-nsg` rule; and the peerings' gateway settings. The deployment takes about
+   45 minutes, nearly all of it the gateways. The steps below use these names:
+
+   ```bash
+   rg=rg-cloudmart-dev
+   kv=$(az deployment sub show -n main --query properties.outputs.keyVaultName.value -o tsv)
+   vm=$(az deployment sub show -n main --query properties.outputs.onPremVmName.value -o tsv)
+   ```
+
+2. **Check the tunnel and the routes.** The VM stops at 19:00 UTC, so start it first if needed
+   (`az vm start -g $rg -n $vm`).
+
+   ```bash
+   az network vpn-connection show -g $rg -n con-cloudmart-dev-hub-to-onprem --query connectionStatus -o tsv  # Connected
+   az network nic show-effective-route-table -g $rg -n $vm-nic -o table
+   ```
+
+   The site's server sends 10.0.0.0/16 and 10.20.0.0/16 to `VirtualNetworkGateway`: the routes come from
+   `lgw-cloudmart-dev-hub`. If the jumpbox is deployed, its NIC (`vm-cloudm-jump-nic`) shows 192.168.0.0/16 the same
+   way, learned through gateway transit. Its **Effective security rules** blade in the portal shows that
+   `VirtualNetwork` now includes 192.168.0.0/16.
+3. **Open a shell on the site's server.** In the portal, open `vm-cloudm-onprem` → **Connect** → **Bastion**, and sign
+   in with *Microsoft Entra ID*, as in phase 2. Steps 3 to 6 run on that server. Set the Key Vault name (the
+   `keyVaultName` output), then sign the Azure CLI in as yourself:
+
+   ```bash
+   kv=<keyVaultName>
+   az login --use-device-code
+   ```
+
+4. **Watch the name send you the wrong way.**
+
+   ```bash
+   nslookup $kv.vault.azure.net
+   az keyvault secret list --vault-name $kv -o table
+   ```
+
+   The answer is a CNAME to `<kv>.privatelink.vaultcore.azure.net` and then a **public** IP. The site's DNS knows
+   only the public zone: the private one is linked to Azure's VNets, not to the site. So the CLI goes to Key Vault's
+   public endpoint, over the internet, and Key Vault refuses it: *Public network access is disabled and request is
+   not from a trusted service nor via an approved private link*. The tunnel is up, but the name sends you around it.
+   This is what on-premises sees without a resolver.
+5. **Ask the resolver.** Over the VPN, straight to its inbound endpoint:
+
+   ```bash
+   dig +short @10.0.2.4 $kv.vault.azure.net
+   ```
+
+   You get the same CNAME, and then a 10.20.6.x address: the private endpoint. The resolver lives in the hub, and it
+   answers the way Azure DNS does inside the hub, from the zones linked to the hub VNet.
+6. **Give the site conditional forwarders.** A real site points conditional forwarders on its DNS servers at the
+   resolver. Make this server the site's DNS server with `dnsmasq`, where each `server=/zone/address` line is one
+   conditional forwarder:
+
+   ```bash
+   sudo apt-get install -y dnsmasq-base
+   site_dns=$(hostname -I | awk '{print $1}')
+   sudo tee /etc/onprem-dns.conf <<EOF
+   listen-address=$site_dns
+   bind-interfaces
+   no-resolv
+   # Everything else goes to the site's usual upstream: here, Azure-provided DNS.
+   server=168.63.129.16
+   # Conditional forwarders for Azure's PUBLIC zones, to the resolver over the VPN.
+   server=/vault.azure.net/10.0.2.4
+   server=/vaultcore.azure.net/10.0.2.4
+   server=/database.windows.net/10.0.2.4
+   server=/blob.core.windows.net/10.0.2.4
+   EOF
+   sudo dnsmasq --conf-file=/etc/onprem-dns.conf
+   sudo resolvectl dns eth0 $site_dns   # this server now uses the site's DNS, like every other client there
+   sudo resolvectl flush-caches         # forget step 4's public answer
+   nslookup $kv.vault.azure.net
+   az keyvault secret list --vault-name $kv -o table
+   ```
+
+   The name now resolves to 10.20.6.x, and the CLI lists the secrets. The request crossed the VPN, the hub's
+   gateway, the peering and `pe-nsg`'s new rule. If you deployed SQL,
+   `timeout 5 bash -c "</dev/tcp/<sqlServerName>.database.windows.net/1433" && echo open` reaches its private
+   endpoint too. Forward the **public** zones (`vault.azure.net`), not `privatelink.vaultcore.azure.net`: the client
+   asks for the public name, and the CNAME to `privatelink` is part of the answer. "Break it" shows what happens
+   otherwise. (`resolvectl` lasts until the server restarts.)
+7. **Read the gateways' logs.** VPN gateways write to the shared `AzureDiagnostics` table:
+
+   ```kusto
+   AzureDiagnostics
+   | where Category == "TunnelDiagnosticLog"
+   | project TimeGenerated, Resource, OperationName, remoteIP_s, instance_s
+   | sort by TimeGenerated asc
+   ```
+
+   Each gateway logs `TunnelConnected` for the other's public IP. `IKEDiagnosticLog` holds the IKE negotiation,
+   where a wrong key shows up, and `RouteDiagnosticLog` holds the routes each gateway learned.
+8. **Stretch: inspect hybrid traffic in the firewall** (with `deployFirewall`). Give the hub's `GatewaySubnet` a
+   route table that sends 10.20.6.0/24 to the firewall, and give `snet-private-endpoints` a route that sends
+   192.168.0.0/16 to it too, so the replies come back the same way. Then add a network rule that allows
+   192.168.0.0/16 to reach 10.20.6.0/24 on 443 and 1433. `AZFWNetworkRule` now shows the site's traffic. This is how
+   a landing-zone hub inspects traffic between on-premises and Azure.
+9. **Stretch: point-to-site from your laptop.** On `vgw-cloudmart-dev-hub`, open **Point-to-site configuration**:
+   address pool 172.16.201.0/24, tunnel type OpenVPN, and *Microsoft Entra ID* authentication (follow Microsoft's
+   "Configure P2S for Microsoft Entra ID authentication"). Import the profile into the Azure VPN Client: your laptop
+   now gets routes to the hub and, through gateway transit, the spoke. To reach the private endpoints it needs what
+   the site got: a `pe-nsg` rule for 172.16.201.0/24, and the resolver as its DNS server (a `<dnsservers>` entry with
+   10.0.2.4 in the profile's XML). Basic can't do any of this. The next deployment removes the configuration, because
+   the Bicep doesn't declare it: that is declarative infrastructure at work.
+10. **Clean up.** First set `deployVpnGateway = false` and `deployDnsResolver = false`, and redeploy. The peerings
+    stop using the gateway before it goes, as the firewall lab removes its route before the firewall. Then delete
+    what bills:
+
+    ```bash
+    az network vpn-connection delete -g $rg -n con-cloudmart-dev-hub-to-onprem
+    az network vpn-connection delete -g $rg -n con-cloudmart-dev-onprem-to-hub
+    for side in hub onprem; do az network vnet-gateway delete -g $rg -n vgw-cloudmart-dev-$side --no-wait; done
+    for side in hub onprem; do az network vnet-gateway wait -g $rg -n vgw-cloudmart-dev-$side --deleted; done
+    for side in hub onprem; do
+      az network public-ip delete -g $rg -n pip-vgw-cloudmart-dev-$side
+      az network local-gateway delete -g $rg -n lgw-cloudmart-dev-$side
+    done
+    az resource delete -g $rg -n dnspr-cloudmart-dev/inbound --resource-type Microsoft.Network/dnsResolvers/inboundEndpoints
+    az resource delete -g $rg -n dnspr-cloudmart-dev --resource-type Microsoft.Network/dnsResolvers
+    ```
+
+    Keep the site if you'll come back to it: about $10/month, and it stops every evening. To remove it, set
+    `deployOnPremSim = false`, redeploy, and delete `vm-cloudm-onprem` (its NIC and disk go with it),
+    `bas-vm-cloudm-onprem` and `vnet-cloudmart-dev-onprem`. The hub VNet, the peerings and the zone links are free.
+
+**Break it:**
+
+- **Drop `useRemoteGateways`.**
+
+  ```bash
+  az network vnet peering update -g $rg --vnet-name vnet-cloudmart-dev -n peer-to-vnet-cloudmart-dev-hub \
+    --set useRemoteGateways=false
+  ```
+
+  On the server, `dig @10.0.2.4` still answers: the resolver is in the hub, where the tunnel ends. But
+  `az keyvault secret list` fails after a long wait, and `timeout 5 bash -c "</dev/tcp/$kv.vault.azure.net/443"`
+  times out. Without gateway transit, the hub's gateway no longer routes to the spoke, and the spoke has no route back
+  to 192.168.0.0/16 (look at the jumpbox's effective routes). **Fix it:** redeploy.
+- **Block the on-premises range.**
+
+  ```bash
+  az network nsg rule delete -g $rg --nsg-name vnet-cloudmart-dev-pe-nsg -n AllowOnPremisesToPrivateEndpoints
+  ```
+
+  DNS still returns the private IP, and the tunnel and the routes are fine, but the connection times out:
+  `DenyEverythingElse` drops it without a word. Unlike Azure Firewall in the first lab, an NSG doesn't answer the
+  TCP handshake, so here a TCP test does tell you something. Network Watcher's **Connection troubleshoot**, from
+  `vm-cloudm-onprem` to the private endpoint's IP on port 443, names the rule that blocks it. **Fix it:** redeploy.
+- **Forward the wrong zone.** In `/etc/onprem-dns.conf`, replace the four forwarders with
+  `server=/privatelink.vaultcore.azure.net/10.0.2.4`, then restart it:
+  `sudo pkill dnsmasq; sudo dnsmasq --conf-file=/etc/onprem-dns.conf`. `nslookup $kv.vault.azure.net` returns the
+  public IP again. The client asks for `<kv>.vault.azure.net`, which matches no forwarder, so the upstream resolves
+  the whole CNAME chain itself, publicly, and the `privatelink` forwarder is never asked. That's why Microsoft says to
+  forward the public zone. **Fix it:** put the four lines back.
+- **Unlink the hub.**
+
+  ```bash
+  az network private-dns link vnet delete -g $rg -z privatelink.vaultcore.azure.net -n vnet-cloudmart-dev-hub-link --yes
+  ```
+
+  `dig @10.0.2.4` now returns the public IP: the resolver answers only from the zones linked to its own VNet. The apps
+  don't notice, because the spoke's link is still there. **Fix it:** redeploy.
+- **Mismatch the key.**
+
+  ```bash
+  az network vpn-connection shared-key update -g $rg --connection-name con-cloudmart-dev-onprem-to-hub \
+    --value not-the-same-key
+  ```
+
+  Within a few minutes the connections are no longer `Connected`, and step 7's `IKEDiagnosticLog` shows why.
+  **Fix it:** redeploy, which gives both connections one new key.
+
 ### Architect's questions
 
-**Draw** the rest of the hub: a VPN or ExpressRoute gateway (`allowGatewayTransit` on the hub's peering,
-`useRemoteGateways` on the spoke's), Bastion, and a **Private DNS Resolver** so on-premises can resolve private
-endpoint names. Then redraw it with **Virtual WAN** and a secured virtual hub.
+**Draw** the rest of the hub: Bastion, an ExpressRoute gateway next to the VPN gateway, and the DNS resolver's
+outbound endpoint with a forwarding ruleset. Then redraw it with **Virtual WAN** and a secured virtual hub.
 
-Real VPN and ExpressRoute need an on-premises device or a provider circuit. For a hands-on taste, deploy a VPN Gateway
-(`VpnGw1`, ≈ $140/month, 30–45 minutes to create) for **one day** and connect the CloudMart VNet to
-`vnet-onprem-sim` VNet-to-VNet, or your laptop point-to-site with Entra ID authentication.
+The hybrid lab built a site-to-site VPN to a simulated site. ExpressRoute needs a provider circuit, so it stays on
+paper: know how it differs from the VPN (the table below).
 
 | Requirement | Recommendation |
 |---|---|
@@ -1053,7 +1326,12 @@ Real VPN and ExpressRoute need an on-premises device or a provider circuit. For 
 | Individual remote users to the VNet | **Point-to-site VPN** (Entra ID auth with OpenVPN) |
 | Private, predictable, high bandwidth, not over the internet | **ExpressRoute** (+ VPN as backup); **Global Reach** links on-prem sites; **FastPath** bypasses the gateway |
 | Many branches and regions, managed transit | **Virtual WAN** |
-| On-prem must resolve `privatelink.*` names | **Azure DNS Private Resolver** + conditional forwarders |
+| Which VPN gateway SKU? | **VpnGw1AZ** and up: zone-redundant, and the non-AZ VpnGw1–5 can't be created since November 2025. **Active-active** for two tunnels and no failover gap. **Basic**: no BGP, no gateway transit, no zone redundancy, 10 tunnels: labs only |
+| Several spokes share one on-premises connection | **Gateway transit**: `allowGatewayTransit` on the hub's peerings, `useRemoteGateways` on the spokes'. Not with a Basic gateway. Virtual WAN does it for you |
+| Routes change often, or there are many sites | **BGP** on the gateways and local network gateways, instead of static prefixes that every new spoke must be added to |
+| On-prem must resolve private endpoint names | **Azure DNS Private Resolver** inbound endpoint, with on-premises **conditional forwarders for the public zones** (`database.windows.net`, `vault.azure.net`, `blob.core.windows.net`), not `privatelink.*` |
+| Azure must resolve on-premises names | Private Resolver **outbound endpoint** and a **DNS forwarding ruleset** linked to the VNets |
+| Inspect traffic between on-premises and Azure | A route table on `GatewaySubnet` (spoke prefixes → firewall), routes on the spoke subnets (on-premises → firewall), and firewall rules |
 | Sync on-prem AD users to Entra ID | **Entra Cloud Sync** (light, multi-forest) or **Connect Sync** (advanced scenarios); **password hash sync** is the recommended sign-in method |
 | Users must authenticate against on-prem DCs | Pass-through authentication (or federation for third-party MFA/smartcards) |
 | Publish an on-prem web app without a VPN | **Entra Application Proxy** (or Entra Private Access) |

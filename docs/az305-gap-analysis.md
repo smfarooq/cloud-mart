@@ -91,7 +91,7 @@ between" decisions the exam actually tests.
 | Automated deployment | ✅ | Bicep, deployment stacks, template specs, GitHub Actions vs Azure Pipelines | Phase 8 |
 | **Migrations** (5 objectives) | ➕ | **Cloud Adoption Framework**, **Azure Migrate** (built: a CSV-imported estate, assessment, business case and the Rs), **Database Migration Service**, **Data Box** / **AzCopy** (built: a bulk copy and a delta pass with a managed identity) / Storage Mover, PostgreSQL native tools (built: an offline cutover with measured downtime) | Phase 15 |
 | Connect to the internet | ✅ | Public IPs, NAT Gateway, Front Door, Application Gateway | Phases 2, 10 |
-| Connect to **on-premises** | ➕ | **VPN Gateway** (S2S/P2S), **ExpressRoute** (+ Global Reach, FastPath), **Virtual WAN** | Phase 13 |
+| Connect to **on-premises** | ➕ | **VPN Gateway** (built: site-to-site to a simulated site, with gateway transit to the spoke; P2S as a stretch step), **Azure DNS Private Resolver** (built: an inbound endpoint and conditional forwarders), **ExpressRoute** (+ Global Reach, FastPath), **Virtual WAN** | Phase 13 |
 | Optimise network performance | ➕ | Accelerated networking, proximity placement groups, ExpressRoute vs VPN, Front Door | Phases 10, 13 |
 | Optimise network security | ⚠️ | **Azure Firewall** (hands-on in phase 13: hub, UDRs, an allow-list policy), **DDoS Protection**, ASGs, **service endpoints vs private endpoints**, Bastion | Phases 2, 13 |
 | Load balancing and routing | ✅ | **Traffic Manager** (DNS) vs Front Door vs Application Gateway vs Load Balancer | Phases 2, 10 |
@@ -118,7 +118,9 @@ between" decisions the exam actually tests.
 | **14** | **Data integration + analytics** | (new) | **Data Factory**, **Fabric** / Synapse, Databricks, Stream Analytics, Purview |
 | **15** | **Migration** | (new) | **CAF Migrate**, **Azure Migrate**, **DMS**, **Data Box**, Storage Mover, AzCopy, Azure Arc |
 
-Phases 11–12 are built into CloudMart (Bicep switches + code), and so is phase 13's hub firewall (`deployFirewall`).
+Phases 11–12 are built into CloudMart (Bicep switches + code), and so is most of phase 13: the hub firewall
+(`deployFirewall`), and a site-to-site VPN with a DNS Private Resolver that connects a simulated on-premises site to
+the private endpoints (`deployOnPremSim`, `deployVpnGateway`, `deployDnsResolver`).
 Phase 14 is built too: a Data Lake Storage Gen2 account, a Data Factory pipeline that exports the orders to it as
 Parquet (through a managed virtual network once the database is private), and optional Event Hubs Capture
 (`deployAnalytics`, `enableClickstreamCapture`). Fabric, Databricks and Synapse stay in the decision tables.
@@ -128,6 +130,6 @@ CloudMart, signed in with the server's managed identity. The product photos go t
 copy and then a delta pass. The order database goes to Azure Database for PostgreSQL with `pg_dump` and
 `pg_restore`, in an offline cutover whose downtime the script measures. The Azure Migrate appliance, server
 replication, Database Migration Service, the PostgreSQL migration service, Data Box and Storage Mover need hardware,
-licences or passwords that this lab avoids, so they stay in the decision table. The rest of phase 13 involves
-on-premises systems that are impractical or expensive to build for real, so it is a design lab: diagrams and decision
-tables, plus a cheap hands-on taste where one exists.
+licences or passwords that this lab avoids, so they stay in the decision table. The rest of phase 13 (ExpressRoute,
+Virtual WAN and hybrid identity) involves on-premises systems that are impractical or expensive to build for real, so
+it is a design lab: diagrams and decision tables, plus a cheap hands-on taste where one exists.
