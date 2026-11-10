@@ -55,7 +55,7 @@ between" decisions the exam actually tests.
 | Database scalability | ➕ | **Elastic pools**, read scale-out, sharding, Hyperscale named replicas | Phase 4 |
 | Data protection | ⚠️ | TDE (service- vs customer-managed key), **Always Encrypted**, dynamic data masking, auditing, Defender for SQL | Phases 4, 6 |
 | Semi-structured data | ✅ | Cosmos DB partition key design, **consistency levels**, RU/s vs serverless vs autoscale | Phase 4 |
-| Unstructured data | ⚠️ | **Access tiers** (Hot/Cool/Cold/Archive), **lifecycle management**, **Data Lake Storage Gen2**, Azure Files | Phase 4 |
+| Unstructured data | ⚠️ | **Access tiers** (Hot/Cool/Cold/Archive), **lifecycle management**, **Data Lake Storage Gen2** (built in phase 14), Azure Files | Phases 4, 14 |
 | Balance features, performance and cost | ➕ | Premium vs standard storage, reserved capacity, the redundancy ladder | Phase 4 |
 | Protection and durability | ⚠️ | **LRS / ZRS / GRS / GZRS / RA-GZRS**, soft delete, versioning, immutability (WORM), point-in-time restore | Phases 4, 11 |
 | **Data integration** | ➕ | **Data Factory** (built: nightly Parquet export, managed VNet runtime), **Fabric** / Synapse, Databricks, Stream Analytics, **Event Hubs Capture** (built) | Phase 14 |

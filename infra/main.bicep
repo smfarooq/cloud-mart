@@ -425,6 +425,7 @@ module frontDoor 'modules/frontdoor.bicep' = if (deployFrontDoor) {
     endpointName: names.frontDoorEndpoint
     wafPolicyName: names.frontDoorWaf
     sku: frontDoorSku
+    workspaceId: monitoring.outputs.workspaceId
     tags: tags
   }
 }

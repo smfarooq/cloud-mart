@@ -85,8 +85,9 @@ authorising access to Azure resources (RBAC).
    az deployment sub create  -l eastus2 -f infra/main.bicep -p infra/main.bicepparam
    ```
 
-   You get: a resource group, Log Analytics + Application Insights + an alert, two managed identities, Key Vault,
-   Storage, App Service (API), Functions (Flex Consumption), Static Web Apps (SPA), two policy assignments and a budget.
+   You get: a resource group, Log Analytics + Application Insights + two alert rules, four managed identities (the
+   Payments and Shipping ones wait for phase 16), Key Vault, Storage, App Service (API), Functions (Flex Consumption),
+   Static Web Apps (SPA), two policy assignments and a budget.
    Read `what-if` output carefully every time: it is the plan-before-apply habit.
 
 4. **Deploy the code by hand once** (phase 8 automates it):
@@ -531,7 +532,7 @@ aren't there, and why: ² ³ ⁴. Then answer: who could read the payment-gatewa
 2. **KQL.** Run the queries in [`docs/kql/cloudmart.kql`](kql/cloudmart.kql) in Log Analytics: slowest operations,
    orders per minute from custom metrics, Key Vault audit (who read the secret), dead-letter counts, and more.
 3. **Alerts.** Exceptions are only one symptom. Six alert rules email you through one action group, each defined
-   next to the resource it watches:
+   next to the resource it watches. Phase 14 adds a seventh:
 
    | Alert | Fires when | Kind | Defined in |
    |---|---|---|---|
@@ -541,6 +542,7 @@ aren't there, and why: ² ³ ⁴. Then answer: who could read the payment-gatewa
    | Service Bus backlog | More than 100 active messages for 15 minutes | Metric | [`messaging.bicep`](../infra/modules/messaging.bicep) |
    | Event Grid dead letters | An upload event was dead-lettered | Metric | [`eventgrid-subscription.bicep`](../infra/modules/eventgrid-subscription.bicep) |
    | Cosmos DB throttling | More than 10 HTTP 429s in 5 minutes | Metric | [`cosmos.bicep`](../infra/modules/cosmos.bicep) |
+   | Data Factory run failed (phase 14) | A pipeline run failed in the last hour: the lake is missing a night of orders | Metric | [`analytics.bicep`](../infra/modules/analytics.bicep) |
 
    Fire three of them:
    - Throw six exceptions with Admin → Chaos.
@@ -551,8 +553,10 @@ aren't there, and why: ² ³ ⁴. Then answer: who could read the payment-gatewa
    Metric alerts are *stateful*: the dead-letter alert stays fired until the queue is empty. Resubmit or purge the
    message in Service Bus Explorer and it resolves on its own. Log search alerts fire once per evaluation that matches.
    Cost: about $1.50/month for each 5-minute log search alert and $0.10/month per metric time series, so roughly
-   $4/month for all six.
-4. **Routing logs.** Every module has a diagnostic setting to the workspace. Add a second one for Key Vault that
+   $4/month for all of them.
+4. **Routing logs.** With every phase on, 22 resources have a diagnostic setting to the workspace. A few have none,
+   for example Static Web Apps, App Configuration, Redis, API Management and AKS; their platform metrics still reach
+   Azure Monitor. Add a second one for Key Vault that
    archives to a storage account:
    `az monitor diagnostic-settings create --resource <kv-id> -n archive --storage-account <st-id> --logs '[{"categoryGroup":"audit","enabled":true}]'`.
    Destinations to know: Log Analytics (query), Storage (cheap archive), Event Hubs (stream to a SIEM or third party).
@@ -680,7 +684,8 @@ fixed, so deploy, test and remove the same day).
    host now answers **403** too. Free can't do this.
 3. **WAF.** Hammer the API: `for i in $(seq 400); do curl -s -o /dev/null -w "%{http_code}\n" https://<fd>/api/products; done | sort | uniq -c`.
    The rate-limit rule starts blocking. With `Premium_AzureFrontDoor`, the managed Default Rule Set also blocks
-   `?q=1' OR '1'='1`. Standard has custom rules only.
+   `?q=1' OR '1'='1`. Standard has custom rules only. Front Door sends its WAF log to the workspace: query 10 in
+   [`cloudmart.kql`](kql/cloudmart.kql) shows `RateLimitApiPerIp` blocking your IP (allow a few minutes for the logs).
 4. **Application Gateway.** `curl http://<appGatewayUrl>/api/platform/info`, then send a SQL-injection query string
    and find the matched rule in the WAF logs (`AzureDiagnostics | where Category == "ApplicationGatewayFirewallLog"`).
    The policy is in *Detection* mode: switch it to *Prevention*.
@@ -919,8 +924,9 @@ same day (≈ $10). Setting the switch back to `false` doesn't delete it: see st
 **What changes:**
 
 - **Hub:** a hub VNet `vnet-cloudmart-dev-hub` (10.0.0.0/16), peered both ways with the CloudMart VNet, which is now a
-  spoke. It holds `AzureFirewallSubnet` and `AzureFirewallManagementSubnet` (both /26). Basic always has a management
-  NIC with its own public IP, so Microsoft's management traffic never depends on your rules.
+  spoke. The firewall uses `AzureFirewallSubnet` and `AzureFirewallManagementSubnet` (both /26); the hub also holds
+  the hybrid lab's `GatewaySubnet` and `snet-dns-inbound`, empty until that lab uses them. Basic always has a
+  management NIC with its own public IP, so Microsoft's management traffic never depends on your rules.
 - **Route table:** `vnet-cloudmart-dev-egress-rt` sends `0.0.0.0/0` to the firewall's private IP from
   `snet-appservice`, `snet-functions` and `snet-containerapps`. App Service (`vnetRouteAllEnabled`) and Flex
   Consumption already put all their outbound traffic into those subnets.
@@ -1030,12 +1036,13 @@ Some traffic never reaches the firewall:
     --policy-name afwp-cloudmart-dev --rcg-name cloudmart-egress --collection-name app-dependencies --name service-bus
   ```
 
-  Wait a minute, then place an order. The API saves it before it publishes, so the checkout call fails after the
-  Service Bus client's retries, and the order stays **Pending**. It's the lost event from phase 5's outbox exercise,
-  caused this time by the network. `AZFWApplicationRule | where Fqdn endswith "servicebus.windows.net"` shows `Deny`
-  from `10.20.1.x` (the API sending) and from `10.20.2.x` (the Functions triggers, which can't receive either).
-  **Fix it:** redeploy, and Bicep puts the rule back. New orders confirm; the stuck one stays Pending, because
-  nothing ever published its event.
+  Wait a minute, then place an order. Checkout still answers **202**: the order and its outbox row are saved
+  together, and publishing is the relay's job. But the order stays **Pending**, and the API logs *Could not publish
+  outbox message* on every attempt (with the orders database, `OutboxMessages.LastError` says why). It's phase 5
+  step 9's outage, caused this time by the network. `AZFWApplicationRule | where Fqdn endswith "servicebus.windows.net"`
+  shows `Deny` from `10.20.1.x` (the API's relay sending) and from `10.20.2.x` (the Functions triggers, which can't
+  receive either). **Fix it:** redeploy, and Bicep puts the rule back. Within a minute the relay's next attempt gets
+  through and the waiting order confirms: nothing was lost.
 - **Go back to AMQP.** With the rule back, set the API's app setting `ServiceBus__TransportType` to `AmqpTcp`. New
   orders get stuck again. The rule allows the namespace on 443 only, and Basic can't allow 5671 by name. Redeploy to
   restore it.
@@ -1131,9 +1138,10 @@ gets a deliberate decision:
 **Lab:**
 
 1. **Deploy.** Set the three switches. `what-if` lists the site's VNet, NSG, VM (with its NIC, disk, Entra sign-in
-   extension, role assignment and shutdown schedule) and Bastion; two more subnets in the hub; two public IPs, two
-   gateways, two local network gateways, two connections and their diagnostic settings; the resolver and its inbound
-   endpoint; nine zone links; the new `pe-nsg` rule; and the peerings' gateway settings. The deployment takes about
+   extension, role assignment and shutdown schedule) and Bastion; the hub VNet with all four subnets and its two
+   peerings, unless the firewall lab already created them; two public IPs, two gateways, two local network gateways,
+   two connections and the gateways' diagnostic settings; the resolver and its inbound endpoint; ten zone links; the
+   new `pe-nsg` rule; and the peerings' gateway settings. The deployment takes about
    45 minutes, nearly all of it the gateways. The steps below use these names:
 
    ```bash
@@ -1621,8 +1629,8 @@ budget, and leaves the rest to the decision table:
 **Why the photos go to `product-uploads`.** Copying straight into `product-images` would be faster. But then nothing
 would check the photos or attach them to products, and the migration identity could overwrite published images.
 Through the upload pipeline, a migrated photo is treated exactly like one uploaded in Admin: checked, published and
-attached. The catch is that the pipeline moves everything it receives out of `product-uploads`. That changes how the
-delta pass works (step 4 and "Break it").
+attached. The catch is that the pipeline moves every photo of a known product out of `product-uploads`. That changes
+how the delta pass works (step 4 and "Break it").
 
 **Who can do what.** Nobody has a key or a password:
 
@@ -1854,10 +1862,10 @@ Do these before step 7: the cutover removes the access they use, and step 8 dele
 - How did the legacy server reach PostgreSQL? Through the server's *Allow public access from any Azure service* rule.
   The legacy server is an Azure VM, so its outbound address is an Azure address. A real datacentre's address would need
   its own firewall rule. With `enablePrivateEndpoints`, the server refuses the internet altogether. The migration then
-  needs a private path: a site-to-site VPN or ExpressRoute into the hub (phase 13), on-premises DNS that resolves the
-  `privatelink` names (through a Private DNS Resolver inbound endpoint), and the private endpoints' NSG opened to the
-  datacentre's range. The PostgreSQL migration service has its own answer for private sources: a migration runtime
-  server inside the VNet.
+  needs a private path: a site-to-site VPN or ExpressRoute into the hub (phase 13), on-premises conditional forwarders
+  for the public zone (`postgres.database.azure.com`) to a DNS Private Resolver inbound endpoint, and the private
+  endpoints' NSG opened to the datacentre's range. Phase 13's hybrid lab builds exactly this path. The PostgreSQL
+  migration service has its own answer for private sources: a migration runtime server inside the VNet.
 - Offline or online? Compare the downtime the business accepts with how long a copy of the database takes. An online
   migration needs more from the source: for PostgreSQL, logical replication (`wal_level = logical`) and a primary key
   on every table.
@@ -1900,7 +1908,7 @@ The phase builds on earlier ones:
 
 - `deployMessaging` (phase 5) for the Durable Functions saga.
 - `deploySql` (phase 4) for the ledger table.
-- `deployNetwork` + `enablePrivateEndpoints` (phase 2) to make the services private.
+- `deployNetwork` + `enablePrivateEndpoints` (phases 2 and 4) to make the services private.
 
 **What changes:**
 
@@ -1978,7 +1986,7 @@ There is no distributed transaction. Each step commits on its own, and correctne
    Why all three? Because every retry layer re-sends the same request: the browser (or a proxy) retrying the POST,
    the HTTP client, the Durable activity retry and Service Bus redelivery.
 3. **Deploy.** Flip the switches and redeploy.
-   1. Run the second half of
+   1. Run the phase 16 part of
       [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql) against the `payments` database.
    2. Run [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh). It creates the two app registrations with
       their **application** app roles, and assigns those roles to the Functions and API managed identities. The

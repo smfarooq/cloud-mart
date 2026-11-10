@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1880 2220" width="1880" height="2220" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1880 2268" width="1880" height="2268" role="img" aria-labelledby="title desc">
   <title id="title">CloudMart deployment and operations diagram</title>
   <desc id="desc">How CloudMart is built, deployed and run. An Azure Pipelines run builds once (tests, four app packages, the SPA, Bicep lint), then deploys infrastructure (what-if, then a subscription deployment) and the applications (zip deploys to App Service and Functions, the Payments and Shipping APIs, the SPA through the Static Web Apps CLI with a per-environment config.json, and a container image through ACR Tasks), through a workload identity federation service connection and an optional approval check. Also: parameter files and environments, how deployment outputs become app settings and config.json, deployment stacks, policy and budget, managed identities and Key Vault, schema delivery with EnsureCreated versus an EF migration bundle, rollback per service, and the alerts and health checks used after a deploy. Phase 14: stage 2 deploys the Data Factory, its linked services, datasets, export pipeline and alert, while the nightly trigger is created and started once with the CLI, because ARM cannot update a started trigger.</desc>
   <defs>
@@ -136,7 +136,7 @@
     </symbol>
   </defs>
 
-  <rect width="1880" height="2220" fill="#ffffff"/>
+  <rect width="1880" height="2268" fill="#ffffff"/>
   <!-- Title -->
   <rect x="30" y="24" width="430" height="66" fill="#4472C4"/>
   <text x="245" y="69" font-size="34" fill="#ffffff" text-anchor="middle">Deployment &amp; Operations</text>
@@ -410,7 +410,7 @@
   <text x="1506" y="1140" class="itemdesc">management groups, Resource Graph queries,</text>
   <text x="1506" y="1156" class="itemdesc">Cost Management exports and Advisor.</text>
   <!-- ============ Secrets and identity ============ -->
-  <rect x="30" y="1220" width="900" height="400" class="zone" rx="6"/>
+  <rect x="30" y="1220" width="900" height="416" class="zone" rx="6"/>
   <text x="46" y="1244" class="zonetitle">Secrets and identity: no keys to rotate</text>
   <rect x="50" y="1262" width="860" height="58" class="svc"/>
   <use href="#i-identity" x="61" y="1273" width="36" height="36"/>
@@ -431,10 +431,11 @@
   <rect x="50" y="1526" width="860" height="58" class="manual"/>
   <use href="#i-sql" x="61" y="1537" width="36" height="36"/>
   <text x="108" y="1548" class="itemname">By hand after the first deploy: what Bicep can't do</text>
-  <text x="108" y="1566" class="itemdesc">deploy/sql/grant-managed-identities.sql (database users, T-SQL); deploy/entra/setup-service-auth.sh (phase 16 app roles).</text>
+  <text x="108" y="1566" class="itemdesc">deploy/sql/ and deploy/postgres/grant-managed-identities.sql (database users); deploy/entra/setup-service-auth.sh (phase 16 app roles).</text>
   <text x="50" y="1608" class="tiletext">The one token left is the Static Web Apps deployment token: stage 3 reads it at run time and never stores it.</text>
+  <text x="50" y="1624" class="tiletext">And one key: phase 13's VPN pre-shared key, a @secure() parameter that defaults to a new GUID on each deployment, kept only on the two VPN connections.</text>
   <!-- ============ Schema delivery ============ -->
-  <rect x="950" y="1220" width="900" height="400" class="zone" rx="6"/>
+  <rect x="950" y="1220" width="900" height="416" class="zone" rx="6"/>
   <text x="966" y="1244" class="zonetitle">Schema delivery: the orders and payments databases</text>
   <rect x="966" y="1262" width="410" height="170" class="svc"/>
   <use href="#i-sql" x="977" y="1329" width="36" height="36"/>
@@ -474,95 +475,97 @@
   <text x="966" y="1540" class="tiletext">Additive changes first (expand, then contract), so the previous build still runs while the new one deploys,</text>
   <text x="966" y="1556" class="tiletext">and rolling the code back doesn't need a schema rollback.</text>
   <!-- ============ Rollback ============ -->
-  <rect x="30" y="1640" width="1240" height="380" class="zone" rx="6"/>
-  <text x="46" y="1664" class="zonetitle">Rollback: what the current SKUs allow, and what needs more</text>
-  <rect x="750" y="1676" width="504" height="330" class="optcell"/>
-  <text x="250" y="1696" class="tiletitle">Today, with the SKUs in the template</text>
-  <text x="760" y="1696" class="tiletitle">Needs more (a bigger SKU or a lab step)</text>
-  <path d="M50 1706 H1254" class="rule"/>
-  <text x="50" y="1726" class="rowlabel">API, Payments, Shipping</text>
-  <text x="50" y="1743" class="itemdesc">App Service B1</text>
-  <text x="250" y="1726" class="tiletext">Basic has no deployment slots: redeploy the previous run's zip.</text>
-  <text x="250" y="1742" class="tiletext">The site restarts on deploy: expect a few seconds of errors.</text>
-  <text x="760" y="1726" class="tiletext">S1, or Premium v3 (zoneRedundant already sets P1v3): deploy to a</text>
-  <text x="760" y="1742" class="tiletext">staging slot, warm it up, swap. Swapping back is the rollback.</text>
-  <path d="M50 1756 H1254" class="rule"/>
-  <text x="50" y="1776" class="rowlabel">Functions</text>
-  <text x="50" y="1793" class="itemdesc">Flex Consumption FC1</text>
-  <text x="250" y="1776" class="tiletext">No deployment slots on Flex Consumption: redeploy the previous</text>
-  <text x="250" y="1792" class="tiletext">functions.zip.</text>
-  <text x="760" y="1776" class="tiletext">Version orchestrator changes: sagas in flight replay their history</text>
-  <text x="760" y="1792" class="tiletext">on the new code, so a breaking change fails them.</text>
-  <path d="M50 1806 H1254" class="rule"/>
-  <text x="50" y="1826" class="rowlabel">SPA</text>
-  <text x="50" y="1843" class="itemdesc">Static Web Apps Free</text>
-  <text x="250" y="1826" class="tiletext">Redeploy the previous drop; stage 3 writes config.json again.</text>
-  <text x="250" y="1842" class="tiletext">Preview environments are already enabled on the site.</text>
-  <text x="760" y="1826" class="tiletext">Deploy with --env &lt;name&gt; to a preview URL first, test it, then</text>
-  <text x="760" y="1842" class="tiletext">deploy to production. Free allows 3 preview environments, Standard 10.</text>
-  <path d="M50 1856 H1254" class="rule"/>
-  <text x="50" y="1876" class="rowlabel">Containers</text>
-  <text x="50" y="1893" class="itemdesc">Container Apps, AKS</text>
-  <text x="250" y="1876" class="tiletext">Single revision mode. Images are tagged with the BuildId: set</text>
-  <text x="250" y="1892" class="tiletext">containerImage to the earlier tag and redeploy.</text>
-  <text x="760" y="1876" class="tiletext">Multiple revision mode: send 10% to the new revision, then 100%.</text>
-  <text x="760" y="1892" class="tiletext">Rolling back is moving the traffic back (phase 8 lab).</text>
-  <path d="M50 1906 H1254" class="rule"/>
-  <text x="50" y="1926" class="rowlabel">Infrastructure</text>
-  <text x="50" y="1943" class="itemdesc">Bicep</text>
-  <text x="250" y="1926" class="tiletext">Revert the commit; the pipeline applies the earlier template. Resources</text>
-  <text x="250" y="1942" class="tiletext">a switch added stay, and no deployment rolls data back.</text>
-  <text x="760" y="1926" class="tiletext">Deployment stack: resources removed from the template are deleted.</text>
-  <text x="760" y="1942" class="tiletext">Data comes back from backups and point-in-time restore (phase 11).</text>
-  <path d="M50 1956 H1254" class="rule"/>
-  <text x="50" y="1976" class="rowlabel">Database schema</text>
-  <text x="50" y="1993" class="itemdesc">Azure SQL</text>
-  <text x="250" y="1976" class="tiletext">EnsureCreated has no undo and no update: a model change needs a</text>
-  <text x="250" y="1992" class="tiletext">hand-written script.</text>
-  <text x="760" y="1976" class="tiletext">Migration bundle with additive changes: the previous build still</text>
-  <text x="760" y="1992" class="tiletext">works. ./efbundle &lt;earlier migration&gt; runs the Down steps.</text>
+  <rect x="30" y="1656" width="1240" height="412" class="zone" rx="6"/>
+  <text x="46" y="1680" class="zonetitle">Rollback: what the current SKUs allow, and what needs more</text>
+  <rect x="750" y="1692" width="504" height="330" class="optcell"/>
+  <text x="250" y="1712" class="tiletitle">Today, with the SKUs in the template</text>
+  <text x="760" y="1712" class="tiletitle">Needs more (a bigger SKU or a lab step)</text>
+  <path d="M50 1722 H1254" class="rule"/>
+  <text x="50" y="1742" class="rowlabel">API, Payments, Shipping</text>
+  <text x="50" y="1759" class="itemdesc">App Service B1</text>
+  <text x="250" y="1742" class="tiletext">Basic has no deployment slots: redeploy the previous run's zip.</text>
+  <text x="250" y="1758" class="tiletext">The site restarts on deploy: expect a few seconds of errors.</text>
+  <text x="760" y="1742" class="tiletext">S1, or Premium v3 (zoneRedundant already sets P1v3): deploy to a</text>
+  <text x="760" y="1758" class="tiletext">staging slot, warm it up, swap. Swapping back is the rollback.</text>
+  <path d="M50 1772 H1254" class="rule"/>
+  <text x="50" y="1792" class="rowlabel">Functions</text>
+  <text x="50" y="1809" class="itemdesc">Flex Consumption FC1</text>
+  <text x="250" y="1792" class="tiletext">No deployment slots on Flex Consumption: redeploy the previous</text>
+  <text x="250" y="1808" class="tiletext">functions.zip.</text>
+  <text x="760" y="1792" class="tiletext">Version orchestrator changes: sagas in flight replay their history</text>
+  <text x="760" y="1808" class="tiletext">on the new code, so a breaking change fails them.</text>
+  <path d="M50 1822 H1254" class="rule"/>
+  <text x="50" y="1842" class="rowlabel">SPA</text>
+  <text x="50" y="1859" class="itemdesc">Static Web Apps Free</text>
+  <text x="250" y="1842" class="tiletext">Redeploy the previous drop; stage 3 writes config.json again.</text>
+  <text x="250" y="1858" class="tiletext">Preview environments are already enabled on the site.</text>
+  <text x="760" y="1842" class="tiletext">Deploy with --env &lt;name&gt; to a preview URL first, test it, then</text>
+  <text x="760" y="1858" class="tiletext">deploy to production. Free allows 3 preview environments, Standard 10.</text>
+  <path d="M50 1872 H1254" class="rule"/>
+  <text x="50" y="1892" class="rowlabel">Containers</text>
+  <text x="50" y="1909" class="itemdesc">Container Apps, AKS</text>
+  <text x="250" y="1892" class="tiletext">Single revision mode. Images are tagged with the BuildId: set</text>
+  <text x="250" y="1908" class="tiletext">containerImage to the earlier tag and redeploy.</text>
+  <text x="760" y="1892" class="tiletext">Multiple revision mode: send 10% to the new revision, then 100%.</text>
+  <text x="760" y="1908" class="tiletext">Rolling back is moving the traffic back (phase 8 lab).</text>
+  <path d="M50 1922 H1254" class="rule"/>
+  <text x="50" y="1942" class="rowlabel">Infrastructure</text>
+  <text x="50" y="1959" class="itemdesc">Bicep</text>
+  <text x="250" y="1942" class="tiletext">Revert the commit; the pipeline applies the earlier template. Resources</text>
+  <text x="250" y="1958" class="tiletext">a switch added stay, and no deployment rolls data back.</text>
+  <text x="760" y="1942" class="tiletext">Deployment stack: resources removed from the template are deleted.</text>
+  <text x="760" y="1958" class="tiletext">Data comes back from backups and point-in-time restore (phase 11).</text>
+  <path d="M50 1972 H1254" class="rule"/>
+  <text x="50" y="1992" class="rowlabel">Database schema</text>
+  <text x="50" y="2009" class="itemdesc">Azure SQL</text>
+  <text x="250" y="1992" class="tiletext">EnsureCreated has no undo and no update: a model change needs a</text>
+  <text x="250" y="2008" class="tiletext">hand-written script.</text>
+  <text x="760" y="1992" class="tiletext">Migration bundle with additive changes: the previous build still</text>
+  <text x="760" y="2008" class="tiletext">works. ./efbundle &lt;earlier migration&gt; runs the Down steps.</text>
   <!-- ============ Day-2 signals ============ -->
-  <rect x="1290" y="1640" width="560" height="380" class="zone" rx="6"/>
-  <text x="1306" y="1664" class="zonetitle">Running it: signals after a deploy (phase 7)</text>
-  <rect x="1306" y="1682" width="528" height="74" class="svc"/>
-  <use href="#i-appinsights" x="1317" y="1701" width="36" height="36"/>
-  <text x="1364" y="1704" class="itemname">Application Insights + Log Analytics</text>
-  <text x="1364" y="1722" class="itemdesc">Every service logs to one workspace; queries in docs/kql/cloudmart.kql.</text>
-  <text x="1364" y="1738" class="itemdesc">Version 1.0.&lt;BuildId&gt; ties what is running to a pipeline run.</text>
-  <rect x="1306" y="1764" width="528" height="74" class="svc"/>
-  <use href="#i-alert" x="1317" y="1783" width="36" height="36"/>
-  <text x="1364" y="1786" class="itemname">Alerts → action group → ownerEmail</text>
-  <text x="1364" y="1804" class="itemdesc">Exception spike and order needs review; from phase 5, Service Bus</text>
-  <text x="1364" y="1820" class="itemdesc">dead letters and a growing backlog.</text>
-  <rect x="1306" y="1846" width="528" height="74" class="svc"/>
-  <use href="#i-appservice" x="1317" y="1865" width="36" height="36"/>
-  <text x="1364" y="1868" class="itemname">Health endpoints</text>
-  <text x="1364" y="1886" class="itemdesc">/health/live is App Service's health check; /health/ready checks</text>
-  <text x="1364" y="1902" class="itemdesc">each dependency the app is configured to use.</text>
-  <rect x="1306" y="1928" width="528" height="74" class="opt"/>
-  <use href="#i-pipelines" x="1317" y="1947" width="36" height="36"/>
-  <text x="1364" y="1950" class="itemname">Smoke test after stage 3 (not in the pipeline yet)</text>
-  <text x="1364" y="1968" class="itemdesc">Call /health/ready and fail the run, so the pipeline catches a bad</text>
-  <text x="1364" y="1984" class="itemdesc">deploy before users do.</text>
+  <rect x="1290" y="1656" width="560" height="412" class="zone" rx="6"/>
+  <text x="1306" y="1680" class="zonetitle">Running it: signals after a deploy (phase 7)</text>
+  <rect x="1306" y="1698" width="528" height="90" class="svc"/>
+  <use href="#i-appinsights" x="1317" y="1725" width="36" height="36"/>
+  <text x="1364" y="1720" class="itemname">Application Insights + Log Analytics</text>
+  <text x="1364" y="1738" class="itemdesc">Diagnostic settings send the logs of up to 22 resources, not every service,</text>
+  <text x="1364" y="1754" class="itemdesc">to one workspace with the apps' telemetry. Queries: docs/kql/cloudmart.kql.</text>
+  <text x="1364" y="1770" class="itemdesc">Version 1.0.&lt;BuildId&gt; ties what is running to a pipeline run.</text>
+  <rect x="1306" y="1796" width="528" height="90" class="svc"/>
+  <use href="#i-alert" x="1317" y="1823" width="36" height="36"/>
+  <text x="1364" y="1818" class="itemname">Alerts → action group → ownerEmail</text>
+  <text x="1364" y="1836" class="itemdesc">Seven rules: an exception spike, an order needing review and Cosmos DB</text>
+  <text x="1364" y="1852" class="itemdesc">throttling (429s); from phase 5, Service Bus dead letters, a growing backlog</text>
+  <text x="1364" y="1868" class="itemdesc">and Event Grid dead letters; from phase 14, failed Data Factory runs.</text>
+  <rect x="1306" y="1894" width="528" height="74" class="svc"/>
+  <use href="#i-appservice" x="1317" y="1913" width="36" height="36"/>
+  <text x="1364" y="1916" class="itemname">Health endpoints</text>
+  <text x="1364" y="1934" class="itemdesc">/health/live is App Service's health check; /health/ready checks</text>
+  <text x="1364" y="1950" class="itemdesc">each dependency the app is configured to use.</text>
+  <rect x="1306" y="1976" width="528" height="74" class="opt"/>
+  <use href="#i-pipelines" x="1317" y="1995" width="36" height="36"/>
+  <text x="1364" y="1998" class="itemname">Smoke test after stage 3 (not in the pipeline yet)</text>
+  <text x="1364" y="2016" class="itemdesc">Call /health/ready and fail the run, so the pipeline catches a bad</text>
+  <text x="1364" y="2032" class="itemdesc">deploy before users do.</text>
   <!-- ============ Phase 14: Data Factory ============ -->
-  <rect x="30" y="2040" width="1820" height="150" class="zone" rx="6"/>
-  <text x="46" y="2064" class="zonetitle">Phase 14 · Data Factory: what stage 2 deploys, and the one part it doesn't</text>
-  <rect x="46" y="2078" width="580" height="96" class="svc"/>
-  <use href="#i-template" x="56" y="2096" width="36" height="36"/>
-  <text x="102" y="2099" class="itemname">Stage 2 deploys the factory with everything else</text>
-  <text x="102" y="2117" class="itemdesc">Linked services (SQL through the failover-group listener, and the lake), datasets,</text>
-  <text x="102" y="2133" class="itemdesc">the export-orders pipeline, managed private endpoints and the failed-run alert,</text>
-  <text x="102" y="2149" class="itemdesc">all from infra/modules/analytics.bicep. No keys: the factory's own identity.</text>
-  <rect x="640" y="2078" width="600" height="96" class="note"/>
-  <use href="#i-pipelines" x="650" y="2096" width="36" height="36"/>
-  <text x="696" y="2099" class="itemname">You create and start the nightly trigger once (lab 14.5)</text>
-  <text x="696" y="2117" class="mono">az datafactory trigger create --properties @…/nightly-export-trigger.json</text>
-  <text x="696" y="2133" class="mono">az datafactory trigger start --name nightly-export</text>
-  <text x="696" y="2149" class="warn">not in Bicep: ARM can't update a started trigger, so every later deploy would fail</text>
-  <rect x="1254" y="2078" width="580" height="96" class="optnote"/>
-  <use href="#i-approval" x="1264" y="2096" width="36" height="36"/>
-  <text x="1310" y="2099" class="itemname">If the pipeline owned the trigger (not done yet)</text>
-  <text x="1310" y="2117" class="itemdesc">Stop the trigger before stage 2 and start it again after: the usual</text>
-  <text x="1310" y="2133" class="itemdesc">Data Factory CI/CD pattern. Rollback is the same as for Bicep: revert</text>
-  <text x="1310" y="2149" class="itemdesc">the commit, and the pipeline JSON goes back with it.</text>
+  <rect x="30" y="2088" width="1820" height="150" class="zone" rx="6"/>
+  <text x="46" y="2112" class="zonetitle">Phase 14 · Data Factory: what stage 2 deploys, and the one part it doesn't</text>
+  <rect x="46" y="2126" width="580" height="96" class="svc"/>
+  <use href="#i-template" x="56" y="2144" width="36" height="36"/>
+  <text x="102" y="2147" class="itemname">Stage 2 deploys the factory with everything else</text>
+  <text x="102" y="2165" class="itemdesc">Linked services (SQL through the failover-group listener, and the lake), datasets,</text>
+  <text x="102" y="2181" class="itemdesc">the export-orders pipeline, managed private endpoints and the failed-run alert,</text>
+  <text x="102" y="2197" class="itemdesc">all from infra/modules/analytics.bicep. No keys: the factory's own identity.</text>
+  <rect x="640" y="2126" width="600" height="96" class="note"/>
+  <use href="#i-pipelines" x="650" y="2144" width="36" height="36"/>
+  <text x="696" y="2147" class="itemname">You create and start the nightly trigger once (lab 14.5)</text>
+  <text x="696" y="2165" class="mono">az datafactory trigger create --properties @…/nightly-export-trigger.json</text>
+  <text x="696" y="2181" class="mono">az datafactory trigger start --name nightly-export</text>
+  <text x="696" y="2197" class="warn">not in Bicep: ARM can't update a started trigger, so every later deploy would fail</text>
+  <rect x="1254" y="2126" width="580" height="96" class="optnote"/>
+  <use href="#i-approval" x="1264" y="2144" width="36" height="36"/>
+  <text x="1310" y="2147" class="itemname">If the pipeline owned the trigger (not done yet)</text>
+  <text x="1310" y="2165" class="itemdesc">Stop the trigger before stage 2 and start it again after: the usual</text>
+  <text x="1310" y="2181" class="itemdesc">Data Factory CI/CD pattern. Rollback is the same as for Bicep: revert</text>
+  <text x="1310" y="2197" class="itemdesc">the commit, and the pipeline JSON goes back with it.</text>
 </svg>

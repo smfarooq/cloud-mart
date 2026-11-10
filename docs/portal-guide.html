@@ -198,8 +198,8 @@ svg text { font-family: "Segoe UI", sans-serif; }
 .flow { display: flex; align-items: stretch; gap: 0; margin: 8px 0 10px; break-inside: avoid; }
 .flow > div { flex: 1; background: var(--accent-soft); border: 1px solid #c4d7ee; padding: 7px 8px 6px 15px; font-size: 8pt; position: relative; margin-right: 9px; border-radius: 4px; }
 .flow > div > b:first-of-type { display: block; color: var(--accent-dark); font-size: 8.6pt; }
-table.names { font-size: 8.4pt; margin-bottom: 0; }
-table.names td { padding: 2.5px 7px; }
+table.names, table.phases { font-size: 8.4pt; margin-bottom: 0; }
+table.names td, table.phases td { padding: 2.5px 7px; }
 .mock.mini { font-size: 7.6pt; }
 .mock.mini .tabs { gap: 9px; padding: 0 9px; flex-wrap: nowrap; }
 .mock.mini .body { padding: 7px 9px 8px; }
@@ -340,7 +340,7 @@ table.names td { padding: 2.5px 7px; }
   <h2>1.1 Portal, CLI or Bicep? A quick correction</h2>
   <p>You may have heard that CloudMart "uses the Azure CLI to create its resources". That is <b>almost</b> right. Here is the precise picture:</p>
   <ul>
-    <li>CloudMart's resources are <b>described in Bicep files</b>: <span class="mono">infra/main.bicep</span> plus 27 modules in <span class="mono">infra/modules/</span>. Bicep is a blueprint. It says <i>what should exist</i>, not the clicks or commands to get there.</li>
+    <li>CloudMart's resources are <b>described in Bicep files</b>: <span class="mono">infra/main.bicep</span> plus 33 modules (and a shared <span class="mono">types.bicep</span>) in <span class="mono">infra/modules/</span>. Bicep is a blueprint. It says <i>what should exist</i>, not the clicks or commands to get there.</li>
     <li>The <b>Azure CLI is the courier</b>. <code>az deployment sub what-if</code> previews the blueprint and <code>az deployment sub create</code> hands it to Azure, which builds everything in the right order. The CLI does not create the resources one command at a time.</li>
     <li>The CLI is used directly only for hands-on jobs: signing in (<code>az login</code>), uploading code (<code>az webapp deploy</code>), building images (<code>az acr build</code>) and lab exercises.</li>
     <li>From phase 8, an <b>Azure Pipeline</b> runs the same commands for you whenever code is pushed.</li>
@@ -1646,8 +1646,8 @@ az deployment sub create  -l eastus2 -f infra/main.bicep -p infra/main.biceppara
 <section class="page" id="next">
   <h2>What's next</h2>
   <p>You now know your way around the portal and have seen every building block of CloudMart's phase 1. Each later phase of <code>docs/learning-path.md</code> turns on more of Azure with a switch in <code>infra/main.bicepparam</code>. Here is where each one shows up in the portal:</p>
-  <table>
-    <tr><th style="width:24%">Phase</th><th>Switch it on in Bicep</th><th>Then look in the portal at</th></tr>
+  <table class="phases">
+    <tr><th style="width:20%">Phase</th><th style="width:36%">Switch it on in Bicep</th><th>Then look in the portal at</th></tr>
     <tr><td>2 · Networking</td><td><code>deployNetwork</code>, <code>deployJumpbox</code></td><td>Virtual network › Subnets; Network security groups; Bastion › Connect to the jumpbox</td></tr>
     <tr><td>3 · Compute</td><td><code>deployContainerApps</code>, <code>deployAks</code></td><td>Container App › Revisions and replicas; Kubernetes service › Workloads</td></tr>
     <tr><td>4 · Data</td><td><code>deployCosmos</code>, <code>deploySql</code></td><td>Cosmos DB › Data Explorer (request charges); SQL database › Query editor</td></tr>
@@ -1658,8 +1658,13 @@ az deployment sub create  -l eastus2 -f infra/main.bicep -p infra/main.biceppara
     <tr><td>9 · Governance</td><td><code>deployGovernance</code> (on)</td><td>Policy › Compliance; Cost Management › Cost analysis by tag</td></tr>
     <tr><td>10 · Architecture</td><td><code>deployFrontDoor</code></td><td>Front Door › Origin groups; WAF policy › Managed rules</td></tr>
     <tr><td>11 · Continuity</td><td><code>sqlSecondaryLocation</code>, …</td><td>SQL server › Failover groups › Failover</td></tr>
+    <tr><td>12 · Application integration</td><td><code>deployAppConfig</code>, <code>deployRedis</code>, <code>deployApim</code></td><td>App Configuration › Feature manager; Azure Managed Redis › Metrics; API Management › APIs › Test</td></tr>
+    <tr><td>13 · Hybrid networking</td><td><code>deployFirewall</code>; hybrid lab: <code>deployOnPremSim</code>, <code>deployVpnGateway</code>, <code>deployDnsResolver</code></td><td>Firewall policy › Application rules; Virtual network gateway › Connections; DNS private resolver › Inbound endpoints</td></tr>
+    <tr><td>14 · Data integration and analytics</td><td><code>deployAnalytics</code>, <code>enableClickstreamCapture</code></td><td>Data factory › Launch studio › Monitor › Pipeline runs; the data lake's storage account › Containers</td></tr>
+    <tr><td>15 · Migration</td><td><code>deployMigrationLab</code>, <code>migrateProjectLocation</code></td><td>Azure Migrate › Servers, databases and web apps › Assess; the legacy VM › Run command</td></tr>
+    <tr><td>16 · Microservices</td><td><code>deployPayments</code>, <code>deployShipping</code></td><td>Storage account › Storage browser › Tables (saga history); Application Insights › Transaction search</td></tr>
   </table>
-  <div class="box warn"><div class="t">Some switches are expensive</div><p>AKS, Application Gateway, Front Door Premium, Bastion Basic, Azure Firewall and the SQL failover group cost real money every hour. The learning path flags each one. Turn it on, learn, turn it off (or delete) the same day.</p></div>
+  <div class="box warn"><div class="t">Some switches are expensive</div><p>AKS, Application Gateway, Front Door Premium, Bastion Basic, Azure Firewall, the SQL failover group, the VPN gateways (about US$187 a month), the DNS Private Resolver (about US$180 a month) and Event Hubs Capture (about US$73 a month) cost real money every hour. The learning path flags each one. Turn it on, learn, turn it off (or delete) the same day.</p></div>
   <div class="box why"><div class="t">Keep this guide's three habits</div>
     <ol style="margin:2px 0 0">
       <li><b>Budget first, delete after.</b> Never leave a lab running "just in case".</li>
