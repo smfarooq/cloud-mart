@@ -52,15 +52,16 @@ Each part of a shop needs a different Azure design decision:
 
 Every arrow to a data or messaging service authenticates with a **managed identity**: there are no keys or
 connection-string secrets. From phase 2, the API and Functions send their outbound traffic through VNet-integrated
-subnets, and the data stores, Event Hubs and (phase 12) Azure Managed Redis are reachable only through **private
-endpoints**. Service Bus Standard
-can't have one, so it stays public but accepts only Entra ID (Premium is the tier with private endpoints). Each subnet
-has its own **NSG**, and
-every service sends its logs to one **Log Analytics** workspace through diagnostic settings. In phase 16 a **Durable
-Functions saga** takes over checkout: it charges through the **Payments API**, books through the **Shipping API**, and
-refunds if shipping fails. Both APIs share the App Service plan and are reachable only through private endpoints. In
-phase 13 an optional **hub VNet** with **Azure Firewall** is peered to this one, and a route table sends the app
-subnets' internet-bound traffic through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
+subnets, and with private endpoints on (phase 4) the data stores, Event Hubs and (phase 12) Azure Managed Redis are
+reachable only through **private endpoints**. The exception is the images Storage account: the browser uploads to it
+directly with a SAS, so it stays reachable from the internet, while the app's own traffic uses its private endpoint.
+Service Bus Standard can't have one, so it stays public but accepts only Entra ID (Premium is the tier with private
+endpoints). Each subnet has its own **NSG**, and with every phase on, 22 resources send their logs to one **Log
+Analytics** workspace through diagnostic settings. In phase 16 a **Durable Functions saga** takes over checkout: it
+charges through the **Payments API**, books through the **Shipping API**, and refunds if shipping fails. Both APIs
+share the App Service plan and are reachable only through private endpoints. In phase 13 an optional **hub VNet**
+with **Azure Firewall** is peered to this one, and a route table sends the app subnets' internet-bound traffic
+through it: only what the apps call, such as Service Bus, Entra ID and Azure Monitor,
 is allowed out. Phase 13's hybrid lab adds a **simulated on-premises site**, a VNet peered to nothing, connected to
 the hub by a **site-to-site VPN**. Gateway transit carries it on to the private endpoints, and a **DNS Private
 Resolver** in the hub lets the site resolve their names. The hub then exists with or without the firewall. In phase
@@ -167,7 +168,7 @@ src/CloudMart.Payments/        Payments API (phase 16): idempotency keys, Azure 
 src/CloudMart.Shipping/        Shipping API (phase 16): idempotent PUT, Table Storage
 src/CloudMart.ServiceDefaults/ what every web service shares: telemetry, health, caller auth, chaos switch
 src/cloudmart-web/             React 19 + TypeScript + Vite SPA (MSAL, App Insights, runtime config.json)
-tests/CloudMart.Core.Tests     business rules, saga failure paths, payment and shipping idempotency
+tests/CloudMart.Core.Tests     business rules, saga failure paths, payment and shipping idempotency, data lake summaries
 infra/main.bicep               subscription-scoped entry point; one switch per phase
 infra/modules/                 33 modules + shared types: network, hub firewall, VPN, data, analytics, messaging,
                                migration, compute...
@@ -235,7 +236,7 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 | 13 Hub-and-spoke | `deployFirewall` (needs `enablePrivateEndpoints`; **≈ $290/month**), `adminIpAddresses` | Order events **Service Bus (WebSockets)**; egress through Azure Firewall |
 | 13 Hybrid | `deployOnPremSim` (needs `enablePrivateEndpoints`, `jumpboxSshPublicKey`), then `deployVpnGateway` (**≈ $187/month**) and `deployDnsResolver` (**≈ $180/month**) | Nothing in the app: a simulated on-premises server reaches Key Vault and SQL over the VPN |
 | 14 Data integration | `deployAnalytics` (needs `deploySql`), `enableClickstreamCapture` (**≈ $73/month**) | **Analytics** panel: newest orders snapshot, today's captured clicks |
-| 15 Migration | `deployMigrationLab` (needs `jumpboxSshPublicKey`; **≈ $10/month** while the legacy server exists), `migrateProjectLocation` | Nothing on Platform: migrated product photos appear in Shop |
+| 15 Migration | `deployMigrationLab` (needs `jumpboxSshPublicKey`; **≈ $10/month** while the legacy server exists), `migrateProjectLocation`. The database wave needs `deployPostgres` with `enablePrivateEndpoints = false`; the photos need phases 4–5's image pipeline | Nothing on Platform: migrated product photos appear in Shop |
 | 16 Microservices | `deployPayments`, `deployShipping` (+ app registrations) | Payments **Payments API**, Shipping **Shipping API** |
 
 ## Cost guard rails
@@ -268,11 +269,12 @@ Then follow [phase 1](docs/learning-path.md#phase-1--foundations) to push the co
 ## Status
 
 All .NET projects build, the 44 unit tests pass, the SPA type-checks and builds, and every Bicep file compiles with
-zero warnings (Bicep 0.48). Phases 1–13 and 16 have switches and code, including phase 13's hybrid half (a
-simulated on-premises site, a VPN and a DNS resolver); so does phase 14 (a data lake and a Data Factory export).
-Phase 15 (migration) has a switch and scripts but no app code: a simulated legacy datacentre, an Azure Migrate
-project, and the scripts that migrate its photos and database. Its SQL and dump/restore steps were tested against
-PostgreSQL 16 in a container; the rest is compile-checked only. Locally, the API, Payments API and Shipping API run together and the saga confirms,
-declines and refunds orders as described in phase 16. Nothing has been deployed to a real subscription from this repository yet, so treat the
-first deployment of each phase as part of the lab. `what-if` first, and read the error messages: they are usually
-exactly what the exam asks about.
+zero warnings (Bicep 0.48). Phases 1–13 and 16 have switches and code. Phase 13's hybrid half (a simulated
+on-premises site, a VPN and a DNS resolver) is Bicep only, with no app changes; phase 14 adds a data lake, a Data
+Factory export and the Platform page's Analytics panel. Phase 15 (migration) has a switch and scripts but no app
+code: a simulated legacy datacentre, an Azure Migrate project, and the scripts that migrate its photos and database.
+Its SQL and dump/restore steps were tested against PostgreSQL 16 in a container; the rest is compile-checked only.
+Locally, the API, Payments API and Shipping API run together and the saga confirms, declines and refunds orders as
+described in phase 16. Nothing has been deployed to a real subscription from this repository yet, so treat the first
+deployment of each phase as part of the lab. `what-if` first, and read the error messages: they are usually exactly
+what the exam asks about.

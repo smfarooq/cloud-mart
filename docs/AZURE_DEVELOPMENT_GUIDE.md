@@ -8,7 +8,7 @@ about Azure.
 > phase 1 resources by clicking, so the names in this guide (resource group, App Service, Key Vault...) will already
 > be familiar. The labs themselves are in [learning-path.md](learning-path.md).
 
-> **What this guide is based on.** The code on `main` at commit `7639ef0` (October 2026). Every file name, class,
+> **What this guide is based on.** The code on `main` at commit `e212128` (November 2026). Every file name, class,
 > method, setting and line number was checked against that commit, and every diagram was drawn from the code, not
 > from a generic Azure example. Line numbers move as the code changes; file, class and method names are the stable
 > part. No real secrets appear anywhere: values in angle brackets, like `<your-account>`, are placeholders.
@@ -60,8 +60,10 @@ Seven ideas come up on almost every page. Each one is explained in more detail i
    Every Azure service CloudMart talks to accepts an Entra ID token instead of a password.
 
 4. **Managed identity.** An identity for a *program* rather than a person. Azure creates it, keeps its credentials
-   and rotates them; your code never sees a secret. CloudMart has four, one per program: `id-cloudmart-dev-api`,
-   `-func`, `-pay` and `-ship`.
+   and rotates them; your code never sees a secret. CloudMart's four programs each have a *user-assigned* identity:
+   `id-cloudmart-dev-api`, `-func`, `-pay` and `-ship`. A few Azure resources also hold roles through their own
+   *system-assigned* identity, created and deleted with the resource: Data Factory and, with Capture on, the Event
+   Hubs namespace (phase 14), and the legacy server (phase 15).
 
 5. **Role-based access control (RBAC).** How Azure decides what an identity may do. A **role assignment** joins three
    things: *who* (an identity), *what* (a role, such as "Azure Service Bus Data Sender") and *where* (a scope, such
@@ -108,6 +110,10 @@ So "adding Azure" to CloudMart never means rewriting business logic. It means se
 | Click stream | `ITelemetryPublisher` | `InProcessTelemetryPublisher` | `EventHubsTelemetryPublisher` | `EventHubs:FullyQualifiedNamespace` | 5 |
 | Taking payment | `IPaymentGateway` | `InProcessPaymentGateway` | `PaymentsApiClient` (calls the Payments API) | `Payments:BaseUrl` | 16 |
 | Booking shipping | `IShippingGateway` | `InProcessShippingGateway` | `ShippingApiClient` (calls the Shipping API) | `Shipping:BaseUrl` | 16 |
+| Listing the data lake | `IDataLakeCatalog` | None (see below) | `DataLakeCatalog` | `Analytics:DataLakeEndpoint` | 14 |
+
+The data lake is the one exception to the rule: it has no local version, because without a lake there is nothing to
+list. The Platform page's Analytics panel just says there is no data lake yet.
 
 A few Azure services aren't behind an interface because they plug into ASP.NET Core itself: Key Vault and
 App Configuration (configuration sources), Application Insights (telemetry), Entra ID (sign-in) and Azure Managed
@@ -220,7 +226,8 @@ the same private endpoints the apps use.
 
 ### 2.1 Where the Azure code lives
 
-CloudMart has five .NET projects and one React app. The table sorts every file that touches Azure into three kinds:
+CloudMart has six .NET projects (Api, Core, Functions, Payments, Shipping and ServiceDefaults), a test project and one
+React app. The table sorts every file that touches Azure into three kinds:
 
 - **Azure-specific:** the code exists *only* to talk to an Azure service.
 - **Azure-aware wiring:** general startup code that decides *whether* to use Azure, based on settings.
@@ -233,6 +240,7 @@ CloudMart has five .NET projects and one React app. The table sorts every file t
 | [CloudMart.Core/Azure/BlobImageStore.cs](../src/CloudMart.Core/Azure/BlobImageStore.cs) | Azure-specific | Upload links (SAS), image processing and download from Blob Storage |
 | [CloudMart.Core/Azure/Messaging.cs](../src/CloudMart.Core/Azure/Messaging.cs) | Azure-specific | Sends order events to Service Bus and clicks to Event Hubs |
 | [CloudMart.Core/Azure/ServiceApiClients.cs](../src/CloudMart.Core/Azure/ServiceApiClients.cs) | Azure-specific | Calls the Payments and Shipping APIs with an Entra ID token |
+| [CloudMart.Core/Azure/DataLakeCatalog.cs](../src/CloudMart.Core/Azure/DataLakeCatalog.cs) | Azure-specific | Lists the data lake's containers for the Platform page (phase 14) |
 | [CloudMart.Core/CloudMartServiceCollectionExtensions.cs](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs) | Azure-aware wiring | Picks local or Azure implementations; creates every SDK client; seeds the catalog |
 | [CloudMart.Core/CloudMartSettings.cs](../src/CloudMart.Core/CloudMartSettings.cs) | Azure-aware wiring | Reads the settings (endpoints, connection strings) into one object |
 | [CloudMart.Core/CloudMartTelemetry.cs](../src/CloudMart.Core/CloudMartTelemetry.cs) | General (exported to Azure) | Custom traces and counters, sent to Application Insights by OpenTelemetry |
@@ -250,9 +258,9 @@ CloudMart has five .NET projects and one React app. The table sorts every file t
 | [cloudmart-web/src/config.ts](../src/cloudmart-web/src/config.ts), [public/config.json](../src/cloudmart-web/public/config.json) | Azure-aware | Runtime settings that the deployment writes |
 | [cloudmart-web/src/api.ts](../src/cloudmart-web/src/api.ts) | Mostly general | Calls the API; `uploadImage` PUTs straight to Blob Storage |
 | [cloudmart-web/public/staticwebapp.config.json](../src/cloudmart-web/public/staticwebapp.config.json) | Azure-specific | Static Web Apps routing and headers |
-| `Domain/`, `Services/`, `Outbox/`, `Payments/`, `Shipping/`, `InMemory/`, `InProcess/` in CloudMart.Core | General | Business rules, the saga logic, the outbox pattern and the local stand-ins |
+| `Domain/`, `Services/`, `Outbox/`, `Payments/`, `Shipping/`, `Analytics/`, `InMemory/`, `InProcess/` in CloudMart.Core | General | Business rules, the saga logic, the outbox pattern, the data-lake summaries (`IDataLakeCatalog`, `LakeFolderSummary`, `LakePaths`) and the local stand-ins |
 
-The infrastructure code ([infra/](../infra), 27 Bicep modules) and the pipeline ([pipelines/](../pipelines)) are also
+The infrastructure code ([infra/](../infra), 33 Bicep modules plus the shared `types.bicep`) and the pipeline ([pipelines/](../pipelines)) are also
 Azure-specific. This guide covers them only where they configure the application;
 [portal-guide.pdf](portal-guide.pdf) and [learning-path.md](learning-path.md) cover them in depth.
 
@@ -431,6 +439,7 @@ The other branches follow the same shape:
 | [139-153](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L139-L153) | Order events | `ServiceBusClient` |
 | [156-166](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L156-L166) | Click stream | `EventHubProducerClient` for hub `telemetry` |
 | [169-197](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L169-L197) | Payments, Shipping | `HttpClient` with an Entra ID token handler |
+| [199-202](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L199-L202) | Data lake (no local branch) | `BlobServiceClient` for the lake's blob endpoint, built by `DataLakeCatalog` itself rather than registered here |
 
 **Seeding the catalog.** After startup, [InitializeCloudMartDataAsync](../src/CloudMart.Core/CloudMartServiceCollectionExtensions.cs#L221-L258)
 does two things:
@@ -505,7 +514,7 @@ pattern:
 
 **Permissions.** The account has `disableLocalAuth: true`, so account keys don't work at all. Bicep gives the API
 identity, the Functions identity and you the built-in **Cosmos DB Built-in Data Contributor** role
-([main.bicep:513](../infra/main.bicep#L513)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
+([main.bicep:514](../infra/main.bicep#L514)). This is a Cosmos DB *data-plane* role assignment: it does not appear in the
 portal's *Access control (IAM)* blade.
 
 ### 2.7 Azure SQL and PostgreSQL: orders and the outbox
@@ -536,7 +545,7 @@ case "PostgreSql":
 ```
 
 - **SQL Server:** the SQL client library fetches the token itself. The connection string Bicep builds
-  ([main.bicep:657-658](../infra/main.bicep#L657-L658)) contains no password:
+  ([main.bicep:658-659](../infra/main.bicep#L658-L659)) contains no password:
   `Server=tcp:<server>.database.windows.net,1433;Database=cloudmart;Authentication=Active Directory Managed Identity;User Id=<identity client id>;Encrypt=True;Connect Timeout=30;`
 - **PostgreSQL:** Npgsql has no built-in Entra support, so the code asks `DefaultAzureCredential` for a token for
   `https://ossrdbms-aad.database.windows.net/.default` and passes it as the password. It renews it every 30 minutes.
@@ -783,7 +792,7 @@ public async Task FulfillOrder(
 ```
 
 **`Connection = "ServiceBus"` is a prefix, not a connection string.** The host looks for app settings that start with
-`ServiceBus__`. Bicep sets three ([main.bicep:732-737](../infra/main.bicep#L732-L737)):
+`ServiceBus__`. Bicep sets three ([main.bicep:733-738](../infra/main.bicep#L733-L738)):
 
 ```text
 ServiceBus__fullyQualifiedNamespace = <namespace>.servicebus.windows.net
@@ -794,7 +803,7 @@ ServiceBus__clientId                = <Functions identity client id>
 This is an **identity-based connection**: the host signs in to Service Bus as the managed identity. The Event Hubs
 trigger works the same way with the `EventHubs__` prefix. The host's own storage uses
 `AzureWebJobsStorage__accountName`, `__credential` and `__clientId`
-([main.bicep:720-723](../infra/main.bicep#L720-L723)) instead of the usual storage connection string.
+([main.bicep:721-724](../infra/main.bicep#L721-L724)) instead of the usual storage connection string.
 
 > **Watch the spelling.** The API reads `ServiceBus__FullyQualifiedNamespace` (capital F) through `CloudMartSettings`.
 > The Functions trigger reads `ServiceBus__fullyQualifiedNamespace` (lower-case f), the name the Functions host
@@ -809,7 +818,7 @@ trigger works the same way with the `EventHubs__` prefix. The host's own storage
 
 **Disabled until phase 5.** Until messaging is deployed there is nothing to listen to, so Bicep sets
 `AzureWebJobs.FulfillOrder.Disabled = true` and the same for the other three message triggers
-([main.bicep:740-744](../infra/main.bicep#L740-L744)). `DailyOrderReport` stays disabled until a database exists.
+([main.bicep:741-745](../infra/main.bicep#L741-L745)). `DailyOrderReport` stays disabled until a database exists.
 
 **Event Grid needs no connection setting.** The Event Grid *subscription* (Bicep) names the Function as its endpoint,
 and Azure delivers events straight to it. The function checks the event type and the container prefix and ignores
@@ -959,7 +968,7 @@ contain `:`, so `--` stands in for it. Needs the **Key Vault Secrets User** role
 CloudMart reads the same secret a second way: a **Key Vault reference**. The Functions app (before phase 16) and the
 Payments API get an app setting whose *value* is
 `@Microsoft.KeyVault(VaultName=<vault>;SecretName=PaymentGateway--ApiKey)`
-([main.bicep:682](../infra/main.bicep#L682)). App Service resolves it using the site's identity, and the code just
+([main.bicep:683](../infra/main.bicep#L683)). App Service resolves it using the site's identity, and the code just
 reads `PaymentGateway:ApiKey` like any other setting.
 
 | | Configuration provider (API) | Key Vault reference (Functions, Payments) |
@@ -969,7 +978,7 @@ reads `PaymentGateway:ApiKey` like any other setting.
 | Picking up a new secret version | Restart the app | Automatic, within about a day, or on restart |
 
 In phase 16 only the Payments API keeps access to the secret: Bicep removes `KeyVault__Uri` and the role from the API
-and Functions ([main.bicep:450-459](../infra/main.bicep#L450-L459)).
+and Functions ([main.bicep:451-460](../infra/main.bicep#L451-L460)).
 
 **App Configuration and feature flags** ([lines 29-38](../src/CloudMart.Api/Program.cs#L29-L38)):
 
@@ -1085,11 +1094,13 @@ the rest of the page. It lists what Data Factory and Event Hubs Capture have wri
 - **[DataLake.cs](../src/CloudMart.Core/Analytics/DataLake.cs)** turns a listing into a summary: how many files with
   one extension, their total size, and the newest. A hierarchical namespace lists its folders as empty blobs too, so
   the extension filter matters.
-- **Only today's click files** are listed, under the `yyyy/MM/dd/` prefix that Capture writes (Capture puts the date
-  first in the path, see [messaging.bicep](../infra/modules/messaging.bicep)). A year of 5-minute files would be a long
-  listing.
-- **Cached for 30 seconds** with HybridCache: the endpoint is anonymous like `/api/platform/info`, and every uncached
-  call lists the lake.
+- **Click files only with Capture on.** When `Analytics:ClickstreamCapture` is true, today's click files are listed,
+  under the `yyyy/MM/dd/` prefix that Capture writes (Capture puts the date first in the path, see
+  [messaging.bicep](../infra/modules/messaging.bicep)). A year of 5-minute files would be a long listing. Otherwise
+  only the orders snapshots are listed.
+- **Cached** with HybridCache, using the defaults from [Program.cs](../src/CloudMart.Api/Program.cs#L88-L92): about
+  10 seconds in each API instance's memory, and 30 seconds in Redis when phase 12's Redis is on. The endpoint is
+  anonymous like `/api/platform/info`, and every uncached call lists the lake.
 - **Errors stay short.** A 403 comes back as its status and error code (`AuthorizationPermissionMismatch`: no role;
   `AuthorizationFailure`: the lake's firewall). A credential failure is logged in full but returned as one line,
   because the full message lists local paths.
@@ -1191,8 +1202,8 @@ Everything below is in the repository today, unless marked otherwise.
 ### 3.1 How the app reaches each Azure service
 
 Every connection follows the same recipe: **an endpoint from configuration + a token from `DefaultAzureCredential` +
-a permission on the resource**. The table lists all of them. "Signs in as" names the managed identity
-(`id-cloudmart-dev-…`).
+a permission on the resource**. The table lists all of them. "Signs in as" names the user-assigned identity
+(`id-cloudmart-dev-…`) or, from phase 14, a resource's own system-assigned identity.
 
 | From | To | Protocol (port) | Client in code | Endpoint setting | Signs in as | Permission needed | Granted by |
 |---|---|---|---|---|---|---|---|
@@ -1202,26 +1213,33 @@ a permission on the resource**. The table lists all of them. "Signs in as" names
 | API, Functions | Cosmos DB | HTTPS (443) | `CosmosClient` | `Cosmos:Endpoint` | `-api`, `-func` | Cosmos DB Built-in Data Contributor (data plane) | [cosmos.bicep](../infra/modules/cosmos.bicep) |
 | API, Functions | Azure SQL | TDS (1433) | EF Core + SqlClient | `ConnectionStrings:OrdersSql` | `-api`, `-func` | Database users: api = read, write, DDL; func = read, write | [grant script](../deploy/sql/grant-managed-identities.sql) (🔧) |
 | API, Functions | PostgreSQL | PostgreSQL (5432) | EF Core + Npgsql | `ConnectionStrings:OrdersPostgres` | `-api`, `-func` | Postgres roles from `pgaadauth_create_principal` | [grant script](../deploy/postgres/grant-managed-identities.sql) (🔧) |
-| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:481-482](../infra/main.bicep#L481-L482) |
-| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:485-487](../infra/main.bicep#L485-L487) |
-| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:601](../infra/main.bicep#L601) |
-| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:602](../infra/main.bicep#L602) |
-| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:606](../infra/main.bicep#L606) |
-| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:607](../infra/main.bicep#L607) |
+| API | Blob Storage | HTTPS | `BlobServiceClient` | `Storage:BlobEndpoint` | `-api` | Storage Blob Data Contributor + Storage Blob Delegator | [main.bicep:482-483](../infra/main.bicep#L482-L483) |
+| Functions | Storage (images, host, task hub) | HTTPS | `BlobServiceClient` and the Functions host | `Storage:BlobEndpoint`, `AzureWebJobsStorage__*` | `-func` | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | [main.bicep:486-488](../infra/main.bicep#L486-L488) |
+| API | Service Bus | AMQP (5671), or WebSockets (443) | `ServiceBusClient` | `ServiceBus:FullyQualifiedNamespace` | `-api` | Azure Service Bus Data Sender | [main.bicep:602](../infra/main.bicep#L602) |
+| Service Bus | Functions | AMQP | Functions host (trigger) | `ServiceBus__fullyQualifiedNamespace` | `-func` | Azure Service Bus Data Receiver | [main.bicep:603](../infra/main.bicep#L603) |
+| API | Event Hubs | AMQP (5671) | `EventHubProducerClient` | `EventHubs:FullyQualifiedNamespace` | `-api` | Azure Event Hubs Data Sender | [main.bicep:607](../infra/main.bicep#L607) |
+| Event Hubs | Functions | AMQP | Functions host (trigger) | `EventHubs__fullyQualifiedNamespace` | `-func` | Azure Event Hubs Data Receiver | [main.bicep:608](../infra/main.bicep#L608) |
 | Storage | Event Grid → Functions | HTTPS push | Event Grid subscription | Bicep, not app settings | Azure (system topic) | Dead letters: Storage Blob Data Contributor on `eventgrid-deadletter` | [eventgrid-subscription.bicep](../infra/modules/eventgrid-subscription.bicep) |
-| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:450-459](../infra/main.bicep#L450-L459) |
+| API | Key Vault | HTTPS | `AddAzureKeyVault` | `KeyVault:Uri` | `-api` | Key Vault Secrets User | [main.bicep:451-460](../infra/main.bicep#L451-L460) |
 | App Service platform | Key Vault (reference) | HTTPS | — (no code) | `@Microsoft.KeyVault(...)` app setting | `-func` before phase 16, `-pay` after | Key Vault Secrets User | same |
-| API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:624](../infra/main.bicep#L624) |
+| API | App Configuration | HTTPS | `AddAzureAppConfiguration` | `AppConfig:Endpoint` | `-api` | App Configuration Data Reader | [main.bicep:625](../infra/main.bicep#L625) |
 | API | Azure Managed Redis | Redis over TLS (10000, then 85XX to each shard) | StackExchange.Redis | `Redis:Endpoint` | `-api` | A Redis *access policy assignment* (not RBAC) | [app-integration.bicep](../infra/modules/app-integration.bicep) |
 | All apps, browser | Application Insights | HTTPS | Azure Monitor exporter, JS SDK | `APPLICATIONINSIGHTS_CONNECTION_STRING`, `appInsightsConnectionString` | Not signed in: the connection string only allows *sending* | — | [monitoring.bicep](../infra/modules/monitoring.bicep) |
 | API, Functions | Payments API | HTTPS | `PaymentsApiClient` + `EntraTokenHandler` | `Payments:BaseUrl`, `Payments:Scope` | `-api`, `-func` | App role `Payments.Process` | [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh) (🔧) |
 | API, Functions | Shipping API | HTTPS | `ShippingApiClient` + `EntraTokenHandler` | `Shipping:BaseUrl`, `Shipping:Scope` | `-api`, `-func` | App role `Shipments.Manage` | same (🔧) |
 | Payments | Azure SQL (`payments`) | TDS (1433) | EF Core | `ConnectionStrings:PaymentsSql` | `-pay` | Database user (commented out in the script) | 🔧 |
-| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:493](../infra/main.bicep#L493) |
+| Shipping | Table Storage | HTTPS | `TableClient` | `Shipping:TableEndpoint` | `-ship` | Storage Table Data Contributor | [main.bicep:494](../infra/main.bicep#L494) |
+| API | Data lake, blob endpoint (14) | HTTPS | `BlobServiceClient` in `DataLakeCatalog` | `Analytics:DataLakeEndpoint` | `-api` | Storage Blob Data Reader on `orders` and `clickstream` | [analytics.bicep:164-186](../infra/modules/analytics.bicep#L164-L186), readers from [main.bicep:573](../infra/main.bicep#L573) |
+| Data Factory (14) | Azure SQL | TDS (1433) | — (pipeline `export-orders`) | Linked service `OrdersDatabase` (Bicep) | The factory's system-assigned identity (`adf-cloudmart-dev-…`) | Database user in `db_datareader` | [grant script](../deploy/sql/grant-managed-identities.sql), phase 14 block (🔧) |
+| Data Factory (14) | Data lake, dfs endpoint | HTTPS | — (pipeline `export-orders`) | Linked service `DataLake` (Bicep) | The same | Storage Blob Data Contributor on `orders` | [analytics.bicep:153-162](../infra/modules/analytics.bicep#L153-L162) |
+| Event Hubs Capture (14) | Data lake, `clickstream` | HTTPS | — (no code) | Capture settings (Bicep) | The namespace's system-assigned identity | Storage Blob Data Contributor on `clickstream` | [messaging.bicep:217-225](../infra/modules/messaging.bicep#L217-L225) |
+| Legacy server (15) | Blob Storage, `product-uploads` | HTTPS | AzCopy in [copy-images.sh](../deploy/migration/copy-images.sh) | Run Command parameter | The VM's system-assigned identity | Storage Blob Data Contributor on `product-uploads` only | [migration.bicep:69-77](../infra/modules/migration.bicep#L69-L77) |
+| Legacy server (15) | PostgreSQL | PostgreSQL (5432) | `psql`, `pg_restore` in [migrate-database.sh](../deploy/migration/migrate-database.sh) | Run Command parameter | The same | Entra administrator of the server (with `deployPostgres`), until the cutover | [migration.bicep:87-95](../infra/modules/migration.bicep#L87-L95) |
 
 Least privilege shows in the details: the API may only *send* to Service Bus and the Functions app may only
 *receive*. Only whoever takes payments may read the gateway key. Payments and Shipping get no access to Cosmos DB,
-Service Bus or Event Hubs at all.
+Service Bus or Event Hubs at all. The phase 14 and 15 roles sit on single containers: Data Factory can write `orders`
+but not `clickstream`, and the legacy server can write only `product-uploads`.
 
 ### 3.2 Authentication and authorization
 
@@ -1231,7 +1249,7 @@ relationships. The [auth diagrams in 4.4](#44-authentication-and-authorization-f
 | Relationship | Who proves identity | How | Token is for (audience) | What decides permission | Where it's configured |
 |---|---|---|---|---|---|
 | **A. A person → the API** | Customer or admin | MSAL sign-in (auth code + PKCE) | `api://<API client id>` | `scp` must contain `access_as_user`; `roles` must contain `CloudMart.Admin` for admin endpoints | Two app registrations, made by hand in phase 6; [Auth.cs](../src/CloudMart.Api/Auth.cs) |
-| **B. A program → an Azure resource** | API, Functions, Payments, Shipping | Managed identity via `DefaultAzureCredential` | The service, e.g. `https://servicebus.azure.net`, `https://storage.azure.com` | Azure RBAC role assignments; Cosmos DB data-plane roles; database users; Redis access policies | Bicep, plus the database grant scripts |
+| **B. A program → an Azure resource** | API, Functions, Payments, Shipping (user-assigned identities); Data Factory, Event Hubs Capture and the legacy server (system-assigned) | Managed identity, via `DefaultAzureCredential` in CloudMart's code, or by the Azure service or tool itself | The service, e.g. `https://servicebus.azure.net`, `https://storage.azure.com` | Azure RBAC role assignments; Cosmos DB data-plane roles; database users; Redis access policies | Bicep, plus the database grant scripts |
 | **C. A program → another program** | API or Functions calling Payments or Shipping | Managed identity, app-only token | `api://<Payments or Shipping client id>` | `roles` must contain `Payments.Process` or `Shipments.Manage` | [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh); [ServiceDefaultsExtensions.cs](../src/CloudMart.ServiceDefaults/ServiceDefaultsExtensions.cs#L56-L83) |
 | **D. The pipeline → Azure** | Azure DevOps | Workload identity federation (no stored secret) | Azure Resource Manager | Owner, or Contributor + Role Based Access Control Administrator, on the subscription | Service connection `azure-cloudmart-dev`, set up by hand |
 
@@ -1265,6 +1283,9 @@ someone else picks it up later. CloudMart keeps the user waiting only for quick,
 | Product views → API → Event Hubs → `AggregateProductViews` | Asynchronous stream, batched | Many small events; counts may lag a few seconds |
 | `DailyOrderReport` | Scheduled (timer) | Runs at 06:00 UTC whether anyone is using the app or not |
 | SPA → `GET /api/orders` every 2.5 s | Polling | How the Orders page notices a *Pending* order is now *Confirmed* ([Orders.tsx:28](../src/cloudmart-web/src/pages/Orders.tsx#L28)) |
+| Data Factory `export-orders`: Azure SQL → data lake (14) | Scheduled: 02:00 UTC, once you create the trigger (🔧) | A nightly Parquet snapshot, so analytics tools read the lake instead of loading the orders database |
+| Event Hubs → Capture → data lake `clickstream` (14) | Asynchronous: an Avro file per partition every 5 minutes, empty ones skipped | Event Hubs keeps events for a day; Capture keeps them as files, with no code |
+| Platform page → `GET /api/platform/analytics` → data lake (14) | Synchronous, cached | Its own endpoint, so a slow lake never holds up the rest of the Platform page |
 
 ### 3.4 The data that travels between components
 
@@ -1403,6 +1424,8 @@ flowchart TB
     blob[("Blob Storage<br/>product images")]
     paysql[("Azure SQL (16)<br/>payments ledger")]
     table[("Table Storage (16)<br/>shipments")]
+    adf["Data Factory (14)<br/>pipeline export-orders"]
+    lake[("Data Lake Storage Gen2 (14)<br/>orders, clickstream")]
     plat["Platform services used by every app:<br/>Entra ID + managed identities, Key Vault,<br/>App Configuration (12), Managed Redis (12),<br/>Application Insights"]
 
     user -- "HTTPS" --> fd
@@ -1425,6 +1448,10 @@ flowchart TB
     func -- "HTTPS + Entra token" --> ship
     pay --> paysql
     ship --> table
+    adf -- "nightly: read orders" --> sql
+    adf -- "write Parquet" --> lake
+    eh -. "Capture (14)" .-> lake
+    api -- "list, for the Platform page" --> lake
     api -.-> plat
     func -.-> plat
 
@@ -1433,8 +1460,8 @@ flowchart TB
     classDef messaging fill:#fef3c7,stroke:#b45309,color:#3a2203
     classDef entry fill:#ede9fe,stroke:#6d28d9,color:#1e0b3a
     classDef platform fill:#f1f5f9,stroke:#475569,color:#0f172a
-    class api,func,pay,ship compute
-    class cosmos,sql,blob,paysql,table data
+    class api,func,pay,ship,adf compute
+    class cosmos,sql,blob,paysql,table,lake data
     class sb,eh,eg messaging
     class fd,swa entry
     class plat platform
@@ -1446,7 +1473,8 @@ Layer by layer:
 - **Compute:** the API answers the browser; the Function App does the background work.
 - **Messaging:** the API hands work on through Service Bus and Event Hubs; Blob Storage announces uploads through
   Event Grid.
-- **Data:** each app reads and writes its own stores.
+- **Data:** each app reads and writes its own stores. In phase 14, Data Factory copies the orders to the data lake
+  every night and Event Hubs Capture can add the click stream; the API only lists the lake, for the Platform page.
 - **Platform:** every app gets tokens from Entra ID through its managed identity, and sends telemetry to Application
   Insights. The API also reads Key Vault, App Configuration and Redis. The Functions app and the Payments API get the
   Key Vault secret through a Key Vault reference.
@@ -1463,7 +1491,7 @@ diagrams alongside the table in [3.1](#31-how-the-app-reaches-each-azure-service
 flowchart LR
     subgraph apiProc["CloudMart.Api process"]
         direction TB
-        ep["Endpoints<br/>Catalog, Orders, Telemetry"]
+        ep["Endpoints<br/>Catalog, Orders, Telemetry, Platform"]
         osvc["OrderService"]
         relay["OutboxRelayWorker<br/>+ OutboxRelay"]
         cpr["CosmosProductRepository<br/>CosmosProductStatsRepository"]
@@ -1471,6 +1499,8 @@ flowchart LR
         bis["BlobImageStore"]
         sbp["ServiceBusOrderEventPublisher"]
         ehp["EventHubsTelemetryPublisher"]
+        pip["PlatformInfoProvider"]
+        dlc["DataLakeCatalog (14)"]
     end
 
     COS[("Cosmos DB")]
@@ -1478,11 +1508,14 @@ flowchart LR
     BLOB[("Blob Storage")]
     SB["Service Bus<br/>topic orders"]
     EH["Event Hubs<br/>hub telemetry"]
+    LAKE[("Data lake (14)<br/>orders, clickstream")]
 
     ep --> osvc
     ep --> cpr
     ep --> bis
     ep --> ehp
+    ep --> pip
+    pip --> dlc
     osvc --> efr
     osvc -- "Wake()" --> relay
     relay -- "claim, mark sent" --> efr
@@ -1493,6 +1526,7 @@ flowchart LR
     bis -- "delegation key, SAS,<br/>image download" --> BLOB
     sbp -- "send, MessageId = order id" --> SB
     ehp -- "send a batch" --> EH
+    dlc -- "list blobs, read only" --> LAKE
 ```
 
 **Inside the Functions app** (signs in as `id-cloudmart-dev-func`):
@@ -1690,7 +1724,7 @@ named at the top are switched on; *Locally* says what happens instead on a lapto
 | 1 | The SPA starts, fetches `/config.json`, then calls `GET /api/products` | SPA | [main.tsx](../src/cloudmart-web/src/main.tsx#L9-L21), [api.ts:58](../src/cloudmart-web/src/api.ts#L58) | None; reading products needs no sign-in |
 | 2 | The endpoint asks `HybridCache` for key `products:all`: first the API's memory, then Redis | API | [CatalogEndpoints.cs:18-23](../src/CloudMart.Api/Endpoints/CatalogEndpoints.cs#L18-L23) | Cache key |
 | 3 | On a cache miss, `CosmosProductRepository.ListAsync(null)` queries the `products` container | API → Cosmos DB | [CosmosRepositories.cs:18-27](../src/CloudMart.Core/Azure/CosmosRepositories.cs#L18-L27) | `SELECT * FROM c ORDER BY c.name`, with an Entra token |
-| 4 | Cosmos DB returns the JSON documents, page by page; the result is cached for 30 s | Cosmos DB → API | `QueryAllAsync` | `Product[]` |
+| 4 | Cosmos DB returns the JSON documents, page by page; the result is cached for about 10 s in the API's memory, and 30 s in Redis with phase 12 | Cosmos DB → API | `QueryAllAsync` | `Product[]` |
 | 5 | The browser loads each image from `GET /api/images/{name}` | SPA → API | [CatalogEndpoints.cs:87-93](../src/CloudMart.Api/Endpoints/CatalogEndpoints.cs#L87-L93) | Image name |
 | 6 | `BlobImageStore.OpenReadAsync` streams the blob from `product-images` with a one-day cache header. Front Door caches it at the edge | API → Blob Storage | [BlobImageStore.cs:52-63](../src/CloudMart.Core/Azure/BlobImageStore.cs#L52-L63) | Image bytes |
 
@@ -1780,7 +1814,7 @@ sequenceDiagram
     FN->>BLOB: read properties, check type and size
     FN->>BLOB: copy to product-images, delete the upload
     FN->>COS: upsert product with ImageUrl /api/images/name
-    Note over SPA,API: next product list, after the 30 s cache, shows the image
+    Note over SPA,API: next product list, once the cache expires (10 s, or 30 s with Redis), shows the image
 ```
 
 | # | What happens | Code |
@@ -1793,8 +1827,8 @@ sequenceDiagram
 | 9-10 | The function checks the subject, then `ProductImageProcessor` promotes the blob | [CatalogFunctions.cs:21-33](../src/CloudMart.Functions/CatalogFunctions.cs#L21-L33), [CatalogServices.cs:30-50](../src/CloudMart.Core/Services/CatalogServices.cs#L30-L50), [BlobImageStore.cs:65-95](../src/CloudMart.Core/Azure/BlobImageStore.cs#L65-L95) |
 | 11 | The product's `ImageUrl` is updated in Cosmos DB | [CatalogServices.cs:47](../src/CloudMart.Core/Services/CatalogServices.cs#L47) |
 
-The product list can take up to 30 seconds to show the new image. The Function updates Cosmos DB, but it can't clear
-the API's cache.
+The product list can take about 10 seconds to show the new image, or up to 30 seconds with phase 12's Redis. The
+Function updates Cosmos DB, but it can't clear the API's cache.
 
 *Locally:* the upload URL is `/api/local-uploads/...`. The API stores the file in memory and processes it at once
 ([CatalogEndpoints.cs:95-110](../src/CloudMart.Api/Endpoints/CatalogEndpoints.cs#L95-L110)). That endpoint exists only
@@ -1900,7 +1934,7 @@ last column says otherwise.
 | User sign-in | Nothing new in Azure | `enableEntraAuth`, `entraApiClientId`, `entraSpaClientId` | Create the *CloudMart API* and *CloudMart SPA* app registrations, the `access_as_user` scope and the `CloudMart.Admin` role ([phase 6](learning-path.md#phase-6--security)) |
 | Live settings and feature flags | App Configuration store | `deployAppConfig` | Add the keys and the `Trending` flag |
 | Shared cache | Azure Managed Redis | `deployRedis` | — |
-| Global entry and WAF | Front Door profile, endpoint, routes, WAF policy | `deployFrontDoor` | — |
+| Global entry and WAF | Front Door profile, endpoint, routes, WAF policy, and a diagnostic setting that sends its access, health probe and WAF logs to Log Analytics | `deployFrontDoor` | — |
 | Payments and Shipping services | Two more App Services, `payments` database, `shipments` table | `deployPayments`, `deployShipping` | Uncomment and run the `payments` part of the SQL grant script; run [setup-service-auth.sh](../deploy/entra/setup-service-auth.sh); set `entraPaymentsClientId` and `entraShippingClientId` |
 | Orders exported to a data lake | Data Lake Storage Gen2 account (`orders`, `clickstream`), Data Factory with the `export-orders` pipeline; with private endpoints, a managed VNet and two managed private endpoints | `deployAnalytics` (needs `deploySql`) | Run the phase 14 part of the SQL grant script; approve the managed private endpoints; create and start the trigger from [nightly-export-trigger.json](../deploy/analytics/nightly-export-trigger.json) ([phase 14](learning-path.md#phase-14--data-integration-and-analytics-new-hands-on)) |
 | Click stream in the data lake | Event Hubs Capture on `telemetry`, the namespace's system-assigned identity and its role on `clickstream` | `enableClickstreamCapture` (needs `deployAnalytics`, `deployMessaging`; about $73/month) | — |
@@ -1911,7 +1945,7 @@ last column says otherwise.
 
 Bicep writes **app settings** on each App Service and Function App. They become environment variables, and the
 `__` turns into `:` ([2.3](#23-settings-from-an-azure-app-setting-to-a-c-object)). The tables list every setting
-Bicep writes, from [main.bicep:663-789](../infra/main.bicep#L663-L789). "Always" means from phase 1. Phase 15 adds none:
+Bicep writes, from [main.bicep:664-790](../infra/main.bicep#L664-L790). "Always" means from phase 1. Phase 15 adds none:
 its scripts get their targets as Run Command parameters.
 
 **API** (App Service; the same settings go to Container Apps when you set `containerImage`):
@@ -1944,7 +1978,8 @@ its scripts get their targets as Run Command parameters.
 **Function App:**
 
 - **The same as the API:** `APPLICATIONINSIGHTS_CONNECTION_STRING`, `CLOUDMART_REGION`, `Storage__BlobEndpoint`,
-  `Cosmos__Endpoint`, `Orders__Provider`, `Payments__*` and `Shipping__*`.
+  `Cosmos__Endpoint`, `Orders__Provider`, `ServiceBus__TransportType` (phase 13 firewall), `Payments__*` and
+  `Shipping__*`. Bicep builds these once, as `sharedSettings`, and gives them to both apps.
 - **`AZURE_CLIENT_ID`:** the *functions* identity.
 - **Database connection strings:** the same form as the API's, but with the functions identity.
 - **Its own settings**, in the table below.
@@ -1978,7 +2013,7 @@ the app's own configuration instead.
 - `AzureAd__*`, once Entra is on
 
 **SPA:** `config.json`, written by the pipeline from the `spaConfig` output
-([main.bicep:1051-1060](../infra/main.bicep#L1051-L1060)).
+([main.bicep:1052-1061](../infra/main.bicep#L1052-L1061)).
 
 | Key | Value |
 |---|---|
@@ -2001,7 +2036,7 @@ the app's own configuration instead.
 | Functions host storage | `UseDevelopmentStorage=true` with the Azurite emulator | `AzureWebJobsStorage__*` with the managed identity |
 | Sign-in | Off: the development handler signs you in as an admin | On from phase 6 |
 
-The deployment output **`localDevelopmentSettings`** ([main.bicep:1063-1072](../infra/main.bicep#L1063-L1072)) gives you the
+The deployment output **`localDevelopmentSettings`** ([main.bicep:1064-1073](../infra/main.bicep#L1064-L1073)) gives you the
 API's values ready to paste:
 
 ```bash
@@ -2026,8 +2061,11 @@ CloudMart's rule: **no secret in code, in Git, or in an app setting**.
 - **The pipeline** signs in to Azure with workload identity federation, so there is no service-principal password to
   leak or rotate.
 - **The deployer:** Bicep gives *you* data roles on Storage, Service Bus, Event Hubs, Cosmos DB, Key Vault (Secrets
-  Officer) and App Configuration, and makes you the Entra admin of the databases. That's what lets the app run on your
-  laptop against Azure.
+  Officer), App Configuration and the data lake (Storage Blob Data Contributor, phase 14), a Redis access policy
+  (phase 12), and makes you the Entra admin of the databases. That's what lets the app run on your laptop against
+  Azure. To sign in to a VM through Bastion with Entra ID, you also get *Virtual Machine Administrator Login* on the
+  jumpbox (phase 2) and the simulated on-premises server (phase 13). Phase 15 gives you no new role: the scripts run
+  on the legacy server through Run Command.
 
 ### 6.5 Deploying
 
@@ -2166,6 +2204,8 @@ Two more tools help in the portal:
 | Key Vault **403** with error code *ForbiddenByRbac* | Missing **Key Vault Secrets User**. Expected for the API and Functions after phase 16 | Vault → IAM | Add the role, or accept the phase 16 design |
 | App setting shows *Key Vault reference error* (red) in the portal | The site's identity can't read the vault, or the vault isn't reachable | *Configuration* blade, the reference's status | Grant Secrets User to the identity named in `keyVaultReferenceIdentity` |
 | You were given a role, but it still fails | Role assignments take time to apply | Wait, then try again | Wait up to about 10 minutes; restart the app so it requests a new token |
+| Platform page's Analytics panel shows **403 AuthorizationPermissionMismatch** (phase 14) | The API identity has no Storage Blob Data Reader on that lake container, or it hasn't applied yet | Lake → container → *Access control (IAM)* → *Check access* for `id-cloudmart-dev-api` | Redeploy with `deployAnalytics`, which assigns it on `orders` and `clickstream`; wait a few minutes |
+| A phase 15 script fails: AzCopy **403**, or PostgreSQL *password authentication failed* | The legacy server's identity lost its access at the cutover, or `deployPostgres` was off, so it isn't a PostgreSQL administrator | The Run Command output; the container's IAM; the PostgreSQL server's *Authentication* blade | Redeploy with `deployMigrationLab` (and `deployPostgres` for the database wave) |
 
 **Databases**
 
@@ -2175,6 +2215,7 @@ Two more tools help in the portal:
 | *Cannot open server… client IP not allowed* (locally) | Your IP isn't in the SQL firewall | Error text | Add your IP under the server's *Networking*, or use the jumpbox when private endpoints are on |
 | First request after a quiet period is slow, or times out | The serverless database auto-paused | Database *Overview* shows it resuming | Normal for the lab; `EnableRetryOnFailure` covers it |
 | PostgreSQL *password authentication failed* | No Entra role for the identity, or the wrong `Username` | Error text | Run the PostgreSQL grant script; `Username` must be the identity's *name* |
+| Data Factory's `export-orders` run fails (phase 14) | (a) The factory's identity has no database user: *Login failed*, error 18456. (b) With private endpoints, its managed private endpoints aren't approved yet | Query 14 in [cloudmart.kql](kql/cloudmart.kql), or *Monitor* in Data Factory Studio | (a) Run the phase 14 part of [grant-managed-identities.sql](../deploy/sql/grant-managed-identities.sql) with the factory's name. (b) Approve them with `az network private-endpoint-connection approve` |
 
 **Messaging and Functions**
 
@@ -2186,7 +2227,8 @@ Two more tools help in the portal:
 | Image uploaded but never appears | No Event Grid subscription (before phase 5), or the function failed | Event Grid subscription *Metrics*; the `eventgrid-deadletter` container | Deploy the Functions code, then `deployEventGridSubscription`; check the function's logs |
 | Image upload fails in the browser with **403** | The SAS expired (10 min), the clock is off, or the delegation key failed | The response body from Blob Storage | Request a new upload; check the API identity has Storage Blob Delegator |
 | Trending stays empty | No Event Hubs yet, no views since, or the `Trending` flag is off | Platform page *Features*; function logs | Open a few products' *Details*; check the flag |
-| Service Bus or Event Hubs connection times out behind a firewall | Port 5671 (AMQP) blocked | Error mentions AMQP / socket | Set `ServiceBus__TransportType=AmqpWebSockets` (phase 13 does this) |
+| Service Bus connection times out behind the phase 13 firewall | The firewall allows Service Bus only by name on 443, so AMQP on 5671 is blocked | Error mentions AMQP / socket; the Platform page shows *Service Bus*, not *Service Bus (WebSockets)* | Set `ServiceBus__TransportType=AmqpWebSockets` on both apps, and `AzureFunctionsJobHost__extensions__serviceBus__transportType` on the Functions app. Bicep sets both with `deployFirewall` |
+| Event Hubs connection times out, with private endpoints (and so behind the firewall) | Event Hubs has no public access any more, so the apps must reach its private endpoint. `ServiceBus__TransportType` doesn't apply: `EventHubProducerClient` gets no transport option | From the jumpbox, `nslookup <namespace>.servicebus.windows.net` should return a 10.20.6.x address | Check that the private endpoint `pe-<namespace>` is approved and that the `privatelink.servicebus.windows.net` zone is linked to the VNet (Bicep does both) |
 | Saga fails at *ChargePayment* with **403** (phase 16) | The calling identity lacks the `Payments.Process` app role | Payments API logs; token `roles` | Run `setup-service-auth.sh` |
 | Saga stuck, orchestration "Running" | The task hub can't reach storage | Function logs mention `AzureWebJobsStorage` | Check the `AzureWebJobsStorage__*` settings and the Functions identity's storage roles |
 
@@ -2198,6 +2240,10 @@ Two more tools help in the portal:
 | **403** on every API call after enabling Front Door | Calling the App Service address directly, which the Front Door lock blocks | The `X-Azure-FDID` check in [Program.cs](../src/CloudMart.Api/Program.cs#L132-L143) | Use the Front Door address |
 | Works in Azure, times out from your laptop (after phase 2) | Private endpoints: the service has no public address any more | `nslookup <account>.documents.azure.com` returns a private IP inside the VNet, nothing usable outside | Work from the jumpbox (Bastion), or test before turning on private endpoints |
 | DNS resolves to a public IP inside the VNet | Private DNS zone not linked | `nslookup` from the jumpbox | Check the private DNS zone links (Bicep creates them with `deployNetwork`) |
+| Some requests through Front Door get **403**, but not all | The WAF blocked them, for example the rate limit of 300 `/api/` requests a minute per client IP | Query 10 in [cloudmart.kql](kql/cloudmart.kql): Front Door sends its WAF log to Log Analytics | Slow down, or change the rule in the WAF policy |
+| Analytics panel shows **403 AuthorizationFailure** (phase 14) | The lake's firewall: with private endpoints on, it accepts only its private endpoint, trusted Azure services and `adminIpAddresses` | From the jumpbox, `nslookup <lake>.blob.core.windows.net` should return a 10.20.6.x address | Check the private endpoint `pe-<lake>-blob` and the blob zone's link to the VNet. To browse the lake from your laptop, add your IP to `adminIpAddresses` |
+| The VPN connection isn't *Connected* (phase 13) | The gateways are still being created (30-45 minutes), or the two connections' pre-shared keys differ | `az network vpn-connection show -g rg-cloudmart-dev -n con-cloudmart-dev-hub-to-onprem --query connectionStatus`; a wrong key shows in `IKEDiagnosticLog` | Wait for the gateways; redeploy, which gives both connections one new key ([hybrid lab](learning-path.md#hybrid-lab-on-premises-over-a-vpn)) |
+| On the on-premises server, a CloudMart name resolves to a **public** IP (phase 13) | The site has no conditional forwarders to the resolver, or forwards a `privatelink.*` zone instead of the public one | `dig +short @10.0.2.4 <name>` returns the private IP but plain `nslookup <name>` doesn't. If the resolver returns a public IP too, the zone isn't linked to the hub | Forward the public zones (`vault.azure.net`, `blob.core.windows.net`…) to the `dnsResolverInboundIp` output. Azure resolving on-premises names isn't built: that needs an outbound endpoint |
 
 ### 7.3 Common beginner mistakes
 
@@ -2216,7 +2262,8 @@ Two more tools help in the portal:
 7. **Putting secrets in `appsettings.Development.json`.** It's committed. Use user secrets or `local.settings.json`
    (git-ignored), or better, no secret at all.
 8. **Reading 401 and 403 as the same thing.** 401: who are you? 403: you may not. They point to different fixes.
-9. **Expecting an image to appear instantly.** Up to 30 seconds of cache, plus Event Grid delivery.
+9. **Expecting an image to appear instantly.** About 10 seconds of cache (up to 30 with Redis), plus Event Grid
+   delivery.
 10. **Not checking `what-if`.** Run it before every `create` and read what will change or be deleted.
 
 ---

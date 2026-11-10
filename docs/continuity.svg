@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1490" width="1700" height="1490" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1690" width="1700" height="1690" role="img" aria-labelledby="title desc">
   <title id="title">CloudMart business continuity diagram</title>
-  <desc id="desc">CloudMart's disaster recovery design (learning path phase 11). Front Door sends traffic to the primary region and fails over to a second copy of the app. Per service: Azure SQL auto-failover group with a listener, Cosmos DB multi-region with service-managed failover, RA-GZRS storage, Event Hubs metadata geo-disaster recovery behind an alias, Service Bus Standard without geo-replication, and Key Vault copied to the paired region by the platform. Phase 14's data lake is LRS by design: its order snapshots are exported again from SQL, but captured clicks older than a day can't be rebuilt. Also the failover order, zone redundancy and backups.</desc>
+  <desc id="desc">CloudMart's disaster recovery design (learning path phase 11). Front Door sends traffic to the primary region and fails over to a second copy of the app. Per service: Azure SQL auto-failover group with a listener, Cosmos DB multi-region with service-managed failover, RA-GZRS storage, Event Hubs metadata geo-disaster recovery behind an alias, Service Bus Standard without geo-replication, and Key Vault copied to the paired region by the platform. Phase 14's data lake is LRS by design: its order snapshots are exported again from SQL, but captured clicks older than a day can't be rebuilt. Azure Database for PostgreSQL, which holds phase 15's migrated legacy orders, keeps 7 days of point-in-time restore in its own region only: geo-redundant backup and high availability are Disabled. Phase 13's hybrid path (hub VNet, VPN gateway, DNS Private Resolver) exists only in the primary region, so losing it cuts the on-premises site's route and DNS to the private endpoints. Also the failover order, zone redundancy and backups.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#404040"/>
@@ -97,8 +97,20 @@
       <circle cx="19" cy="21" r="6" fill="none" stroke="#ffffff" stroke-width="3"/>
       <path d="M23 25 l12 12 m-4 -4 l3 -3 m-6 0 l3 -3" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none"/>
     </symbol>
+    <symbol id="i-postgres" viewBox="0 0 48 48">
+      <path d="M8 10 v28 c0 2.8 7.2 5 16 5 s16 -2.2 16 -5 V10 c0 2.8 -7.2 5 -16 5 S8 12.8 8 10 z" fill="#336791"/>
+      <ellipse cx="24" cy="10" rx="16" ry="5" fill="#6A9BC9"/>
+      <text x="24" y="33" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">PG</text>
+    </symbol>
+    <symbol id="i-vpngw" viewBox="0 0 48 48">
+      <rect x="3" y="6" width="42" height="36" rx="5" fill="#0078D4"/>
+      <path d="M17 22 V17 a7 7 0 0 1 14 0 V22" stroke="#ffffff" stroke-width="3" fill="none"/>
+      <rect x="13" y="21" width="22" height="15" rx="2" fill="#ffffff"/>
+      <circle cx="24" cy="27" r="2.6" fill="#0078D4"/>
+      <path d="M24 28 V32" stroke="#0078D4" stroke-width="2.4"/>
+    </symbol>
   </defs>
-  <rect width="1700" height="1490" fill="#ffffff"/>
+  <rect width="1700" height="1690" fill="#ffffff"/>
   <rect x="30" y="24" width="430" height="66" fill="#4472C4"/>
   <text x="245" y="69" font-size="34" fill="#ffffff" text-anchor="middle">Business Continuity</text>
   <text x="30" y="132" font-size="15" fill="#404040">CloudMart's disaster recovery (learning path, phase 11): what each service fails over to, what the copy costs, and the order to fail over in. Grey = a switch in infra/main.bicepparam.</text>
@@ -129,9 +141,9 @@
   <use href="#i-entra" x="1182" y="200" width="40" height="40"/>
   <text x="1234" y="206" class="itemname">Microsoft Entra ID</text>
   <text class="itemdesc"><tspan x="1234" y="226">A global service: sign-in and app-role tokens keep</tspan><tspan x="1234" y="242">working through a regional outage.</tspan></text>
-  <rect x="30" y="300" width="730" height="860" rx="6" class="zone"/>
+  <rect x="30" y="300" width="730" height="1060" rx="6" class="zone"/>
   <text x="46" y="326" class="zonetitle">Primary region · eastus2 (location)</text>
-  <rect x="940" y="300" width="730" height="860" rx="6" class="zone"/>
+  <rect x="940" y="300" width="730" height="1060" rx="6" class="zone"/>
   <text x="956" y="326" class="zonetitle">Secondary region · centralus</text>
   <text x="1466" y="326" class="tiletitle">Switch · cost</text>
   <path d="M700 264 V348" class="flow"/>
@@ -267,36 +279,68 @@
   <text x="1466" y="1076" class="itemdesc">no switch: LRS</text>
   <text x="1466" y="1096" class="itemdesc">GZRS in analytics.bicep</text>
   <text x="1466" y="1112" class="itemdesc">if click history matters</text>
-  <rect x="30" y="1190" width="800" height="270" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
-  <text x="46" y="1218" class="paneltitle">Failover order (runbook in phase 11)</text>
-  <text x="46" y="1246" class="itemname">1 · Declare</text>
-  <text class="itemdesc"><tspan x="150" y="1246">One named person decides. The RTO clock started at the outage, not at the decision.</tspan></text>
-  <text x="46" y="1280" class="itemname">2 · Data</text>
-  <text class="itemdesc"><tspan x="150" y="1280">SQL: failover-group set-primary on the secondary. Cosmos DB: service-managed failover.</tspan><tspan x="150" y="1296">Storage: account failover. Event Hubs: alias fail-over.</tspan></text>
-  <text x="46" y="1330" class="itemname">3 · Compute</text>
-  <text class="itemdesc"><tspan x="150" y="1330">The second copy is already deployed: scale it out, and delete the Event Hubs checkpoints so its trigger starts clean.</tspan><tspan x="150" y="1346">Phase 14: give the new Event Hubs primary the lake role, or Capture stays off.</tspan></text>
-  <text x="46" y="1380" class="itemname">4 · Traffic</text>
-  <text class="itemdesc"><tspan x="150" y="1380">Front Door's probes move traffic to priority 2. Disable the primary origin so it can't flap back.</tspan></text>
-  <text x="46" y="1414" class="itemname">5 · Verify</text>
-  <text class="itemdesc"><tspan x="150" y="1414">Place an order, follow its trace in Application Insights, and watch the alerts.</tspan></text>
-  <text x="46" y="1448" class="itemname">6 · Fail back</text>
-  <text class="itemdesc"><tspan x="150" y="1448">Same order, reversed, once the region is healthy. Re-pair Event Hubs and turn geo-redundancy back on.</tspan></text>
-  <rect x="870" y="1190" width="800" height="270" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
-  <text x="886" y="1218" class="paneltitle">Inside each region</text>
-  <text x="886" y="1244" class="itemname">Zones (zoneRedundant): a datacentre fails</text>
-  <text x="886" y="1266" class="itemdesc">SQL: zone-redundant databases</text>
-  <text x="886" y="1284" class="itemdesc">Cosmos DB: replicas across zones (set at creation)</text>
-  <text x="886" y="1302" class="itemdesc">App Service: P1v3 x 2 instances across zones</text>
-  <text x="886" y="1320" class="itemdesc">Storage: ZRS or GZRS (storageSku)</text>
-  <text x="886" y="1338" class="itemdesc">Event Hubs Standard: automatic</text>
-  <text x="886" y="1356" class="itemdesc">Functions Flex: check the region supports zones</text>
-  <text x="1270" y="1244" class="itemname">Backups: deletion, corruption, ransomware</text>
-  <text x="1270" y="1266" class="itemdesc">SQL: PITR 7 days + geo-restore (RPO up to 1 h)</text>
-  <text x="1270" y="1284" class="itemdesc">Cosmos DB: continuous backup, 7 days</text>
-  <text x="1270" y="1302" class="itemdesc">Blob: soft delete, versioning, lifecycle</text>
-  <text x="1270" y="1320" class="itemdesc">Azure Backup vault: VM and blob backups</text>
-  <text x="1270" y="1338" class="itemdesc">Site Recovery: the jumpbox VM</text>
-  <text x="1270" y="1356" class="itemdesc">Data lake orders: export again from SQL</text>
-  <text x="886" y="1404" class="smallnote">Replication copies a bad write or a deletion to the other region within seconds.</text>
-  <text x="886" y="1422" class="smallnote">Backups are what bring the data back; zones and regions only keep it available.</text>
+  <!-- Legacy orders: PostgreSQL, phase 4's alternative engine and phase 15's migration target -->
+  <text x="50" y="1182" class="rowlabel">Legacy orders</text>
+  <text x="50" y="1202" class="itemdesc">phase 15 · in-region only</text>
+  <rect x="250" y="1150" width="490" height="84" class="svc"/>
+  <use href="#i-postgres" x="262" y="1170" width="40" height="40"/>
+  <text x="314" y="1176" class="itemname">Azure Database for PostgreSQL · B1ms</text>
+  <text class="itemdesc"><tspan x="314" y="1196">Phase 4's alternative orders engine, and phase 15's migrated legacy orders.</tspan><tspan x="314" y="1212">PITR 7 days in this region only: geo-redundant backup and HA Disabled.</tspan></text>
+  <rect x="960" y="1150" width="490" height="84" class="opt"/>
+  <use href="#i-postgres" x="972" y="1170" width="40" height="40"/>
+  <text x="1024" y="1176" class="itemname">No copy in the second region</text>
+  <text class="itemdesc"><tspan x="1024" y="1196">No read replica and no geo-redundant backup: if eastus2 is lost, the</tspan><tspan x="1024" y="1212">orders are unavailable until it returns. Geo-restore needs geo-backups.</tspan></text>
+  <text x="850" y="1184" class="warn" text-anchor="middle">no replication</text>
+  <text x="850" y="1212" class="warn" text-anchor="middle">(no geo-backup)</text>
+  <text x="1466" y="1176" class="itemdesc">no switch: geo-backup is</text>
+  <text x="1466" y="1196" class="itemdesc">Disabled in postgres.bicep</text>
+  <!-- Hybrid access: phase 13's hub, VPN gateway and DNS resolver exist in the primary region only -->
+  <text x="50" y="1282" class="rowlabel">Hybrid access</text>
+  <text x="50" y="1302" class="itemdesc">phase 13 · one region only</text>
+  <rect x="250" y="1250" width="490" height="84" class="svc"/>
+  <use href="#i-vpngw" x="262" y="1270" width="40" height="40"/>
+  <text x="314" y="1276" class="itemname">Hub VNet · VPN gateway + DNS resolver</text>
+  <text class="itemdesc"><tspan x="314" y="1296">On-premises reaches the private endpoints through the hub's VPN</tspan><tspan x="314" y="1312">gateway (gateway transit) and resolves their names at 10.0.2.4.</tspan></text>
+  <rect x="960" y="1250" width="490" height="84" class="opt"/>
+  <use href="#i-vpngw" x="972" y="1270" width="40" height="40"/>
+  <text x="1024" y="1276" class="itemname">Nothing in the second copy</text>
+  <text class="itemdesc"><tspan x="1024" y="1296">The 'dr' copy gets no hub, gateway or resolver, and no tunnel: if</tspan><tspan x="1024" y="1312">eastus2 is lost, on-premises loses its route and DNS to the private endpoints.</tspan></text>
+  <text x="850" y="1284" class="warn" text-anchor="middle">no second path</text>
+  <text x="850" y="1312" class="warn" text-anchor="middle">(one region)</text>
+  <text x="1466" y="1276" class="itemdesc">no switch: needs a hub,</text>
+  <text x="1466" y="1296" class="itemdesc">gateway and tunnel there</text>
+  <rect x="30" y="1390" width="800" height="270" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="46" y="1418" class="paneltitle">Failover order (runbook in phase 11)</text>
+  <text x="46" y="1446" class="itemname">1 · Declare</text>
+  <text class="itemdesc"><tspan x="150" y="1446">One named person decides. The RTO clock started at the outage, not at the decision.</tspan></text>
+  <text x="46" y="1480" class="itemname">2 · Data</text>
+  <text class="itemdesc"><tspan x="150" y="1480">SQL: failover-group set-primary on the secondary. Cosmos DB: service-managed failover.</tspan><tspan x="150" y="1496">Storage: account failover. Event Hubs: alias fail-over.</tspan></text>
+  <text x="46" y="1530" class="itemname">3 · Compute</text>
+  <text class="itemdesc"><tspan x="150" y="1530">The second copy is already deployed: scale it out, and delete the Event Hubs checkpoints so its trigger starts clean.</tspan><tspan x="150" y="1546">Phase 14: give the new Event Hubs primary the lake role, or Capture stays off.</tspan></text>
+  <text x="46" y="1580" class="itemname">4 · Traffic</text>
+  <text class="itemdesc"><tspan x="150" y="1580">Front Door's probes move traffic to priority 2. Disable the primary origin so it can't flap back.</tspan></text>
+  <text x="46" y="1614" class="itemname">5 · Verify</text>
+  <text class="itemdesc"><tspan x="150" y="1614">Place an order, follow its trace in Application Insights, and watch the alerts.</tspan></text>
+  <text x="46" y="1648" class="itemname">6 · Fail back</text>
+  <text class="itemdesc"><tspan x="150" y="1648">Same order, reversed, once the region is healthy. Re-pair Event Hubs and turn geo-redundancy back on.</tspan></text>
+  <rect x="870" y="1390" width="800" height="270" fill="#ffffff" stroke="#D9D9D9" stroke-width="1"/>
+  <text x="886" y="1418" class="paneltitle">Inside each region</text>
+  <text x="886" y="1444" class="itemname">Zones (zoneRedundant): a datacentre fails</text>
+  <text x="886" y="1466" class="itemdesc">SQL: zone-redundant databases</text>
+  <text x="886" y="1484" class="itemdesc">Cosmos DB: replicas across zones (set at creation)</text>
+  <text x="886" y="1502" class="itemdesc">App Service: P1v3 x 2 instances across zones</text>
+  <text x="886" y="1520" class="itemdesc">Storage: ZRS or GZRS (storageSku)</text>
+  <text x="886" y="1538" class="itemdesc">Event Hubs Standard: automatic</text>
+  <text x="886" y="1556" class="itemdesc">Functions Flex: check the region supports zones</text>
+  <text x="886" y="1574" class="itemdesc">PostgreSQL: no HA on Burstable (B1ms)</text>
+  <text x="1270" y="1444" class="itemname">Backups: deletion, corruption, ransomware</text>
+  <text x="1270" y="1466" class="itemdesc">SQL: PITR 7 days + geo-restore (RPO up to 1 h)</text>
+  <text x="1270" y="1484" class="itemdesc">Cosmos DB: continuous backup, 7 days</text>
+  <text x="1270" y="1502" class="itemdesc">Blob: soft delete, versioning, lifecycle</text>
+  <text x="1270" y="1520" class="itemdesc">Azure Backup vault: VM and blob backups</text>
+  <text x="1270" y="1538" class="itemdesc">Site Recovery: the jumpbox VM</text>
+  <text x="1270" y="1556" class="itemdesc">Data lake orders: export again from SQL</text>
+  <text x="1270" y="1574" class="itemdesc">PostgreSQL: PITR 7 days, no geo-backup</text>
+  <text x="886" y="1604" class="smallnote">Replication copies a bad write or a deletion to the other region within seconds.</text>
+  <text x="886" y="1622" class="smallnote">Backups are what bring the data back; zones and regions only keep it available.</text>
 </svg>

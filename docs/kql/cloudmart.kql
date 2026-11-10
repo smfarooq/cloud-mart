@@ -31,7 +31,7 @@ AppExceptions
 // 5. Failing dependencies: which Azure service is the problem?
 AppDependencies
 | where TimeGenerated > ago(24h) and Success == false
-| summarize failures = count() by Type, Target, ResultCode, bin(TimeGenerated, 15m)
+| summarize failures = count() by DependencyType, Target, ResultCode, bin(TimeGenerated, 15m)
 | order by TimeGenerated desc
 
 // 6. Function executions: volume, failures, duration
@@ -58,7 +58,7 @@ AppServiceHTTPLogs
 | summarize count() by CsHost, ScStatus, CIp
 | order by count_ desc
 
-// 10. Front Door WAF: what was blocked, by which rule, from where
+// 10. Front Door WAF: what was blocked, by which rule, from where (the rate-limit demo in phase 10)
 AzureDiagnostics
 | where Category == "FrontDoorWebApplicationFirewallLog"
 | summarize count() by ruleName_s, action_s, clientIP_s

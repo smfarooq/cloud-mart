@@ -5,6 +5,7 @@
 param profileName string
 param endpointName string
 param wafPolicyName string
+param workspaceId string
 param tags object
 
 @description('Standard: custom WAF rules only. Premium: Microsoft-managed rule sets, bot protection, Private Link origins.')
@@ -73,6 +74,18 @@ resource securityPolicy 'Microsoft.Cdn/profiles/securityPolicies@2024-09-01' = {
       wafPolicy: { id: waf.id }
       associations: [{ domains: [{ id: endpoint.id }], patternsToMatch: ['/*'] }]
     }
+  }
+}
+
+// Access, health probe and WAF logs, so you can see which rule blocked a request (query 10 in docs/kql/cloudmart.kql).
+// Front Door writes them to the shared AzureDiagnostics table.
+resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'to-log-analytics'
+  scope: profile
+  properties: {
+    workspaceId: workspaceId
+    logs: [{ categoryGroup: 'allLogs', enabled: true }]
+    metrics: [{ category: 'AllMetrics', enabled: true }]
   }
 }
 
