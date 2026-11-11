@@ -18,7 +18,7 @@ var config = builder.Configuration;
 var credential = new DefaultAzureCredential();
 
 // ---------------------------------------------------------------------------------------------------------------
-// Configuration sources. Phase 6: Key Vault. Gap topic: App Configuration + feature flags.
+// Configuration sources. Phase 6: Key Vault. Phase 12: App Configuration + feature flags.
 // ---------------------------------------------------------------------------------------------------------------
 if (config["KeyVault:Uri"] is { Length: > 0 } keyVaultUri)
 {
@@ -83,7 +83,7 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(Policies.Admin, policy => policy.RequireAuthenticatedUser().RequireRole(Roles.Admin));
 
 // ---------------------------------------------------------------------------------------------------------------
-// Caching (gap topic): HybridCache = in-process L1, plus Azure Managed Redis as a shared L2 when configured.
+// Caching (phase 12): HybridCache = in-process L1, plus Azure Managed Redis as a shared L2 when configured.
 // ---------------------------------------------------------------------------------------------------------------
 builder.Services.AddHybridCache(options => options.DefaultEntryOptions = new HybridCacheEntryOptions
 {

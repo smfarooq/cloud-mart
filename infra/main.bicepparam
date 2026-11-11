@@ -73,7 +73,7 @@ param eventHubsSecondaryLocation = ''
 // Set before the first deployment. COST: the App Service plan becomes P1v3 x 2 (about $250/month).
 param zoneRedundant = false
 
-// Gap topics (AZ-305 "application architecture")
+// Phase 12 · Application integration (AZ-305 "Design an application architecture")
 param deployAppConfig = false
 param deployRedis = false
 param deployApim = false

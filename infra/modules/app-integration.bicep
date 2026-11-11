@@ -1,4 +1,4 @@
-// Gap topics from the AZ-305 outline ("Design an application architecture"):
+// Phase 12 · Application integration, from the AZ-305 outline ("Design an application architecture"):
 //  - App Configuration: central settings + feature flags, refreshed without redeploying
 //  - Azure Managed Redis: shared cache (the successor to Azure Cache for Redis), Entra auth, no access keys, and a
 //    private endpoint once the data stores have them

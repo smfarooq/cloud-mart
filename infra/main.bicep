@@ -120,7 +120,7 @@ param eventHubsSecondaryLocation string = ''
 @description('Zone-redundant SQL databases, Cosmos DB regions and App Service plan (P1v3 x 2, about $250/month). Set it before the first deployment: Cosmos DB regions and App Service plans can\'t switch later. For Storage, choose a ZRS or GZRS storageSku.')
 param zoneRedundant bool = false
 
-// ------------------------------------------------------------------ Gap topics
+// ------------------------------------------------------------------ Phase 12 · Application integration
 param deployAppConfig bool = false
 param deployRedis bool = false
 param deployApim bool = false
