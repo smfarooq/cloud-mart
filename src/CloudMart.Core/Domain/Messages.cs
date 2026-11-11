@@ -12,7 +12,7 @@ public sealed record OrderPlaced(
     bool SimulateFailure,
     DateTimeOffset PlacedUtc)
 {
-    /// <summary>Matches the SQL filter on the "high-value" Service Bus subscription (infra/modules/servicebus.bicep).</summary>
+    /// <summary>Matches the SQL filter on the "high-value" Service Bus subscription (infra/modules/messaging.bicep).</summary>
     public const decimal HighValueThreshold = 500m;
 }
 

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace CloudMart.Functions;
 
 /// <summary>
-/// Three independent consumers of the "orders" topic, one per subscription (infra/modules/servicebus.bicep).
+/// Three independent consumers of the "orders" topic, one per subscription (infra/modules/messaging.bicep).
 /// "ServiceBus" is an identity-based connection: app settings ServiceBus__fullyQualifiedNamespace,
 /// ServiceBus__credential=managedidentity and ServiceBus__clientId. No connection string.
 /// </summary>

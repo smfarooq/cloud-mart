@@ -1191,10 +1191,6 @@ Everything below is in the repository today, unless marked otherwise.
 | Hosting on AKS | Partial | [deploy/k8s/cloudmart-api.yaml](../deploy/k8s/cloudmart-api.yaml) sets only Cosmos DB, Blob Storage, Key Vault and Application Insights; no SQL, Service Bus or CORS settings |
 | API Management, Logic Apps | 📝 | Bicep can create API Management; no application code uses it |
 
-> **Two stale comments.** [OrderFunctions.cs](../src/CloudMart.Functions/OrderFunctions.cs#L13) and
-> [Messages.cs](../src/CloudMart.Core/Domain/Messages.cs#L15) point to `infra/modules/servicebus.bicep`. That file
-> doesn't exist: the Service Bus topology is in [messaging.bicep](../infra/modules/messaging.bicep).
-
 ---
 
 ## 3. Component integration and interaction
